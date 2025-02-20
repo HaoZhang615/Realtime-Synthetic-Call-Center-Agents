@@ -46,6 +46,7 @@ cd agentic-voice-assistant
 azd up
 ```
 ### Update: added Web Search Agent that uses Bing Search API to enable up-to-date information retrieval.
+- as current limitation of provisioning Bing Search resource in Azure, the bicep file does not include the Bing Search resource provisioning, so you need to have an existing Bing Search resource in your Azure subscription and be able to access the API key.
 - you will be asked to provide your Bing Search API key after executing `azd up`
 - new questions can be asked using voice like "what is the latest news about XXX?"
 
