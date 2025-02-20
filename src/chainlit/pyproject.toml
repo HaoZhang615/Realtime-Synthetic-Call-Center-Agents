@@ -15,4 +15,6 @@ dependencies = [
     "invoke==2.2.0",
     "numpy>=2.2.2",
     "aiohttp>=3.11.12",
+    "cffi==1.17.1",
+    "cryptography==44.0.0"
 ]

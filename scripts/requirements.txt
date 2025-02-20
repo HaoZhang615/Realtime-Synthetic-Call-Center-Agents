@@ -16,3 +16,5 @@ rich==13.9.4
     # via openai-realtime-agents (pyproject.toml)
 websockets==14.0
     # via openai-realtime-agents (pyproject.toml)
+aiohttp>=3.11.12
+    # via openai-realtime-agents (pyproject.toml)
