@@ -27,6 +27,7 @@ It works alongside you on your research, keeping you efficient and safe.
 - Update the status of experiment 3 by James Brown to Success. You can validate the record has been updated in CosmosDB experiments container - see ![SQL Statement](./docs/sample_queries/get_experiments.sql)
 - Summarise the record keeping instructions and send them via email to "\<your email>"
 
+
 ## How to deploy
 
 ### Depenendencies
@@ -44,6 +45,9 @@ git clone https://github.com/Azure-Samples/agentic-voice-assistant.git
 cd agentic-voice-assistant
 azd up
 ```
+### Update: added Web Search Agent that uses Bing Search API to enable up-to-date information retrieval.
+- you will be asked to provide your Bing Search API key after executing `azd up`
+- new questions can be asked using voice like "what is the latest news about XXX?"
 
 >[!NOTE]
 >Once deployed, you need to authorise the solution to use your M365 email account for the outbound email capability.
