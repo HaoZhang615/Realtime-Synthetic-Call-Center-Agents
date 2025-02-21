@@ -16,11 +16,17 @@ azure-identity==1.19.0
     # via agentic-voice-assistant (pyproject.toml)
 invoke==2.2.0
     # via agentic-voice-assistant (pyproject.toml)
-numpy==2.2.3
+numpy
     # via agentic-voice-assistant (pyproject.toml)
 python-dotenv==1.0.1
     # via agentic-voice-assistant (pyproject.toml)
 rich==13.9.4
     # via agentic-voice-assistant (pyproject.toml)
+streamlit
+    # via agentic-voice-assistant (pyproject.toml)
 websockets==14.0
     # via agentic-voice-assistant (pyproject.toml)
+azure-monitor-opentelemetry==1.0.0b9
+    # Added for configure_azure_monitor in Admin.py
+tempfile
+    # Added for creating temporary directories in 01_Ingest_Data.py
