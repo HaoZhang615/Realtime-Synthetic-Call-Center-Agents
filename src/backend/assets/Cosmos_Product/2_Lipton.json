@@ -1,0 +1,16 @@
+{
+    "name": "Lipton Green Tea",
+    "category": "Beverages",
+    "type": "Tea",
+    "brand": "Lipton",
+    "company": "Unilever",
+    "unit_price": 3.99,
+    "weight": {
+        "value": 100,
+        "unit": "g"
+    },
+    "color": "Green",
+    "material": "Tea Leaves",
+    "product_id": "cc2cf1203679338692c5d73de997d17c",
+    "id": "2_cc2cf1203679338692c5d73de997d17c"
+}

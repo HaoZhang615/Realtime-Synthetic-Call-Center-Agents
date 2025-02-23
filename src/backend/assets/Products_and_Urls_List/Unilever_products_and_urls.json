@@ -1,0 +1,12 @@
+{
+  "products": [
+    "Dove",
+    "Hellmann's",
+    "Lipton"
+  ],
+  "urls": [
+    "https://www.dove.com",
+    "https://www.hellmanns.com",
+    "https://www.lipton.com"
+  ]
+}

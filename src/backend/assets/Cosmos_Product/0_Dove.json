@@ -1,0 +1,16 @@
+{
+    "name": "Dove Nourishing Body Wash",
+    "category": "Personal Care",
+    "type": "Body Wash",
+    "brand": "Dove",
+    "company": "Unilever",
+    "unit_price": 6.99,
+    "weight": {
+        "value": 16,
+        "unit": "fl oz"
+    },
+    "color": "White",
+    "material": "Liquid",
+    "product_id": "7b4eb49d1dfc3727ba4278ac1ae0b1e0",
+    "id": "0_7b4eb49d1dfc3727ba4278ac1ae0b1e0"
+}

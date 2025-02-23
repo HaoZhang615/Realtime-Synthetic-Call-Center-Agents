@@ -1,0 +1,11 @@
+{
+    "customer_id": "123ebaca359831b18af4957f9bf96f83",
+    "product_id": "cc2cf1203679338692c5d73de997d17c",
+    "quantity": 4,
+    "purchasing_date": "2025-01-15T10:30:00",
+    "delivered_date": "2025-01-22T14:00:00",
+    "order_number": "e80ce24b08e237bd8997def7dcd0ebd3",
+    "product_details": {},
+    "total_price": 0,
+    "id": "3_e80ce24b08e237bd8997def7dcd0ebd3"
+}

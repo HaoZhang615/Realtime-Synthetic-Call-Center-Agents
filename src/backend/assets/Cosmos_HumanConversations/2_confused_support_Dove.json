@@ -1,0 +1,64 @@
+{
+    "conversation_id": "conv_00123",
+    "customer_id": "cust_45678",
+    "agent_id": "agent_fred",
+    "messages": [
+        {
+            "sender": "customer",
+            "message": "Hi, I'm not sure how to use my Dove product properly. Can you help?"
+        },
+        {
+            "sender": "agent",
+            "message": "Of course, Tara! Which Dove product are you asking about?"
+        },
+        {
+            "sender": "customer",
+            "message": "I have the Dove body wash, but the instructions are a bit unclear for me."
+        },
+        {
+            "sender": "agent",
+            "message": "I understand. Are you confused about how to apply it or how much to use?"
+        },
+        {
+            "sender": "customer",
+            "message": "Both, I guess. I just want to make sure I'm doing it right."
+        },
+        {
+            "sender": "agent",
+            "message": "No problem! You can use a small amount on a wet washcloth or directly on your skin. Just lather it gently."
+        },
+        {
+            "sender": "customer",
+            "message": "Okay, but how much is a small amount? I don't want to waste it."
+        },
+        {
+            "sender": "agent",
+            "message": "A nickel-sized amount is usually sufficient for most people. You can always adjust based on your preference."
+        },
+        {
+            "sender": "customer",
+            "message": "That makes sense, but should I rinse it off immediately or leave it for a while?"
+        },
+        {
+            "sender": "agent",
+            "message": "You should rinse it off after lathering for about 20 seconds to enjoy the benefits."
+        },
+        {
+            "sender": "customer",
+            "message": "Thanks, Fred! But can I use it every day?"
+        },
+        {
+            "sender": "agent",
+            "message": "Yes, you can use it daily. It's gentle enough for everyday use."
+        },
+        {
+            "sender": "customer",
+            "message": "Great! I appreciate your help, I'm still a bit confused, but this is better."
+        }
+    ],
+    "sentiment": "confused",
+    "topic": "support",
+    "product": "Dove",
+    "session_id": "98e25a7dda3f362c90fc487953dcf5dd",
+    "id": "chat_2_98e25a7dda3f362c90fc487953dcf5dd"
+}

@@ -1,0 +1,14 @@
+{
+    "first_name": "Oliver",
+    "last_name": "Davis",
+    "email": "oliver.davis@example.com",
+    "address": {
+        "street": "Maple Ave 34",
+        "city": "San Francisco",
+        "postal_code": "94105",
+        "country": "USA"
+    },
+    "phone_number": "+14155501234",
+    "customer_id": "1670bc6c5aa33ff3b25a9e05f33a04dd",
+    "id": "2_1670bc6c5aa33ff3b25a9e05f33a04dd"
+}

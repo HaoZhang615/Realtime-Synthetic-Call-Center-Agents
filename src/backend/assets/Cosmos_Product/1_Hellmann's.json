@@ -1,0 +1,16 @@
+{
+    "name": "Hellmann's Real Mayonnaise",
+    "category": "Condiments",
+    "type": "Mayonnaise",
+    "brand": "Hellmann's",
+    "company": "Unilever",
+    "unit_price": 3.49,
+    "weight": {
+        "value": 15,
+        "unit": "oz"
+    },
+    "color": "Creamy White",
+    "material": "",
+    "product_id": "b1737337874932aca2e21925ff66e46d",
+    "id": "1_b1737337874932aca2e21925ff66e46d"
+}

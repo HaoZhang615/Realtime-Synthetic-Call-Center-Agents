@@ -253,6 +253,7 @@ class DataSynthesizer:
                 "category": "string", 
                 "type": "string", 
                 "brand": "string", 
+                "company": "string",
                 "unit_price": "number",
                 "weight": {{
                     "value": "number",
@@ -262,6 +263,7 @@ class DataSynthesizer:
                 "material": "string"
             }}
             Be creative about the values and do not use markdown to format the json object. if any field is not applicable, leave it empty.
+            the value of the key 'company' should always be: {company_name}.
             """
             
             # Generate the document using Azure OpenAI
