@@ -20,7 +20,7 @@ async def query_internal_knowledge_base(params):
 		search_text=query,  
 		vector_queries= [vector_query],
 		select=["title", "chunk_id", "chunk"],
-		top=5
+		top=3
 	)
 
 	# Chunk id has format {parent_id}_pages_{page_number}

@@ -8,7 +8,7 @@ root_assistant = {
     DO NOT CALL THIS IF:  
     - You need to fetch information from the internal knowledge base -> use Assistant_internal_kb_agent
     - You need to send an email to the specified user -> use Assistant_Executive_Assistant
-    - You need to update the experiment results -> use Assistant_Lab_Experiments 
+    - You need to manage database records (get/create/update any of the Customer, Product and Purchases container/table) -> use Database Agent 
     - You need to search the web for current information -> use Assistant_WebSearch
     """,
     "system_message": """You are a lab assistant that responds to users inquiries. 
