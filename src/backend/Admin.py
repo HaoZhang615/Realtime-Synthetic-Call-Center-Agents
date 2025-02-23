@@ -23,7 +23,7 @@ util.load_dotenv_from_azd()
 
 st.set_page_config(
     page_title="Admin",
-    page_icon=os.path.join("images", "favicon.ico"),
+    page_icon=":studio_microphone:",
     layout="wide",
     menu_items=None,
 )

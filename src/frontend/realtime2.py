@@ -102,7 +102,7 @@ class RealtimeAPI(RealtimeEventHandler):
         self.credentials = DefaultAzureCredential()
         self.acquire_token = get_bearer_token_provider(self.credentials, "https://cognitiveservices.azure.com/.default")
         self.api_version = "2024-10-01-preview"
-        self.azure_deployment = os.environ["AZURE_OPENAI_DEPLOYMENT"]
+        self.azure_deployment = os.environ["AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT"]
         self.ws = None
 
     def is_connected(self):
