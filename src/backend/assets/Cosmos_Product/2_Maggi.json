@@ -1,0 +1,15 @@
+{
+    "name": "Maggi Instant Noodles",
+    "category": "Food",
+    "type": "Instant Noodles",
+    "brand": "Nestlé",
+    "unit_price": 1.99,
+    "weight": {
+        "value": 70,
+        "unit": "grams"
+    },
+    "color": "Yellow",
+    "material": "Wheat Flour",
+    "product_id": "af817161d66a358894818e5c75179d52",
+    "id": "2_af817161d66a358894818e5c75179d52"
+}

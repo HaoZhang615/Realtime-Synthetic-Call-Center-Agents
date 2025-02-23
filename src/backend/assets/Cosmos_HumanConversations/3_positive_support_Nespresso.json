@@ -1,0 +1,68 @@
+{
+    "conversation_id": "conv123456",
+    "customer_id": "cust78910",
+    "agent_id": "emil",
+    "messages": [
+        {
+            "sender": "customer",
+            "message": "Hello, I need help with my Nespresso. It's not producing coffee properly."
+        },
+        {
+            "sender": "agent",
+            "message": "Hi Ian! I'm so sorry to hear that. Let's get this sorted out for you."
+        },
+        {
+            "sender": "customer",
+            "message": "Thanks! I really appreciate your help."
+        },
+        {
+            "sender": "agent",
+            "message": "Of course! Could you please tell me what happens when you try to brew a cup?"
+        },
+        {
+            "sender": "customer",
+            "message": "It just makes a grinding noise and then stops. No coffee comes out."
+        },
+        {
+            "sender": "agent",
+            "message": "Got it. It sounds like it might be clogged. Have you tried cleaning it?"
+        },
+        {
+            "sender": "customer",
+            "message": "I haven't tried that yet. How do I clean it?"
+        },
+        {
+            "sender": "agent",
+            "message": "No problem! I can walk you through the cleaning process. It’s really straightforward!"
+        },
+        {
+            "sender": "customer",
+            "message": "Great! I'm ready when you are."
+        },
+        {
+            "sender": "agent",
+            "message": "Awesome! First, make sure the machine is cool and unplugged. Then, we can remove and clean the capsule holder..."
+        },
+        {
+            "sender": "customer",
+            "message": "Perfect! I'm following along."
+        },
+        {
+            "sender": "agent",
+            "message": "Fantastic! Once we're done, you should be able to enjoy your coffee again."
+        },
+        {
+            "sender": "customer",
+            "message": "I can't wait! Thank you for your clear instructions, Emil."
+        },
+        {
+            "sender": "agent",
+            "message": "You're very welcome, Ian! I'm here to help. Let me know how it goes after cleaning."
+        }
+    ],
+    "sentiment": "positive",
+    "topic": "support",
+    "product": "Nespresso",
+    "session_id": "b7f4f6f1e6ce3600ae1e2b22b1953ac5",
+    "id": "chat_3_b7f4f6f1e6ce3600ae1e2b22b1953ac5"
+}

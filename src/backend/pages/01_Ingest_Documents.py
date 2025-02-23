@@ -2,9 +2,10 @@ import os
 import streamlit as st
 import sys
 import logging
+import traceback
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
-from util import setup_index, upload_documents
+from utils.file_processor import setup_index, upload_documents
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 logger = logging.getLogger(__name__)

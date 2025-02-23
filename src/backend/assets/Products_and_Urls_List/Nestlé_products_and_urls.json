@@ -1,0 +1,12 @@
+{
+  "products": [
+    "Nespresso",
+    "KitKat",
+    "Maggi"
+  ],
+  "urls": [
+    "https://www.nespresso.com",
+    "https://www.kitkat.com",
+    "https://www.maggi.com"
+  ]
+}

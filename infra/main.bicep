@@ -69,8 +69,10 @@ module appIdentity './modules/app/identity.bicep' = {
 
 // ------------------------
 // [ Array of OpenAI Model deployments ]
-param aoaiGpt4ModelName string = 'gpt-4o-realtime-preview'
+param aoaiGpt4oRealtimeModelName string = 'gpt-4o-realtime-preview'
 param aoaiGpt4ModelVersion string = '2024-12-17'
+param aoaiGpt4oMiniModelName string = 'gpt-4o-mini'
+param aoaiGpt4oMiniModelVersion string = '2024-07-18'
 param embedModel string = 'text-embedding-3-large'
 
 var embeddingDeployment = [
@@ -88,19 +90,32 @@ var embeddingDeployment = [
 ]
 
 var realtimeDeployment =    [{
-    name: aoaiGpt4ModelName
+    name: aoaiGpt4oRealtimeModelName
     model: {
       format: 'OpenAI'
-      name: aoaiGpt4ModelName
+      name: aoaiGpt4oRealtimeModelName
       version: aoaiGpt4ModelVersion
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  1
+      capacity:  6
     }
   }]
 
-var openAiDeployments = empty(openAiRealtimeName) ?  concat(realtimeDeployment, embeddingDeployment) : embeddingDeployment
+var gpt4ominiDeployment =    [{
+    name: aoaiGpt4oMiniModelName
+    model: {
+      format: 'OpenAI'
+      name: aoaiGpt4oMiniModelName
+      version: aoaiGpt4oMiniModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity:  6
+    }
+  }]
+
+var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment)
 
 module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
   name: 'openai'
@@ -363,7 +378,7 @@ module app 'modules/app/containerapp.bicep' = {
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
-      AZURE_OPENAI_DEPLOYMENT: 'gpt-4o-realtime-preview'
+      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: 'gpt-4o-realtime-preview'
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
@@ -371,7 +386,11 @@ module app 'modules/app/containerapp.bicep' = {
       GET_RESULTS_LOGIC_APP_URL: getExperimentUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
-      COSMOSDB_CONTAINER: cosmosdb.outputs.cosmosDbContainer
+      COSMOSDB_AI_Conversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
+      COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
+      COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
+      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
+      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
       BING_SEARCH_API_KEY: bingSearchApiKey
     },
@@ -494,7 +513,7 @@ output AZURE_OPENAI_ENDPOINT string = openAiEndpoint
 output AZURE_OPENAI_EMBEDDING_ENDPOINT string = openAi.outputs.endpoint
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
-output AZURE_OPENAI_DEPLOYMENT string = aoaiGpt4ModelName
+output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelName
 
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
@@ -511,3 +530,11 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.outputs.loginServer
 output SEND_EMAIL_LOGIC_APP_URL string = sendMailUrl.outputs.url
 output UPDATE_RESULTS_LOGIC_APP_URL string = updateExperimentUrl.outputs.url
 output GET_RESULTS_LOGIC_APP_URL string = getExperimentUrl.outputs.url
+
+output COSMOSDB_ENDPOINT string = cosmosdb.outputs.cosmosDbEndpoint
+output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase
+output COSMOSDB_AI_Conversations_CONTAINER string = cosmosdb.outputs.cosmosDbAIConversationsContainer
+output COSMOSDB_Customer_CONTAINER string = cosmosdb.outputs.cosmosDbCustomerContainer
+output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbHumanConversationsContainer
+output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
+output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer

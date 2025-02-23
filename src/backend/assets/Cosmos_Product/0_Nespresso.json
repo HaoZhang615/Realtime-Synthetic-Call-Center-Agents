@@ -1,0 +1,15 @@
+{
+    "name": "Nespresso VertuoPlus Deluxe Coffee and Espresso Maker",
+    "category": "Coffee Machines",
+    "type": "Single Serve Espresso Machine",
+    "brand": "Nespresso",
+    "unit_price": 199.99,
+    "weight": {
+        "value": 4.5,
+        "unit": "kg"
+    },
+    "color": "Matte Black",
+    "material": "Plastic and Stainless Steel",
+    "product_id": "93cd95c7bc8c396cb32fa887108b7236",
+    "id": "0_93cd95c7bc8c396cb32fa887108b7236"
+}

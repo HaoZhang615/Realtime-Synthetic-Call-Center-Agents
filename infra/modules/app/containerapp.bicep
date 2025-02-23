@@ -96,7 +96,7 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
           //   { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
           //   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: applicationInsights.properties.ConnectionString }
           //   { name: 'AZURE_OPENAI_ENDPOINT', value: azureOpenAIModelEndpoint }
-          //   { name: 'AZURE_OPENAI_DEPLOYMENT', value: azureModelDeploymentName }
+          //   { name: 'AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT', value: azureModelDeploymentName }
           //   // { name: 'AZURE_OPENAI_API_KEY', value: openAiApiKey }
           //   { name: 'COSMOSDB_ENDPOINT', value: cosmosDbEndpoint }
           //   { name: 'COSMOSDB_DATABASE', value: cosmosDbName }

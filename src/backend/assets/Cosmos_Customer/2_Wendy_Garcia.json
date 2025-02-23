@@ -1,0 +1,14 @@
+{
+    "first_name": "Wendy",
+    "last_name": "Garcia",
+    "email": "wendy.garcia@example.com",
+    "address": {
+        "street": "Maple Avenue 42",
+        "city": "Los Angeles",
+        "postal_code": "90015",
+        "country": "USA"
+    },
+    "phone_number": "+12345678900",
+    "customer_id": "2ef6445fc95d36c59121a9e7f4deca12",
+    "id": "2_2ef6445fc95d36c59121a9e7f4deca12"
+}

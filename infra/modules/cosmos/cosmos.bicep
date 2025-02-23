@@ -1,5 +1,5 @@
 param cosmosDbAccountName string 
-param databaseName string = 'system_of_record'
+param databaseName string = 'GenAI'
 param location string = resourceGroup().location
 param tags object = {}
 
@@ -46,18 +46,94 @@ resource cosmosDbDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@20
   }
 }
 
-resource experimentsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  name: 'experiments'
+resource AIConversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  name: 'AI_Conversations'
   location: location
   parent: cosmosDbDatabase
   properties: {
     resource: {
-      id: 'experiments'
+      id: 'AI_Conversations'
       createMode: 'Default'
       partitionKey: {
         kind: 'Hash'
         paths: [
-          '/id'
+          '/customer_id'
+        ]
+      }
+    }
+    options: {
+    }
+  }
+}
+resource CustomerContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  name: 'Customer'
+  location: location
+  parent: cosmosDbDatabase
+  properties: {
+    resource: {
+      id: 'Customer'
+      createMode: 'Default'
+      partitionKey: {
+        kind: 'Hash'
+        paths: [
+          '/customer_id'
+        ]
+      }
+    }
+    options: {
+    }
+  }
+}
+resource HumanConversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  name: 'Human_Conversations'
+  location: location
+  parent: cosmosDbDatabase
+  properties: {
+    resource: {
+      id: 'Human_Conversations'
+      createMode: 'Default'
+      partitionKey: {
+        kind: 'Hash'
+        paths: [
+          '/customer_id'
+        ]
+      }
+    }
+    options: {
+    }
+  }
+}
+resource ProductContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  name: 'Product'
+  location: location
+  parent: cosmosDbDatabase
+  properties: {
+    resource: {
+      id: 'Product'
+      createMode: 'Default'
+      partitionKey: {
+        kind: 'Hash'
+        paths: [
+          '/product_id'
+        ]
+      }
+    }
+    options: {
+    }
+  }
+}
+resource PurchasesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  name: 'Purchases'
+  location: location
+  parent: cosmosDbDatabase
+  properties: {
+    resource: {
+      id: 'Purchases'
+      createMode: 'Default'
+      partitionKey: {
+        kind: 'Hash'
+        paths: [
+          '/customer_id'
         ]
       }
     }
@@ -117,5 +193,9 @@ resource sqlRoleAssignmentPrincipal 'Microsoft.DocumentDB/databaseAccounts/sqlRo
 }
 
 output cosmosDbDatabase string = cosmosDbDatabase.name
-output cosmosDbContainer string = experimentsContainer.name
+output cosmosDbAIConversationsContainer string = AIConversationsContainer.name
+output cosmosDbCustomerContainer string = CustomerContainer.name
+output cosmosDbHumanConversationsContainer string = HumanConversationsContainer.name
+output cosmosDbProductContainer string = ProductContainer.name
+output cosmosDbPurchasesContainer string = PurchasesContainer.name
 output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint

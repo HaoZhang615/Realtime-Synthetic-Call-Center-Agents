@@ -46,10 +46,8 @@ st.write(
     """
     Welcome to the admin interface. Use the navigation menu on the left to:
     
-    * **Ingest Data**: Upload documents (.pdf, .docx, etc.) to be processed and added to the knowledge base
-    * **Delete Data**: Remove documents from the knowledge base when they are no longer needed
-    
-    The system uses Azure AI Search with integrated vectorization to process and index your documents 
-    for semantic search capabilities. Uploaded documents will be processed and made available for searching in your realtime voice enabled assistant.
+    * **Ingest Documents**: Upload documents (.pdf, .docx, etc.) to be processed and added to the knowledge base
+    * **Delete Documents**: Remove documents from the knowledge base when they are no longer needed
+    * **Synthesize Data**: Generate synthetic data to simulate a **Contact Center** scenario with a database comprised of product, customer, purchases history, human agent conversations and AI agent concersations.
     """
 )
