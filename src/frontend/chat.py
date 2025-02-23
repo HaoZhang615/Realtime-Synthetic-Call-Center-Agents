@@ -1,6 +1,12 @@
 import chainlit as cl
 from uuid import uuid4
 from chainlit.logger import logger
+import json
+import os
+from typing import List, Dict
+from azure.cosmos import CosmosClient, exceptions
+from azure.identity import DefaultAzureCredential
+import util
 
 from realtime2 import RealtimeClient
     
@@ -10,8 +16,33 @@ from agents.database_agent import database_agent
 from agents.assistant_agent import assistant_agent
 from agents.web_search_agent import web_search_agent
 
+def load_customers() -> List[Dict]:
+    util.load_dotenv_from_azd()
+    credential = DefaultAzureCredential()
+    cosmos_endpoint = os.getenv("COSMOSDB_ENDPOINT")
+    cosmos_client = CosmosClient(cosmos_endpoint, credential)
+    database_name = os.getenv("COSMOSDB_DATABASE")
+    customer_container_name = "Customer"
+    
+    try:
+        database = cosmos_client.get_database_client(database_name)
+        container = database.get_container_client(customer_container_name)
+        
+        # Query all customers
+        query = "SELECT c.customer_id, c.first_name, c.last_name FROM c"
+        items = list(container.query_items(query, enable_cross_partition_query=True))
+        
+        return [{
+            'id': item['customer_id'],  # Using customer_id as id for consistency
+            'name': f"{item['first_name']} {item['last_name']}"
+        } for item in items]
+    except exceptions.CosmosResourceNotFoundError as e:
+        logger.error(f"CosmosHttpResponseError: {e}")
+        return []
+
 async def setup_openai_realtime():
     """Instantiate and configure the OpenAI Realtime Client"""
+    customer_id = cl.user_session.get("customer_id")
              
     openai_realtime = RealtimeClient(system_prompt = "")
     cl.user_session.set("track_id", str(uuid4()))
@@ -73,13 +104,37 @@ async def setup_openai_realtime():
     openai_realtime.assistant.register_agent(database_agent)
     openai_realtime.assistant.register_agent(assistant_agent)
     # This method must be called last, as it will ensure every agent knows each other plus the path to the root agent
-    openai_realtime.assistant.register_root_agent(root_assistant)
+    openai_realtime.assistant.register_root_agent(root_assistant(customer_id))
     
 
 @cl.on_chat_start
 async def start():
-    # res = await cl.AskUserMessage(content="What is your name?", timeout=30).send()
-    await setup_openai_realtime()
+    # Load customer list
+    customers = load_customers()
+    
+    # Create customer selection dropdown
+    res = await cl.AskActionMessage(
+        content="Please select a customer to login:",
+        actions=[
+            cl.Action(
+                name="login",
+                value=str(customer['id']),
+                label=customer['name'],
+                payload={"customer_id": customer['id']}
+            )
+            for customer in customers
+        ],
+    ).send()
+    
+    if res:
+        # Get customer_id from the payload
+        customer_id = res['payload']['customer_id']
+        print(f"Customer ID: {customer_id}")
+        cl.user_session.set("customer_id", customer_id)
+        await cl.Message(content=f"Logged in successfully!").send()
+        await setup_openai_realtime()
+    else:
+        await cl.Message(content="Login failed or timed out. Please refresh to try again.").send()
 
 @cl.on_message
 async def on_message(message: cl.Message):

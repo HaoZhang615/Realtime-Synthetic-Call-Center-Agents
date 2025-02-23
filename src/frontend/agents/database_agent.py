@@ -2,6 +2,8 @@
 import os
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
 from azure.identity import DefaultAzureCredential
+import util
+util.load_dotenv_from_azd()
 
 # CosmosDB Configuration
 credential = DefaultAzureCredential()

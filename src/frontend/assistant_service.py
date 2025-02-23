@@ -116,6 +116,8 @@ class AssistantService:
             return response
 
     def format_string(self, string, params):
-        # TODO additional logic may be added here, 
-        # like providing common instructions for all agents to follow voice-specific guidelines
+        # If there are no format placeholders in the string, return it as is
+        if '{language}' not in string:
+            return string
+        # Otherwise format it with the provided params
         return string.format(**params)

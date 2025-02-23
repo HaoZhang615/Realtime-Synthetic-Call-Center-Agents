@@ -16,5 +16,6 @@ dependencies = [
     "numpy>=2.2.2",
     "aiohttp>=3.11.12",
     "cffi",
-    "cryptography"
+    "cryptography",
+    "azure-cosmos>=4.9.0",
 ]
