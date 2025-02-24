@@ -98,7 +98,7 @@ var realtimeDeployment =    [{
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  6
+      capacity:  1
     }
   }]
 
@@ -111,7 +111,7 @@ var gpt4ominiDeployment =    [{
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  6
+      capacity:  1
     }
   }]
 
