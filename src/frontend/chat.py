@@ -101,7 +101,7 @@ async def setup_openai_realtime():
     # Agents must be registered before the root agent
     openai_realtime.assistant.register_agent(web_search_agent)
     openai_realtime.assistant.register_agent(internal_kb_agent)
-    openai_realtime.assistant.register_agent(database_agent)
+    openai_realtime.assistant.register_agent(database_agent(customer_id))
     openai_realtime.assistant.register_agent(assistant_agent)
     # This method must be called last, as it will ensure every agent knows each other plus the path to the root agent
     openai_realtime.assistant.register_root_agent(root_assistant(customer_id))
