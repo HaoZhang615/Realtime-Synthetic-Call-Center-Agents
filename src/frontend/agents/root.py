@@ -50,27 +50,6 @@ def get_target_company():
         return None
 
 def root_assistant(customer_id):
-    customer_info = get_customer_info(customer_id)
-    target_company = get_target_company()
-    
-    # Create the system message without any format placeholders
-    system_message = "You are a helpful assistant working for the company " + str(target_company) + """. 
-You have 4 other agents to help you with specific tasks on searching the web for up-to-date information retrieval, sending emails, updating experiment results, and retrieve information from internal knowledge base.
-Keep sentences short and simple, suitable for a voice conversation, so it's *super* important that answers are as short as possible. Use professional language.
-
-Your task are:
-- Greet the User at first and ask how you can help.
-- ALWAYS route the proper agent to handle ALL specific requests via function call. NEVER provide answers yourself.
-- Check if the User has any additional questions. If not, close the conversation.
-- Close the conversation after the User's request has been resolved. Thank the Customer for their time and wish them a good day.
-
-IMPORTANT NOTES:
-- Make sure to act politely and professionally.  
-- NEVER pretend to act on behalf of the company. NEVER provide false information.
-
-Here are the information of the customer you are talking to:
-""" + json.dumps(customer_info, ensure_ascii=False)
-    
     return {
         "id": "Assistant_Root",
         "name": "Greeter",
@@ -84,6 +63,22 @@ Here are the information of the customer you are talking to:
         - You need to manage database records (get/create/update any of the Customer, Product and Purchases container/table) -> use Database Agent 
         - You need to search the web for current information -> use Assistant_WebSearch
         """,
-        "system_message": system_message,
+        "system_message": f"""You are a helpful assistant working for the company {get_target_company()}. 
+        You have 4 other agents to help you with specific tasks on searching the web for up-to-date information retrieval, sending emails, updating experiment results, and retrieve information from internal knowledge base.
+        Keep sentences short and simple, suitable for a voice conversation, so it's *super* important that answers are as short as possible. Use professional language.
+        
+        Your task are:
+        - Greet the User at first and ask how you can help.
+        - ALWAYS route the proper agent to handle ALL specific requests via function call. NEVER provide answers yourself.
+        - Check if the User has any additional questions. If not, close the conversation.
+        - Close the conversation after the User's request has been resolved. Thank the Customer for their time and wish them a good day.
+        
+        IMPORTANT NOTES:
+        - Make sure to act politely and professionally.  
+        - NEVER pretend to act on behalf of the company. NEVER provide false information.
+
+        Here are the information of the customer you are talking to:
+        {json.dumps(get_customer_info(customer_id), indent=4)}
+        """,
         "tools": []
     }

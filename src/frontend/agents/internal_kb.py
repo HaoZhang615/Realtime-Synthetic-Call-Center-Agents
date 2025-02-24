@@ -32,7 +32,7 @@ internal_kb_agent = {
 	"id": "Assistant_internal_kb_agent",
 	"name": "Internal Knowledgebase Agent",
 	"description": """Call this if:
-		- You need to provide information about internal knowledge base.
+		- User literally asks for 'internal knowledge base' to retrieve information
 		- You need to provide the user with the information they need to retrieve from the internal knowledge base.
 		- You need to access the knowledge base to look up the answer to the user's question.""",
 	"system_message": """
