@@ -4,6 +4,7 @@ from azure.identity import DefaultAzureCredential
 import util
 from typing import Dict, List, Optional, Union
 import logging
+import uuid  # NEW: Import uuid for generating unique IDs
 
 util.load_dotenv_from_azd()
 
@@ -35,6 +36,26 @@ class DatabaseAgent:
     def create_purchases_record(self, parameters: Dict) -> str:
         """Creates a new purchase record in the Purchases container."""
         purchase_record = parameters.get('purchase_record', {})
+        
+        # Check if product_id is missing in purchase_record
+        if "product_id" not in purchase_record:
+            # First, check if top-level product_id is provided
+            if "product_id" in parameters:
+                purchase_record["product_id"] = parameters["product_id"]
+            # Otherwise, if a product_name is provided in purchase_record, derive product_id from it
+            elif "product_name" in purchase_record:
+                product_name = purchase_record["product_name"]
+                product_container = database.get_container_client(product_container_name)
+                query = "SELECT TOP 1 * FROM c WHERE CONTAINS(c.name, @name)"
+                query_params = [{"name": "@name", "value": product_name}]
+                results = list(product_container.query_items(query=query, parameters=query_params, enable_cross_partition_query=True))
+                if results:
+                    purchase_record["product_id"] = results[0]["product_id"]
+                    # Optionally remove product_name to avoid redundancy
+                    del purchase_record["product_name"]
+                else:
+                    return f"Product with name '{product_name}' not found. Please check the product name."
+        
         container = database.get_container_client(purchase_container_name)
         
         # Validate customer exists
@@ -44,6 +65,10 @@ class DatabaseAgent:
         
         # Add customer_id to purchase record
         purchase_record["customer_id"] = self.customer_id
+        
+        # NEW: Add an "id" field required by CosmosDB
+        purchase_record["id"] = str(uuid.uuid4())
+        
         if "product_id" not in purchase_record:
             return "Missing required field: product_id"
         
