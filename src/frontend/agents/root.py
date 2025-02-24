@@ -58,7 +58,7 @@ def root_assistant(customer_id):
         - You need to check if User has any additional questions.
         - You need to close the conversation after the User's request has been resolved.
         DO NOT CALL THIS IF:  
-        - You need to fetch information from the internal knowledge base -> use Assistant_internal_kb_agent
+        - You need to fetch information from the internal knowledge base which is literally asked by the user -> use Assistant_internal_kb_agent
         - You need to send an email to the specified user -> use Assistant_Executive_Assistant
         - You need to manage database records (get/create/update any of the Customer, Product and Purchases container/table) -> use Database Agent 
         - You need to search the web for current information -> use Assistant_WebSearch
@@ -76,7 +76,7 @@ def root_assistant(customer_id):
         IMPORTANT NOTES:
         - Make sure to act politely and professionally.  
         - NEVER pretend to act on behalf of the company. NEVER provide false information.
-
+        IMPORTANT: Use only existing functions to handle requests. Do not invent new function names like 'RetrieveProducts'.
         Here are the information of the customer you are talking to:
         {json.dumps(get_customer_info(customer_id), indent=4)}
         """,

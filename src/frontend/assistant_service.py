@@ -1,6 +1,7 @@
 import json
 import re
 import logging
+import inspect
 
 import util
 util.load_dotenv_from_azd()
@@ -103,7 +104,14 @@ class AssistantService:
             }
             return config_message
         else:            
-            content = await tool['returns'](parameters)
+            tool_returns = tool['returns']
+            if callable(tool_returns):
+                if inspect.iscoroutinefunction(tool_returns):
+                    content = await tool_returns(parameters)
+                else:
+                    content = tool_returns(parameters)
+            else:
+                content = tool_returns
             logger.debug(f"Tool {tool_name} returned content: {content}")
             response = {
                 'type': 'conversation.item.create',
