@@ -14,6 +14,7 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: cosmosDbAccountName
   location: location
   kind: 'GlobalDocumentDB'
+  tags: tags  // Added tags usage
   properties: {
     databaseAccountOfferType: 'Standard'
     locations: [

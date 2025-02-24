@@ -194,27 +194,9 @@ module office365Connection 'br/public:avm/res/web/connection:0.4.1' = {
   }
 }
 
-
-module experimentsConnection 'br/public:avm/res/web/connection:0.4.1' = {
-  name: 'experiments'
-  scope: resGroup
-  params: {
-    name: 'experiments'
-    api: {
-      id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/documentdb'
-    }
-    displayName: 'experiments'
-    parameterValueSet: {
-      name: 'managedIdentityAuth'
-      values: {}
-    }
-  }
-}
-
 module sendEmailLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
   name: 'sendEmailLogic'
   scope: resGroup
-  dependsOn: [office365Connection]
   params: {
     name: '${abbrs.logicWorkflows}sendemail-${resourceToken}'
     location: resGroup.location
@@ -246,92 +228,6 @@ module sendEmailLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
     }
   }
 }
-module updateResultsLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
-  name: 'updateResultsLogic'
-  scope: resGroup
-  params: {
-    name: '${abbrs.logicWorkflows}updateresults-${resourceToken}'
-    location: resGroup.location
-    managedIdentities: { userAssignedResourceIds: [appIdentity.outputs.identityId] }
-    diagnosticSettings: [
-      {
-        name: 'customSetting'
-        metricCategories: [
-          {
-            category: 'AllMetrics'
-          }
-        ]
-        workspaceResourceId: monitoring.outputs.logAnalyticsWorkspaceId
-      }
-    ]
-    workflowActions: loadJsonContent('./modules/logicapp/update_experiments.actions.json')
-    workflowTriggers: loadJsonContent('./modules/logicapp/update_experiments.triggers.json')
-    workflowParameters: loadJsonContent('./modules/logicapp/update_experiments.parameters.json')
-    definitionParameters: {
-      '$connections': {
-        value: {
-          experiments: {
-            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/documentdb'
-            connectionId: experimentsConnection.outputs.resourceId
-            connectionName: experimentsConnection.name
-            connectionProperties: {
-              authentication: {
-                  type: 'ManagedServiceIdentity'
-                  identity: appIdentity.outputs.identityId
-              }
-            }
-          }
-        }
-      }
-      dbAccountName : {
-        value: 'cosmos${resourceToken}'
-      }
-    }
-  }
-}
-module getResultsLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
-  name: 'getResultsLogic'
-  scope: resGroup
-  params: {
-    name: '${abbrs.logicWorkflows}getresults-${resourceToken}'
-    location: resGroup.location
-    managedIdentities: { userAssignedResourceIds: [appIdentity.outputs.identityId] }
-    diagnosticSettings: [
-      {
-        name: 'customSetting'
-        metricCategories: [
-          {
-            category: 'AllMetrics'
-          }
-        ]
-        workspaceResourceId: monitoring.outputs.logAnalyticsWorkspaceId
-      }
-    ]
-    workflowActions: loadJsonContent('./modules/logicapp/get_experiments.actions.json')
-    workflowTriggers: loadJsonContent('./modules/logicapp/get_experiments.triggers.json')
-    workflowParameters: loadJsonContent('./modules/logicapp/get_experiments.parameters.json')
-    definitionParameters: {
-      '$connections': {
-        value: {
-          experiments: {
-            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/documentdb'
-            connectionId: experimentsConnection.outputs.resourceId
-            connectionName: experimentsConnection.name
-            connectionProperties: {
-              authentication: {
-                  type: 'ManagedServiceIdentity'
-                  identity: appIdentity.outputs.identityId
-              }
-            }
-          }
-        }
-      }
-      dbAccountName : {
-        value: 'cosmos${resourceToken}'
-      }
-    }
-  }
-}
 
 module sendMailUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
   name: 'sendMailUrl'
@@ -342,33 +238,17 @@ module sendMailUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
   }
   dependsOn: [sendEmailLogic]
 }
-module updateExperimentUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
-  name: 'updateExperimentUrl'
-  scope: resGroup
-  params: {
-    logicAppName: '${abbrs.logicWorkflows}updateresults-${resourceToken}'
-    triggerName: 'When_a_HTTP_request_is_received'
-  }
-  dependsOn: [updateResultsLogic]
-}
-module getExperimentUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
-  name: 'getExperimentUrl'
-  scope: resGroup
-  params: {
-    logicAppName: '${abbrs.logicWorkflows}getresults-${resourceToken}'
-    triggerName: 'When_a_HTTP_request_is_received'
-  }
-  dependsOn: [updateResultsLogic]
-}
 
 var openAiEndpoint = !empty(openAiRealtimeName)
   ? 'https://${openAiRealtimeName}.openai.azure.com'
   : openAi.outputs.endpoint
+  
 module app 'modules/app/containerapp.bicep' = {
   name: 'app'
   scope: resGroup
   params: {
-    name: '${abbrs.appContainerApps}app-${resourceToken}'
+    appName: '${abbrs.appContainerApps}app-${resourceToken}'
+    location: location
     tags: tags
     logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
@@ -382,8 +262,6 @@ module app 'modules/app/containerapp.bicep' = {
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
-      UPDATE_RESULTS_LOGIC_APP_URL: updateExperimentUrl.outputs.url
-      GET_RESULTS_LOGIC_APP_URL: getExperimentUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
       COSMOSDB_AI_Conversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
@@ -398,7 +276,6 @@ module app 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
     })
   }
-  dependsOn: [registry, sendEmailLogic, updateResultsLogic]
 }
 
 module searchService 'br/public:avm/res/search/search-service:0.7.1' = {
@@ -518,7 +395,7 @@ output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelNam
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
 
-output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.blob.core.windows.net'
+output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.${environment().suffixes.storage}'
 output AZURE_STORAGE_ACCOUNT string = storage.outputs.name
 output AZURE_STORAGE_CONNECTION_STRING string = 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
 output AZURE_STORAGE_CONTAINER string = storageContainerName
@@ -526,10 +403,7 @@ output AZURE_STORAGE_RESOURCE_GROUP string = resGroup.name
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.outputs.loginServer
 
-
 output SEND_EMAIL_LOGIC_APP_URL string = sendMailUrl.outputs.url
-output UPDATE_RESULTS_LOGIC_APP_URL string = updateExperimentUrl.outputs.url
-output GET_RESULTS_LOGIC_APP_URL string = getExperimentUrl.outputs.url
 
 output COSMOSDB_ENDPOINT string = cosmosdb.outputs.cosmosDbEndpoint
 output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase

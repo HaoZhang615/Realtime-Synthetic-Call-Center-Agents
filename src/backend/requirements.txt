@@ -28,5 +28,3 @@ websockets==14.0
     # via agentic-voice-assistant (pyproject.toml)
 azure-monitor-opentelemetry==1.0.0b9
     # Added for configure_azure_monitor in Admin.py
-tempfile
-    # Added for creating temporary directories in 01_Ingest_Data.py

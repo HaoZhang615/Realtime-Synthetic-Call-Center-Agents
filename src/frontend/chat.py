@@ -51,45 +51,35 @@ async def setup_openai_realtime():
         delta = event.get("delta")
         """Currently used to stream audio back to the client."""
         if event:
-            # print(f"Event {event}")
             if "input_audio_transcription" in item["type"]:
                 msg = cl.Message(content=delta["transcript"], author="user")
                 msg.type = "user_message"
                 await msg.send()
         if delta:
-            # Only one of the following will be populated for any given event
             if 'audio' in delta:
-                audio = delta['audio']  # Int16Array, audio added
+                audio = delta['audio']
                 await cl.context.emitter.send_audio_chunk(cl.OutputAudioChunk(mimeType="pcm16", data=audio, track=cl.user_session.get("track_id")))
             if 'transcript' in delta:
-                transcript = delta['transcript']  # string, transcript added
+                transcript = delta['transcript']
                 pass
             if 'arguments' in delta:
-                arguments = delta['arguments']  # string, function arguments added
+                arguments = delta['arguments']
                 pass
             
     async def handle_item_completed(item):
         """Used to populate the chat context with transcription once an item is completed."""
         if item["item"]["type"] == "message":
-                
             content = item["item"]["content"][0]
-            
-            if item["item"]["content"][0]["type"] == "input_audio":
-                logger.info(f"----------------------------------------")
-                logger.info(f"Here to be transcription")
-                
             if content["type"] == "audio":
                 await cl.Message(content=content["transcript"]).send()
     
     async def handle_conversation_interrupt(event):
         """Used to cancel the client previous audio playback."""
         cl.user_session.set("track_id", str(uuid4()))
-        # NOTE this will only work starting from version 2.0.0
         await cl.context.emitter.send_audio_interrupt()
         
     async def handle_error(event):
         logger.error(event)
-        
     
     openai_realtime.on('conversation.updated', handle_conversation_updated)
     openai_realtime.on('conversation.item.completed', handle_item_completed)
@@ -103,9 +93,7 @@ async def setup_openai_realtime():
     openai_realtime.assistant.register_agent(internal_kb_agent)
     openai_realtime.assistant.register_agent(database_agent(customer_id))
     openai_realtime.assistant.register_agent(assistant_agent)
-    # This method must be called last, as it will ensure every agent knows each other plus the path to the root agent
     openai_realtime.assistant.register_root_agent(root_assistant(customer_id))
-    
 
 @cl.on_chat_start
 async def start():

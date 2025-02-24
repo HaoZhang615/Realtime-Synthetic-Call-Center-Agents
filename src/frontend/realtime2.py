@@ -111,7 +111,7 @@ class RealtimeAPI(RealtimeEventHandler):
     def log(self, *args):
         logger.debug(f"[Websocket/{datetime.utcnow().isoformat()}]", *args)
 
-    async def connect(self, model='gpt-4o-realtime-preview'):
+    async def connect(self, model='gpt-4o-mini-realtime-preview'):
         if self.is_connected():
             raise Exception("Already connected")
         

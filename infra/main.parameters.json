@@ -22,6 +22,24 @@
     },
     "appExists": {
       "value": "${SERVICE_APP_RESOURCE_EXISTS=false}"
+    },
+    "backendContainerAppName": {
+      "value": "agentic-backend-app"
+    },
+    "backendContainerImage": {
+      "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+    },
+    "frontendContainerAppName": {
+      "value": "agentic-frontend-app"
+    },
+    "frontendContainerImage": {
+      "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+    },
+    "bingSearchApiKey": {
+      "value": "${BING_SEARCH_API_KEY}"
+    },
+    "bingSearchApiEndpoint": {
+      "value": "https://api.bing.microsoft.com/v7.0/search"
     }
   }
 }
