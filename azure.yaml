@@ -2,8 +2,15 @@ name: agentic-voice-demo
 metadata:
     template: azd-init@1.4.2
 services:
-    app:
+    frontend:
         project: ./src/frontend
+        host: containerapp
+        language: python
+        docker:
+            path: Dockerfile
+            remoteBuild: true
+    backend:
+        project: ./src/backend
         host: containerapp
         language: python
         docker:

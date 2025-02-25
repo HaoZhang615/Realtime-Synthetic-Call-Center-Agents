@@ -1,6 +1,7 @@
 param appName string
 param location string = resourceGroup().location
 param tags object = {}
+param serviceName string
 
 @description('The environment variables for the container in key value pairs')
 param env object = {}
@@ -9,6 +10,7 @@ param identityId string
 param containerRegistryName string
 param logAnalyticsWorkspaceName string
 param exists bool
+param targetPort int = 80
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = { name: logAnalyticsWorkspaceName }
 
@@ -38,7 +40,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2022-10-01'
 resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
   name: appName
   location: location
-  tags: union(tags, {'azd-service-name':  'app' })
+  tags: union(tags, {'azd-service-name': serviceName})
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${identityId}': {} }
@@ -48,7 +50,7 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
     configuration: {
       ingress:  {
         external: true
-        targetPort: 80
+        targetPort: targetPort
         transport: 'auto'
       }
       registries: [

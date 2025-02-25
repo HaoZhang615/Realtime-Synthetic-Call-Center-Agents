@@ -8,22 +8,34 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the project configuration files
+COPY pyproject.toml ./
+# If a uv.lock file exists, uncomment the next line
+# COPY uv.lock ./
+
+# Install uv package manager and sync dependencies from pyproject.toml
+RUN pip install --no-cache-dir uv && uv sync
 
 # Copy the rest of the application
 COPY . .
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PORT=3000
+ENV PORT=80
+ENV PYTHONPATH=/app
 
-# Make sure pages directory is treated as a package
-RUN touch pages/__init__.py
+# Ensure directories are treated as packages and verify structure
+RUN touch __init__.py pages/__init__.py utils/__init__.py && \
+    ls -la /app && \
+    ls -la /app/utils && \
+    echo "PYTHONPATH: $PYTHONPATH" && \
+    python -c "import sys; print('Python path:', sys.path)"
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE ${PORT}
 
-# Command to run the application
-CMD ["streamlit", "run", "pages/01_Ingest_Documents.py", "--server.port", "3000", "--server.address", "0.0.0.0"]
+# Wrap the startup command to print debug info
+CMD echo "Current directory: $(pwd)" && \
+    echo "Directory contents: $(ls -la)" && \
+    echo "Python path: $(python -c 'import sys; print(sys.path)')" && \
+    /app/.venv/bin/streamlit run Admin.py --server.port=80 --server.address=0.0.0.0 --server.enableCORS false

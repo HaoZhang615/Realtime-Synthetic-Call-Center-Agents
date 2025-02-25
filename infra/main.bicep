@@ -111,7 +111,7 @@ var gpt4ominiDeployment =    [{
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  1
+      capacity:  50
     }
   }]
 
@@ -242,18 +242,20 @@ module sendMailUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
 var openAiEndpoint = !empty(openAiRealtimeName)
   ? 'https://${openAiRealtimeName}.openai.azure.com'
   : openAi.outputs.endpoint
-  
-module app 'modules/app/containerapp.bicep' = {
-  name: 'app'
+
+module frontendApp 'modules/app/containerapp.bicep' = {
+  name: 'frontend'
   scope: resGroup
   params: {
-    appName: '${abbrs.appContainerApps}app-${resourceToken}'
+    appName: '${abbrs.appContainerApps}frontend-${resourceToken}'
+    serviceName: 'frontend'  // Changed from 'app' to 'frontend'
     location: location
     tags: tags
     logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
     containerRegistryName: registry.outputs.name
     exists: appExists
+    targetPort: 80
     env: union({
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
@@ -264,13 +266,49 @@ module app 'modules/app/containerapp.bicep' = {
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
-      COSMOSDB_AI_Conversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
+      COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
       COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
       COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
       BING_SEARCH_API_KEY: bingSearchApiKey
+    },
+    empty(openAiRealtimeName) ? {} : {
+      AZURE_OPENAI_API_KEY: openAiRealtimeKey
+    })
+  }
+}
+
+module backendApp 'modules/app/containerapp.bicep' = {
+  name: 'backend'
+  scope: resGroup
+  params: {
+    appName: '${abbrs.appContainerApps}backend-${resourceToken}'
+    serviceName: 'backend'
+    location: location
+    tags: tags
+    logAnalyticsWorkspaceName: logAnalyticsName
+    identityId: appIdentity.outputs.identityId
+    containerRegistryName: registry.outputs.name
+    exists: appExists
+    targetPort: 80  // Updated targetPort to 80 to match container listening port
+    env: union({
+      AZURE_CLIENT_ID: appIdentity.outputs.clientId
+      APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
+      AZURE_OPENAI_ENDPOINT: openAiEndpoint
+      AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
+      AZURE_SEARCH_INDEX: searchIndexName
+      AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.core.windows.net'
+      AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
+      AZURE_STORAGE_CONTAINER: storageContainerName
+      COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
+      COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
+      COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
+      COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
+      COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
+      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
+      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
     },
     empty(openAiRealtimeName) ? {} : {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
@@ -391,11 +429,12 @@ output AZURE_OPENAI_EMBEDDING_ENDPOINT string = openAi.outputs.endpoint
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
 output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelName
+output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
 
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
 
-output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.${environment().suffixes.storage}'
+output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.blob.core.windows.net'
 output AZURE_STORAGE_ACCOUNT string = storage.outputs.name
 output AZURE_STORAGE_CONNECTION_STRING string = 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
 output AZURE_STORAGE_CONTAINER string = storageContainerName
@@ -407,8 +446,10 @@ output SEND_EMAIL_LOGIC_APP_URL string = sendMailUrl.outputs.url
 
 output COSMOSDB_ENDPOINT string = cosmosdb.outputs.cosmosDbEndpoint
 output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase
-output COSMOSDB_AI_Conversations_CONTAINER string = cosmosdb.outputs.cosmosDbAIConversationsContainer
+output COSMOSDB_AIConversations_CONTAINER string = cosmosdb.outputs.cosmosDbAIConversationsContainer
 output COSMOSDB_Customer_CONTAINER string = cosmosdb.outputs.cosmosDbCustomerContainer
 output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbHumanConversationsContainer
 output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
 output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
+
+output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint

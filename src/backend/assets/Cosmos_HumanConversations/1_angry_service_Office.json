@@ -1,0 +1,44 @@
+{
+    "conversation_id": "123456789",
+    "customer_id": "Hannah-001",
+    "agent_id": "fred-001",
+    "messages": [
+        {
+            "sender": "customer",
+            "message": "I've been trying to get my Office software to work for the last hour! This is ridiculous!"
+        },
+        {
+            "sender": "agent",
+            "message": "I apologize for the inconvenience, Hannah. Can you please tell me what issues you're facing?"
+        },
+        {
+            "sender": "customer",
+            "message": "It keeps crashing! I need to get my work done, and this is unacceptable!"
+        },
+        {
+            "sender": "agent",
+            "message": "I understand how frustrating that can be. Let's see if we can troubleshoot the issue together."
+        },
+        {
+            "sender": "customer",
+            "message": "I don't want to troubleshoot! I just want it to work! I've had enough of this poor service!"
+        },
+        {
+            "sender": "agent",
+            "message": "I'm sorry to hear that you're upset. I'm here to help you resolve this as quickly as possible."
+        },
+        {
+            "sender": "customer",
+            "message": "It shouldn't be this hard! I just want a functional product that I paid for!"
+        },
+        {
+            "sender": "agent",
+            "message": "I completely understand your frustration. Let me pull up your account and see what we can do to fix it quickly."
+        }
+    ],
+    "sentiment": "angry",
+    "topic": "service",
+    "product": "Office",
+    "session_id": "30d99d41c29c3ef99266f5d808f4db7a",
+    "id": "chat_1_30d99d41c29c3ef99266f5d808f4db7a"
+}

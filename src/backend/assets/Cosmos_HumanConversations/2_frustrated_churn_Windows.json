@@ -1,0 +1,48 @@
+{
+    "conversation_id": "conv123456",
+    "customer_id": "cust789012",
+    "agent_id": "curie",
+    "messages": [
+        {
+            "sender": "customer",
+            "message": "I've been really frustrated with my Windows lately. It's constantly crashing!"
+        },
+        {
+            "sender": "agent",
+            "message": "I'm sorry to hear that, Nicole. Can you tell me when the crashes typically occur?"
+        },
+        {
+            "sender": "customer",
+            "message": "It happens randomly! I can't complete any of my tasks. I'm seriously considering switching to a different OS."
+        },
+        {
+            "sender": "agent",
+            "message": "I understand how that can be very frustrating. Let's see if we can troubleshoot this together."
+        },
+        {
+            "sender": "customer",
+            "message": "I've already tried updating everything, and it still doesn't work! What else can be done?"
+        },
+        {
+            "sender": "agent",
+            "message": "Have you checked if there are any conflicting programs that could be causing the crashes?"
+        },
+        {
+            "sender": "customer",
+            "message": "No, I shouldn't have to be a tech expert to figure this out. I just want my Windows to work!"
+        },
+        {
+            "sender": "agent",
+            "message": "I completely understand your frustration. Let's go through a few steps to hopefully resolve this."
+        },
+        {
+            "sender": "customer",
+            "message": "I appreciate your help, but this is really disappointing. I can't keep dealing with this."
+        }
+    ],
+    "sentiment": "frustrated",
+    "topic": "churn",
+    "product": "Windows",
+    "session_id": "ed1bb8e971e332639c0eb95acd24964a",
+    "id": "chat_2_ed1bb8e971e332639c0eb95acd24964a"
+}

@@ -1,0 +1,16 @@
+{
+    "name": "Windows 11 Pro",
+    "category": "Operating System",
+    "type": "Software",
+    "brand": "Microsoft",
+    "company": "Microsoft",
+    "unit_price": 199.99,
+    "weight": {
+        "value": 0,
+        "unit": "kg"
+    },
+    "color": "N/A",
+    "material": "N/A",
+    "product_id": "5f5bf301daaa37b1a998ed111893703e",
+    "id": "0_5f5bf301daaa37b1a998ed111893703e"
+}

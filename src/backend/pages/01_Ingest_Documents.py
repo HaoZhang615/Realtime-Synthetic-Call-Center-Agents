@@ -5,9 +5,11 @@ import logging
 import traceback
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils.file_processor import setup_index, upload_documents
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 logger = logging.getLogger(__name__)
 
 st.set_page_config(

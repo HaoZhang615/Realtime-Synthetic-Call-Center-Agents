@@ -1,0 +1,14 @@
+{
+    "first_name": "Fiona",
+    "last_name": "Parker",
+    "email": "fiona.parker@example.com",
+    "address": {
+        "street": "Maple Avenue 45",
+        "city": "Seattle",
+        "postal_code": "98101",
+        "country": "USA"
+    },
+    "phone_number": "+12063457890",
+    "customer_id": "f9d85f823796392fb9ffbcf61b58c636",
+    "id": "1_f9d85f823796392fb9ffbcf61b58c636"
+}
