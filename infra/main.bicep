@@ -69,7 +69,7 @@ module appIdentity './modules/app/identity.bicep' = {
 
 // ------------------------
 // [ Array of OpenAI Model deployments ]
-param aoaiGpt4oRealtimeModelName string = 'gpt-4o-realtime-preview'
+param aoaiGpt4oRealtimeModelName string = 'gpt-4o-mini-realtime-preview'
 param aoaiGpt4ModelVersion string = '2024-12-17'
 param aoaiGpt4oMiniModelName string = 'gpt-4o-mini'
 param aoaiGpt4oMiniModelVersion string = '2024-07-18'
@@ -261,7 +261,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
-      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: 'gpt-4o-mini-realtime-preview'
+      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: aoaiGpt4oRealtimeModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
@@ -296,8 +296,13 @@ module backendApp 'modules/app/containerapp.bicep' = {
     targetPort: 80  // Updated targetPort to 80 to match container listening port
     env: union({
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
+      AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
+      AZURE_OPENAI_EMBEDDING_ENDPOINT: openAiEndpoint
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
+      AZURE_OPENAI_EMBEDDING_MODEL: embedModel
+      AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.core.windows.net'
