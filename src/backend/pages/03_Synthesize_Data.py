@@ -20,7 +20,7 @@ def load_css(file_path):
     with open(file_path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-products_folder_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'Products_and_Urls_List')
+products_folder_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'Cosmos_ProductUrl')
 json_file_path = None
 for file_name in os.listdir(products_folder_path):
     if file_name.endswith('.json'):

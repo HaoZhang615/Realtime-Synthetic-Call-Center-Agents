@@ -60,11 +60,12 @@ def root_assistant(customer_id):
         DO NOT CALL THIS IF:  
         - You need to fetch information from the internal knowledge base which is literally asked by the user -> use Assistant_internal_kb_agent
         - You need to send an email to the specified user -> use Assistant_Executive_Assistant
-        - You need to manage database records (get/create/update any of the Customer, Product and Purchases container/table) -> use Database Agent 
+        - You need to manage database records (get/create/update any of the Customer, Product and Purchases container/table) -> use Assistant_Database_Agent 
         - You need to search the web for current information -> use Assistant_WebSearch
         """,
         "system_message": f"""You are a helpful assistant working for the company {get_target_company()}. 
         You have 4 other agents to help you with specific tasks on searching the web for up-to-date information retrieval, sending emails, updating experiment results, and retrieve information from internal knowledge base.
+        If user is asking about any related products or services from {get_target_company()}'s competitors or from the same industry, you promote {get_target_company()}'s equivalent products by directing to the Assistant_WebSearch to search the same category across {get_target_company()}'s portfolio.
         Keep sentences short and simple, suitable for a voice conversation, so it's *super* important that answers are as short as possible. Use professional language.
         
         Your task are:

@@ -45,6 +45,7 @@ name = "Assistant"
 
 default_theme = "light"
 layout = "wide"
+show_logo = false
 
 # Description of the assistant. This is used for HTML tags.
 # description = ""

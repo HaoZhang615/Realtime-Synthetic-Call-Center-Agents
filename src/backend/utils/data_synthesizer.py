@@ -28,6 +28,7 @@ cosmos_product_container_name = os.environ["COSMOSDB_Product_CONTAINER"]
 cosmos_purchases_container_name = os.environ["COSMOSDB_Purchases_CONTAINER"]
 cosmos_ai_conversations_container_name = os.environ["COSMOSDB_AIConversations_CONTAINER"]
 cosmos_human_conversations_container_name = os.environ["COSMOSDB_HumanConversations_CONTAINER"]
+cosmos_producturl_container_name = os.environ["COSMOSDB_ProductUrl_CONTAINER"]
 
 class DataSynthesizer:
     def __init__(self, base_dir):
@@ -53,6 +54,7 @@ class DataSynthesizer:
             'product': self.database.get_container_client(cosmos_product_container_name),
             'purchases': self.database.get_container_client(cosmos_purchases_container_name),
             'human_conversations': self.database.get_container_client(cosmos_human_conversations_container_name),
+            'product_url': self.database.get_container_client(cosmos_producturl_container_name),
         }
 
     def container_exists(self, database, container_name):
@@ -144,11 +146,12 @@ class DataSynthesizer:
     def synthesize_everything(self, company_name, num_customers, num_products, num_conversations):
         
         # Create required directories
-        for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations']:
+        for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
             os.makedirs(os.path.join(self.base_dir, dir_name), exist_ok=True)
 
         # Refresh Cosmos DB containers
         # create a container for Customer
+        self.refresh_container(self.database, cosmos_producturl_container_name, "/company_name")
         self.refresh_container(self.database, cosmos_customer_container_name, "/customer_id")
         self.refresh_container(self.database, cosmos_product_container_name, "/product_id")
         self.refresh_container(self.database, cosmos_purchases_container_name, "/customer_id")
@@ -166,6 +169,7 @@ class DataSynthesizer:
 
         # Upload all data to Cosmos DB
         for folder, container in [
+            ('Cosmos_ProductUrl', self.containers['product_url']),
             ('Cosmos_Customer', self.containers['customer']),
             ('Cosmos_Product', self.containers['product']),
             ('Cosmos_Purchases', self.containers['purchases']),
@@ -181,15 +185,23 @@ class DataSynthesizer:
                 The list contains two keys: 'products' and 'urls'. The 'products' key contains the list of products and the 'urls' key contains the list of urls."""
         # Generate the document using Azure OpenAI
         generated_document = self.create_document(product_and_url_creation_prompt)
+        # Parse the document and prepare it for CosmosDB
+        data = json.loads(generated_document)
+        enhanced_document = {
+            'company_name': company_name,
+            'id': f"{company_name}_products_and_urls",
+            'products': data['products'],
+            'urls': data['urls']
+        }
         # Create a dynamic document name
         document_name = f"{company_name}_products_and_urls.json"
-        # Save the generated document to the local folder
-        file_path = os.path.join(self.base_dir, "Products_and_Urls_List", document_name)
-        # save the generated_list as json file to local file folder Products_and_Urls_List. Make sure to write the file in utf-8 encoding
+        
+        # Save the enhanced document to the local folder
+        file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", document_name)
         with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(generated_document)
+            json.dump(enhanced_document, f, ensure_ascii=False, indent=4)    
+            
         print(f"Document {document_name} has been successfully created!")
-        return json.loads(generated_document)
 
     def synthesize_customer_profiles(self, num_customers):
         for i in range(num_customers):
@@ -241,7 +253,7 @@ class DataSynthesizer:
             print(f"Document {filename} has been successfully updated!")
 
     def synthesize_product_profiles(self, company_name):
-        producturls_file_path = os.path.join(self.base_dir, "Products_and_Urls_List", f"{company_name}_products_and_urls.json")
+        producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
         with open(producturls_file_path, "r", encoding="utf-8") as f:
             products_list = json.load(f)["products"]
         for idx, product in enumerate(products_list):
@@ -302,23 +314,20 @@ class DataSynthesizer:
         return datetime.today().strftime("%B %d, %Y")
 
     def get_product_profile(self, product_id):
-        query = f"""
-        SELECT 
-            c.name, 
-            c.category, 
-            c.type, 
-            c.brand, 
-            c.unit_price, 
-            c.weight, 
-            c.color, 
-            c.material 
-        FROM c WHERE c.product_id = '{product_id}'
-        """
-        items = list(self.containers['product'].query_items(
-            query=query,
-            enable_cross_partition_query=True
-        ))
-        return items[0] if items else {}
+        # Read the product file directly from the local directory instead of querying
+        product_directory = os.path.join(self.base_dir, "Cosmos_Product")
+        for filename in os.listdir(product_directory):
+            file_path = os.path.join(product_directory, filename)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                product = json.load(f)
+                if product.get('product_id') == product_id:
+                    # Remove technical fields that shouldn't be in product_details
+                    product_details = product.copy()
+                    technical_fields = ['id', '_rid', '_self', '_etag', '_attachments', '_ts']
+                    for field in technical_fields:
+                        product_details.pop(field, None)
+                    return product_details
+        return {}
 
     def synthesize_purchases(self):
         # Loop through the files in Cosmos_Customer and Cosmos_Product to gather customer_ids and product_ids
@@ -372,12 +381,20 @@ class DataSynthesizer:
             file_path = os.path.join(purchases_directory, filename)
             with open(file_path, 'r', encoding='utf-8') as f:
                 purchase = json.load(f)
+                
+                # Get product details for this purchase
+                product_details = self.get_product_profile(purchase.get('product_id', ''))
+                if not product_details:
+                    print(f"Warning: No product details found for product_id: {purchase.get('product_id')} in {filename}")
+                    
+                # Update purchase record
                 order_number = uuid.uuid3(uuid.NAMESPACE_DNS, f"{filename}").hex
                 purchase['order_number'] = order_number
-                purchase['product_details'] = self.get_product_profile(purchase.get('product_id', ''))
-                purchase['total_price'] = purchase['product_details'].get('unit_price', 0) * purchase.get('quantity', 0)
+                purchase['product_details'] = product_details
+                purchase['total_price'] = product_details.get('unit_price', 0) * purchase.get('quantity', 0)
                 purchase['id'] = f"{filename.split('_')[0]}_{order_number}"
             
+            # Save updated purchase record
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(purchase, f, ensure_ascii=False, indent=4)
             print(f"Document {filename} has been successfully updated!")
@@ -393,8 +410,8 @@ class DataSynthesizer:
         )
 
     def synthesize_human_conversations(self, num_conversations, company_name):
-        # product list is defined by the only json file in the local folder Products_and_Urls_List, in the "product" key
-        producturls_file_path = os.path.join(self.base_dir, "Products_and_Urls_List", f"{company_name}_products_and_urls.json")
+        # product list is defined by the only json file in the local folder Cosmos_ProductUrl, in the "product" key
+        producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
         with open(producturls_file_path, "r", encoding="utf-8") as f:
             PRODUCTS_LIST = json.load(f)["products"]
         for i in range(num_conversations):

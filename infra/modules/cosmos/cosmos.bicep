@@ -143,6 +143,26 @@ resource PurchasesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
   }
 }
 
+resource ProductUrlContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  name: 'ProductUrl'
+  location: location
+  parent: cosmosDbDatabase
+  properties: {
+    resource: {
+      id: 'ProductUrl'
+      createMode: 'Default'
+      partitionKey: {
+        kind: 'Hash'
+        paths: [
+          '/company_name'
+        ]
+      }
+    }
+    options: {
+    }
+  }
+}
+
 /*
   SEE
     https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/microsoft.kusto/kusto-cosmos-db/main.bicep
@@ -199,4 +219,5 @@ output cosmosDbCustomerContainer string = CustomerContainer.name
 output cosmosDbHumanConversationsContainer string = HumanConversationsContainer.name
 output cosmosDbProductContainer string = ProductContainer.name
 output cosmosDbPurchasesContainer string = PurchasesContainer.name
+output cosmosDbProductUrlContainer string = ProductUrlContainer.name
 output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint

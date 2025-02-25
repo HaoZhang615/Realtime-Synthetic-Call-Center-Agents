@@ -1,7 +1,0 @@
-{
-  "products": ["Windows", "Office"],
-  "urls": [
-    "https://www.microsoft.com/windows",
-    "https://www.microsoft.com/microsoft-365"
-  ]
-}

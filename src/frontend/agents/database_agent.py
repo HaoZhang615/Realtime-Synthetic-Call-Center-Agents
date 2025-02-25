@@ -4,7 +4,8 @@ from azure.identity import DefaultAzureCredential
 import util
 from typing import Dict, List, Optional, Union
 import logging
-import uuid  # NEW: Import uuid for generating unique IDs
+import uuid
+from datetime import datetime  # Add datetime import
 
 util.load_dotenv_from_azd()
 
@@ -55,25 +56,45 @@ class DatabaseAgent:
                     del purchase_record["product_name"]
                 else:
                     return f"Product with name '{product_name}' not found. Please check the product name."
-        
+
         container = database.get_container_client(purchase_container_name)
+        product_container = database.get_container_client(product_container_name)
         
         # Validate customer exists
         customer_container = database.get_container_client(customer_container_name)
         if not self.validate_customer_exists(customer_container):
             return f"Customer with ID {self.customer_id} not found"
         
-        # Add customer_id to purchase record
-        purchase_record["customer_id"] = self.customer_id
-        
-        # NEW: Add an "id" field required by CosmosDB
-        purchase_record["id"] = str(uuid.uuid4())
-        
-        if "product_id" not in purchase_record:
+        # Get product details
+        if "product_id" in purchase_record:
+            product_query = "SELECT * FROM c WHERE c.product_id = @product_id"
+            product_params = [{"name": "@product_id", "value": purchase_record["product_id"]}]
+            product_results = list(product_container.query_items(
+                query=product_query,
+                parameters=product_params,
+                enable_cross_partition_query=True
+            ))
+            if product_results:
+                product_details = product_results[0]
+            else:
+                return f"Product with ID {purchase_record['product_id']} not found"
+        else:
             return "Missing required field: product_id"
+
+        # Create final purchase record with required schema
+        final_record = {
+            "customer_id": self.customer_id,
+            "product_id": purchase_record["product_id"],
+            "quantity": purchase_record.get("quantity", 1),  # Default to 1 if not specified
+            "purchasing_date": datetime.utcnow().isoformat(),
+            "order_number": str(uuid.uuid4().hex),
+            "product_details": product_details,
+            "total_price": product_details.get("unit_price", 0) * purchase_record.get("quantity", 1),
+            "id": str(uuid.uuid4())
+        }
         
         try:
-            container.create_item(body=purchase_record)
+            container.create_item(body=final_record)
             return "Purchase record created successfully."
         except exceptions.CosmosHttpResponseError as e:
             logging.error(f"Failed to create purchase record: {e}")
@@ -286,7 +307,7 @@ IMPORTANT: Never invent new tool or function names. Always use only the provided
                     "properties": {
                         "purchase_record": {
                             "type": "object",
-                            "description": "The purchase record containing product_id, quantity, purchasing_date, and total_price"
+                            "description": "The purchase record containing product_id and quantity."
                         }
                     },
                     "required": ["purchase_record"]
