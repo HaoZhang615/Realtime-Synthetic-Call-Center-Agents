@@ -261,7 +261,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
-      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: 'gpt-4o-realtime-preview'
+      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: 'gpt-4o-mini-realtime-preview'
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
