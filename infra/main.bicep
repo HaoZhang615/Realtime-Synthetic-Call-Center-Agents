@@ -258,6 +258,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
     targetPort: 80
     env: union({
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
+      AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
       AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: 'gpt-4o-realtime-preview'
