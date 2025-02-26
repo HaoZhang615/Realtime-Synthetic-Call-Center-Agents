@@ -68,8 +68,6 @@ Please follow the instructions in [the instructions in `src/chainlit`](./src/fro
 
 ![Architecture Diagram](./docs/images/architecture.png)
 
-Because the assistant has a modular architecture and powered by Azure Logic Apps, expanding its features is simple. You can add new steps and integrations without tearing everything apart.
-
 ## Contributing
 
 This project welcomes contributions and suggestions. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.

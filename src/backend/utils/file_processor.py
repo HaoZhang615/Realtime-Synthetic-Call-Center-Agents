@@ -48,6 +48,8 @@ load_dotenv_from_azd()
 def setup_index(azure_credential, uami_id, index_name, azure_search_endpoint, azure_storage_connection_string, azure_storage_container, azure_openai_embedding_endpoint, azure_openai_embedding_deployment, azure_openai_embedding_model, azure_openai_embeddings_dimensions):
     index_client = SearchIndexClient(azure_search_endpoint, azure_credential)
     indexer_client = SearchIndexerClient(azure_search_endpoint, azure_credential)
+    logging.info(f"Using identity: {azure_credential.__class__.__name__}")
+    logging.info(f"User assigned identity ID: {uami_id}")
 
     data_source_connections = indexer_client.get_data_source_connections()
     if index_name in [ds.name for ds in data_source_connections]:

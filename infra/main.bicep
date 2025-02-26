@@ -98,7 +98,7 @@ var realtimeDeployment =    [{
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  1
+      capacity:  2
     }
   }]
 
@@ -116,6 +116,37 @@ var gpt4ominiDeployment =    [{
   }]
 
 var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment)
+
+// Add Key Vault to store secrets like Bing Search API Key
+module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
+  name: 'keyVault'
+  scope: resGroup
+  params: {
+    name: 'kv-${resourceToken}'
+    location: location
+    enableRbacAuthorization: true
+    roleAssignments: [
+      {
+        roleDefinitionIdOrName: 'Key Vault Secrets User'
+        principalId: appIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
+      {
+        roleDefinitionIdOrName: 'Key Vault Secrets Officer'
+        principalId: principalId
+        principalType: principalType
+      }
+    ]
+    secrets: {
+      secureList: [
+        {
+          name: 'bingSearchApiKey'
+          value: bingSearchApiKey
+        }
+      ]
+    }
+  }
+}
 
 module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
   name: 'openai'
@@ -315,6 +346,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
+      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
     },
     empty(openAiRealtimeName) ? {} : {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
@@ -427,6 +459,7 @@ module storage 'br/public:avm/res/storage/storage-account:0.9.1' = {
 // OUTPUTS will be saved in azd env for later use
 output AZURE_LOCATION string = location
 output AZURE_TENANT_ID string = tenant().tenantId
+output AZURE_CLIENT_ID string = appIdentity.outputs.clientId
 output AZURE_RESOURCE_GROUP string = resGroup.name
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 
@@ -460,3 +493,6 @@ output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesC
 output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
 
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
+// Add output for Key Vault reference - this will be saved in the .env file
+output BING_SEARCH_API_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)'
+// This doesn't expose the actual key value but instead provides a reference format that can be used by Container Apps

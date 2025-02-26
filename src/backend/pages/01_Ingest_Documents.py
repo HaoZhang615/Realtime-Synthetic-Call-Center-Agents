@@ -52,6 +52,7 @@ try:
 
                     azure_credential = DefaultAzureCredential()
 
+
                     # Ensure index and required components exist
                     setup_index(
                         azure_credential=azure_credential,

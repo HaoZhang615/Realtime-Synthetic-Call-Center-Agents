@@ -39,7 +39,7 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
     st.image(os.path.join("images", "logo.png"))
 
-st.write("# Realtime Synthetic Call Center Agents Solution Accelerator")
+st.write("# Realtime Synthetic Call Center Agents")
 st.write("## Admin Interface")
 
 st.write(
