@@ -291,12 +291,12 @@ Available operations:
 - get_purchases_record: retrieves all purchases for the current customer from the Purchases container.
 
 NOTES:
-- Before updating any records, make sure to confirm the details with the user.
+- Before updating or creating any records, make sure to confirm the details with the user.
 - All operations automatically use the current customer's ID.
 - Purchases are always associated with both the current customer and a product_id.
 - Before creating or updating a record, use the 'get' tools to retrieve the required schema of the respective container.
 
-IMPORTANT: Never invent new tool or function names. Always use only the provided tools when interacting with the database.
+IMPORTANT: Never invent new tool or function names. Always use only the provided tools when interacting with the database. You are not allowed to delete any records.
 """,
         "tools": [
             {
@@ -307,7 +307,7 @@ IMPORTANT: Never invent new tool or function names. Always use only the provided
                     "properties": {
                         "purchase_record": {
                             "type": "object",
-                            "description": "The purchase record containing product_id and quantity."
+                            "description": "The purchase record containing product_id and quantity. User does not know product_id, use the get_product_record tool to derive product_id from the user's natural language query.",
                         }
                     },
                     "required": ["purchase_record"]

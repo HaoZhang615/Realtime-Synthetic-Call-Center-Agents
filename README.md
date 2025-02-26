@@ -1,13 +1,13 @@
 # Realtime Synthetic Call Center Agents
 **Realtime Synthetic Call Center Agents** is a solution that simulates AI-driven contact center scenarios using synthetic data and realtime voice interaction. 
 
-It allows users to ingest own documents (PDF, Word, TXT, HTML etc.) to build an `internal knowledgebase` for the `internal kb agent` to query on and instantly synthesize structured data about customers, products, purchases and human-agent interactions for `database agent` to perform actions (read, update) upon, enabling rapid prototyping and demonstration of AI enabled multi-agent pattern. 
+It allows users to ingest own documents (PDF, Word, TXT, HTML etc.) to build an `internal knowledge base` for the `internal kb agent` to query on and instantly synthesize structured data about customers, products, purchases and human-agent interactions for `database agent` to perform actions (read, update) upon, enabling rapid prototyping and demonstration of AI enabled multi-agent pattern. 
 
 Addtionally, based on the input company name, a `web search agent` is also available to retrieve up-to-date information for users and ground the answer by the related products from that company. 
 
 ![Assistant Interface](./docs/images/Realtime-Synthetic-Call-Center-Agents.webp "AI Assistant Interface")
 
-The multi-agent system supports internal knowledge base query, web searche (grounded by the synthetic product of a real given company e.g. Microsoft), and database actions (create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
+The multi-agent system supports internal knowledge base query, web searche (grounded by the synthetic product of a real given company e.g. Microsoft), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
 
 ## How to get it work
 
@@ -50,6 +50,11 @@ git clone [placeholder for the repo URL]
 cd [placeholder for the repo name]
 azd up
 ```
+Example: initiate deployment
+![azd_up_start](docs/images/azdup.png)
+Example: successful deployment
+![azd_up_final](docs/images/azd_up_final_state.png)
+
 
 >[!NOTE]
 >Once deployed, you need to authorise the solution to use your M365 email account for the outbound email capability.
@@ -62,7 +67,7 @@ azd up
 
 Once the environment has been deployed with `azd up` you can also run the aplication locally.
 
-Please follow the instructions in [the instructions in `src/chainlit`](./src/frontend/README.md)
+Please follow the instructions in [the instructions in `src/frontend`](./src/frontend/README.md)
 
 ## Architecture
 
@@ -81,7 +86,7 @@ This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for
 - [Chainlit Documentation](https://docs.chainlit.io/)
 - [Azure OpenAI Documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
 - [VoiceRAG Documentation](https://techcommunity.microsoft.com/blog/azure-ai-services-blog/voicerag-an-app-pattern-for-rag--voice-using-azure-ai-search-and-the-gpt-4o-real/4259116)
-- This project is based on the ideas and implementation of the following projects:
-    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)
+- This project is derived from the ideas and implementation of the following projects:
     - [Azure Samples: agentic-voice-assistant](https://github.com/Azure-Samples/agentic-voice-assistant)
     - [Azure Samples: chat-with-your-data-solution-accelerator](https://github.com/Azure-Samples/chat-with-your-data-solution-accelerator)
+    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)
