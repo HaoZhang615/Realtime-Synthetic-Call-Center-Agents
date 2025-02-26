@@ -303,6 +303,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
+      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
       BING_SEARCH_API_KEY: bingSearchApiKey
     },
