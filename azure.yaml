@@ -16,15 +16,3 @@ services:
         docker:
             path: Dockerfile
             remoteBuild: true
-# hooks:
-#     postprovision:
-#       windows:
-#         shell: pwsh
-#         run: ./scripts/setup.ps1
-#         interactive: true
-#         continueOnError: false
-#       posix:
-#         shell: sh
-#         run: ./scripts/setup.sh
-#         interactive: true
-#         continueOnError: false

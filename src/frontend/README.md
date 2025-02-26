@@ -7,7 +7,7 @@ The project is managed by pyproject.toml and [uv package manager](https://docs.a
 For local execution init the .venv environment using [uv package manager](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```shell
-cd src/chainlit
+cd src/frontend
 uv sync
 . ./.venv/bin/activate
 chainlit run ./chat.py
@@ -19,5 +19,7 @@ The local execution relies on environmental variables to reference Azure resourc
 These environment vaiables are set automatically by `azd` when the infrastructure is provisioned by `azd up`. 
 
 They are set in the AZD env file: `$project/.azure/<selected_azd_environment>/.env`
+
+You have to manually add the environment variable `BING_SEARCH_API_KEY` in the .env file's last line.
 
 When `chainlit` command is run, the application looks up and reads the `.env` file above automatically.

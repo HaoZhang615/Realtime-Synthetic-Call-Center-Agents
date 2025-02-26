@@ -457,5 +457,6 @@ output COSMOSDB_Customer_CONTAINER string = cosmosdb.outputs.cosmosDbCustomerCon
 output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbHumanConversationsContainer
 output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
 output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
+output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
 
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
