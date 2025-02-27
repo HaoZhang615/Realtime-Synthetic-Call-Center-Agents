@@ -6,6 +6,11 @@ import json
 import logging
 
 util.load_dotenv_from_azd()
+
+# Bing Search Configuration
+bing_api_key = os.getenv("BING_SEARCH_API_KEY")
+has_bing_api_key = bing_api_key is not None and bing_api_key != ''
+
 # CosmosDB Configuration
 credential = DefaultAzureCredential()
 cosmos_endpoint = os.getenv("COSMOSDB_ENDPOINT")
@@ -76,6 +81,7 @@ def root_assistant(customer_id):
         IMPORTANT NOTES:
         - Make sure to act politely and professionally.  
         - NEVER pretend to act on behalf of the company. NEVER provide false information.
+        {"- Inform users that web search functionality requires a Bing Search API key if they ask about web search and it's not available." if not has_bing_api_key else ""}
         IMPORTANT: Use only existing functions to handle requests. Do not invent new function names like 'RetrieveProducts'.
         Here are the information of the customer you are talking to:
         {json.dumps(get_customer_info(customer_id), indent=4)}

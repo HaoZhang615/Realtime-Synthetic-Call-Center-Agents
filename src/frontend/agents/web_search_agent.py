@@ -12,8 +12,7 @@ util.load_dotenv_from_azd()
 
 # Bing Search Configuration
 bing_api_key = os.getenv("BING_SEARCH_API_KEY")
-if not bing_api_key:
-    raise ValueError("Missing Bing search API key. Please set BING_SEARCH_API_KEY environment variable.")
+has_bing_api_key = bing_api_key is not None and bing_api_key != ''
 
 bing_api_endpoint = os.getenv("BING_SEARCH_API_ENDPOINT", "https://api.bing.microsoft.com/v7.0/search")
 
@@ -42,6 +41,9 @@ def get_target_company():
         return None
     
 async def search_web(params):
+    if not has_bing_api_key:
+        return "Web search is currently unavailable because no Bing Search API key was provided."
+        
     query = params["query"]
     up_to_date = params.get("up_to_date", False)
 

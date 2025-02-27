@@ -138,12 +138,12 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
       }
     ]
     secrets: {
-      secureList: [
+      secureList: !empty(bingSearchApiKey) ? [
         {
           name: 'bingSearchApiKey'
           value: bingSearchApiKey
         }
-      ]
+      ] : []
     }
   }
 }
@@ -305,11 +305,15 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
-      BING_SEARCH_API_KEY: bingSearchApiKey
     },
-    empty(openAiRealtimeName) ? {} : {
-      AZURE_OPENAI_API_KEY: openAiRealtimeKey
-    })
+    union(
+      empty(openAiRealtimeName) ? {} : {
+        AZURE_OPENAI_API_KEY: openAiRealtimeKey
+      },
+      !empty(bingSearchApiKey) ? {
+        BING_SEARCH_API_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)'
+      } : {}
+    ))
   }
 }
 
@@ -494,6 +498,5 @@ output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesC
 output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
 
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
-// Add output for Key Vault reference - this will be saved in the .env file
-output BING_SEARCH_API_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)'
-// This doesn't expose the actual key value but instead provides a reference format that can be used by Container Apps
+// Only include Key Vault reference if a Bing Search API key was provided
+output BING_SEARCH_API_KEY string = !empty(bingSearchApiKey) ? '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)' : ''

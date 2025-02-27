@@ -5,9 +5,9 @@ It allows users to ingest own documents (PDF, Word, TXT, HTML etc.) to build an 
 
 Addtionally, based on the input company name, a `web search agent` is also available to retrieve up-to-date information for users and ground the answer by the related products from that company. 
 
-![Assistant Interface](./docs/images/Realtime-Synthetic-Call-Center-Agents.webp "AI Assistant Interface")
+![Assistant Interface](./docs/images/Realtime-Synthetic-Call-Center-Agents.webp)
 
-The multi-agent system supports internal knowledge base query, web searche (grounded by the synthetic product of a real given company e.g. Microsoft), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
+The multi-agent system supports internal knowledge base query, web search (grounded by the synthetic product of a real given company e.g. Microsoft), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
 
 ## How to get it work
 
@@ -42,6 +42,7 @@ The multi-agent system supports internal knowledge base query, web searche (grou
 - [Python](https://www.python.org/about/gettingstarted/): `python`
 - [UV](https://docs.astral.sh/uv/getting-started/installation/): `uv`
 - Optionally [Docker](https://www.docker.com/get-started/): `docker`
+- Optionally a Bing Search V7 resource API in Azure for the web search agent to work.
 
 ### Deployment and setup
 
@@ -115,4 +116,9 @@ This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for
 - This project is derived from the ideas and implementation of the following projects:
     - [Azure Samples: agentic-voice-assistant](https://github.com/Azure-Samples/agentic-voice-assistant)
     - [Azure Samples: chat-with-your-data-solution-accelerator](https://github.com/Azure-Samples/chat-with-your-data-solution-accelerator)
-    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)
+    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)$
+
+## to-do
+- [ ] add a demo video
+- [ ] add logic to log the conversation into CosmosDB under container `human_agent_conversations`
+- [ ] add PowerBI dashboard integration for Post-Call Analysis
