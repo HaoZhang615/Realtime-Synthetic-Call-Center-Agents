@@ -63,6 +63,32 @@ Example: successful deployment
 >[!NOTE]
 >AZD will also setup the local Python environment for you, using `venv` and installing the required packages.
 
+## Customization and Iteration
+
+This solution is designed to be easily customizable without requiring complete redeployment of Azure resources:
+
+- To modify and deploy only the frontend components:
+  ```sh
+  # Make your changes to the frontend code
+  azd deploy frontend
+  ```
+
+- To modify and deploy only the backend components:
+  ```sh
+  # Make your changes to the backend code
+  azd deploy backend
+  ```
+
+These targeted deployments allow for faster development cycles and testing while preserving your Azure resource configuration and data.
+
+Additionally, thanks to Azure Logic Apps' extensive connector ecosystem, the solution offers promising extensibility options. You can easily integrate with hundreds of services and systems such as:
+- CRM and business systems (Dynamics 365, Salesforce, etc.)
+- Communication platforms (Teams, Slack, SMS)
+- Additional database systems
+- Enterprise applications and services
+
+This enables you to build complete end-to-end workflows that connect the AI assistant with your existing business processes and data sources without extensive custom coding.
+
 ## Local execution
 
 Once the environment has been deployed with `azd up` you can also run the aplication locally.

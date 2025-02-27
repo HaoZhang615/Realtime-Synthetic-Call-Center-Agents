@@ -9,6 +9,11 @@ from utils.data_synthesizer import run_synthesis
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 logger = logging.getLogger(__name__)
 
+# Ensure the assets directory structure exists
+base_assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
+for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
+    os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
+
 st.set_page_config(
     page_title="Synthesize Data",
     page_icon=":studio_microphone:",
