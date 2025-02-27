@@ -47,8 +47,8 @@ The multi-agent system supports internal knowledge base query, web search (groun
 ### Deployment and setup
 
 ```sh
-git clone [placeholder for the repo URL]
-cd [placeholder for the repo name]
+git clone https://github.com/HaoZhang615/Realtime-Synthetic-Call-Center-Agents.git
+cd .\Realtime-Synthetic-Call-Center-Agents\
 azd up
 ```
 Example: initiate deployment
