@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 logger = logging.getLogger(__name__)
 
 st.set_page_config(
-    page_title="Delete Data",
+    page_title="Synthesize Data",
     page_icon=":studio_microphone:",
     layout="wide",
     menu_items=None,
