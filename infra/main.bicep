@@ -69,8 +69,10 @@ module appIdentity './modules/app/identity.bicep' = {
 
 // ------------------------
 // [ Array of OpenAI Model deployments ]
-param aoaiGpt4ModelName string = 'gpt-4o-realtime-preview'
+param aoaiGpt4oRealtimeModelName string = 'gpt-4o-mini-realtime-preview'
 param aoaiGpt4ModelVersion string = '2024-12-17'
+param aoaiGpt4oMiniModelName string = 'gpt-4o-mini'
+param aoaiGpt4oMiniModelVersion string = '2024-07-18'
 param embedModel string = 'text-embedding-3-large'
 
 var embeddingDeployment = [
@@ -88,19 +90,63 @@ var embeddingDeployment = [
 ]
 
 var realtimeDeployment =    [{
-    name: aoaiGpt4ModelName
+    name: aoaiGpt4oRealtimeModelName
     model: {
       format: 'OpenAI'
-      name: aoaiGpt4ModelName
+      name: aoaiGpt4oRealtimeModelName
       version: aoaiGpt4ModelVersion
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  1
+      capacity:  2
     }
   }]
 
-var openAiDeployments = empty(openAiRealtimeName) ?  concat(realtimeDeployment, embeddingDeployment) : embeddingDeployment
+var gpt4ominiDeployment =    [{
+    name: aoaiGpt4oMiniModelName
+    model: {
+      format: 'OpenAI'
+      name: aoaiGpt4oMiniModelName
+      version: aoaiGpt4oMiniModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity:  50
+    }
+  }]
+
+var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment)
+
+// Add Key Vault to store secrets like Bing Search API Key
+module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
+  name: 'keyVault'
+  scope: resGroup
+  params: {
+    name: 'kv-${resourceToken}'
+    location: location
+    enableRbacAuthorization: true
+    roleAssignments: [
+      {
+        roleDefinitionIdOrName: 'Key Vault Secrets User'
+        principalId: appIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
+      {
+        roleDefinitionIdOrName: 'Key Vault Secrets Officer'
+        principalId: principalId
+        principalType: principalType
+      }
+    ]
+    secrets: {
+      secureList: [
+        {
+          name: 'bingSearchApiKey'
+          value: bingSearchApiKey
+        }
+      ]
+    }
+  }
+}
 
 module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
   name: 'openai'
@@ -179,27 +225,9 @@ module office365Connection 'br/public:avm/res/web/connection:0.4.1' = {
   }
 }
 
-
-module experimentsConnection 'br/public:avm/res/web/connection:0.4.1' = {
-  name: 'experiments'
-  scope: resGroup
-  params: {
-    name: 'experiments'
-    api: {
-      id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/documentdb'
-    }
-    displayName: 'experiments'
-    parameterValueSet: {
-      name: 'managedIdentityAuth'
-      values: {}
-    }
-  }
-}
-
 module sendEmailLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
   name: 'sendEmailLogic'
   scope: resGroup
-  dependsOn: [office365Connection]
   params: {
     name: '${abbrs.logicWorkflows}sendemail-${resourceToken}'
     location: resGroup.location
@@ -231,92 +259,6 @@ module sendEmailLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
     }
   }
 }
-module updateResultsLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
-  name: 'updateResultsLogic'
-  scope: resGroup
-  params: {
-    name: '${abbrs.logicWorkflows}updateresults-${resourceToken}'
-    location: resGroup.location
-    managedIdentities: { userAssignedResourceIds: [appIdentity.outputs.identityId] }
-    diagnosticSettings: [
-      {
-        name: 'customSetting'
-        metricCategories: [
-          {
-            category: 'AllMetrics'
-          }
-        ]
-        workspaceResourceId: monitoring.outputs.logAnalyticsWorkspaceId
-      }
-    ]
-    workflowActions: loadJsonContent('./modules/logicapp/update_experiments.actions.json')
-    workflowTriggers: loadJsonContent('./modules/logicapp/update_experiments.triggers.json')
-    workflowParameters: loadJsonContent('./modules/logicapp/update_experiments.parameters.json')
-    definitionParameters: {
-      '$connections': {
-        value: {
-          experiments: {
-            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/documentdb'
-            connectionId: experimentsConnection.outputs.resourceId
-            connectionName: experimentsConnection.name
-            connectionProperties: {
-              authentication: {
-                  type: 'ManagedServiceIdentity'
-                  identity: appIdentity.outputs.identityId
-              }
-            }
-          }
-        }
-      }
-      dbAccountName : {
-        value: 'cosmos${resourceToken}'
-      }
-    }
-  }
-}
-module getResultsLogic 'br/public:avm/res/logic/workflow:0.4.0' = {
-  name: 'getResultsLogic'
-  scope: resGroup
-  params: {
-    name: '${abbrs.logicWorkflows}getresults-${resourceToken}'
-    location: resGroup.location
-    managedIdentities: { userAssignedResourceIds: [appIdentity.outputs.identityId] }
-    diagnosticSettings: [
-      {
-        name: 'customSetting'
-        metricCategories: [
-          {
-            category: 'AllMetrics'
-          }
-        ]
-        workspaceResourceId: monitoring.outputs.logAnalyticsWorkspaceId
-      }
-    ]
-    workflowActions: loadJsonContent('./modules/logicapp/get_experiments.actions.json')
-    workflowTriggers: loadJsonContent('./modules/logicapp/get_experiments.triggers.json')
-    workflowParameters: loadJsonContent('./modules/logicapp/get_experiments.parameters.json')
-    definitionParameters: {
-      '$connections': {
-        value: {
-          experiments: {
-            id: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Web/locations/${location}/managedApis/documentdb'
-            connectionId: experimentsConnection.outputs.resourceId
-            connectionName: experimentsConnection.name
-            connectionProperties: {
-              authentication: {
-                  type: 'ManagedServiceIdentity'
-                  identity: appIdentity.outputs.identityId
-              }
-            }
-          }
-        }
-      }
-      dbAccountName : {
-        value: 'cosmos${resourceToken}'
-      }
-    }
-  }
-}
 
 module sendMailUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
   name: 'sendMailUrl'
@@ -327,51 +269,41 @@ module sendMailUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
   }
   dependsOn: [sendEmailLogic]
 }
-module updateExperimentUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
-  name: 'updateExperimentUrl'
-  scope: resGroup
-  params: {
-    logicAppName: '${abbrs.logicWorkflows}updateresults-${resourceToken}'
-    triggerName: 'When_a_HTTP_request_is_received'
-  }
-  dependsOn: [updateResultsLogic]
-}
-module getExperimentUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
-  name: 'getExperimentUrl'
-  scope: resGroup
-  params: {
-    logicAppName: '${abbrs.logicWorkflows}getresults-${resourceToken}'
-    triggerName: 'When_a_HTTP_request_is_received'
-  }
-  dependsOn: [updateResultsLogic]
-}
 
 var openAiEndpoint = !empty(openAiRealtimeName)
   ? 'https://${openAiRealtimeName}.openai.azure.com'
   : openAi.outputs.endpoint
-module app 'modules/app/containerapp.bicep' = {
-  name: 'app'
+
+module frontendApp 'modules/app/containerapp.bicep' = {
+  name: 'frontend'
   scope: resGroup
   params: {
-    name: '${abbrs.appContainerApps}app-${resourceToken}'
+    appName: '${abbrs.appContainerApps}frontend-${resourceToken}'
+    serviceName: 'frontend'  // Changed from 'app' to 'frontend'
+    location: location
     tags: tags
     logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
     containerRegistryName: registry.outputs.name
     exists: appExists
+    targetPort: 80
     env: union({
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
+      AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
-      AZURE_OPENAI_DEPLOYMENT: 'gpt-4o-realtime-preview'
+      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: aoaiGpt4oRealtimeModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
-      UPDATE_RESULTS_LOGIC_APP_URL: updateExperimentUrl.outputs.url
-      GET_RESULTS_LOGIC_APP_URL: getExperimentUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
-      COSMOSDB_CONTAINER: cosmosdb.outputs.cosmosDbContainer
+      COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
+      COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
+      COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
+      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
+      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
+      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
       BING_SEARCH_API_KEY: bingSearchApiKey
     },
@@ -379,7 +311,48 @@ module app 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
     })
   }
-  dependsOn: [registry, sendEmailLogic, updateResultsLogic]
+}
+
+module backendApp 'modules/app/containerapp.bicep' = {
+  name: 'backend'
+  scope: resGroup
+  params: {
+    appName: '${abbrs.appContainerApps}backend-${resourceToken}'
+    serviceName: 'backend'
+    location: location
+    tags: tags
+    logAnalyticsWorkspaceName: logAnalyticsName
+    identityId: appIdentity.outputs.identityId
+    containerRegistryName: registry.outputs.name
+    exists: appExists
+    targetPort: 80  // Updated targetPort to 80 to match container listening port
+    env: union({
+      AZURE_CLIENT_ID: appIdentity.outputs.clientId
+      AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
+      APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
+      AZURE_OPENAI_ENDPOINT: openAiEndpoint
+      AZURE_OPENAI_EMBEDDING_ENDPOINT: openAiEndpoint
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
+      AZURE_OPENAI_EMBEDDING_MODEL: embedModel
+      AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
+      AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
+      AZURE_SEARCH_INDEX: searchIndexName
+      AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.core.windows.net'
+      AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
+      AZURE_STORAGE_CONTAINER: storageContainerName
+      COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
+      COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
+      COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
+      COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
+      COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
+      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
+      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
+      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
+    },
+    empty(openAiRealtimeName) ? {} : {
+      AZURE_OPENAI_API_KEY: openAiRealtimeKey
+    })
+  }
 }
 
 module searchService 'br/public:avm/res/search/search-service:0.7.1' = {
@@ -487,6 +460,7 @@ module storage 'br/public:avm/res/storage/storage-account:0.9.1' = {
 // OUTPUTS will be saved in azd env for later use
 output AZURE_LOCATION string = location
 output AZURE_TENANT_ID string = tenant().tenantId
+output AZURE_CLIENT_ID string = appIdentity.outputs.clientId
 output AZURE_RESOURCE_GROUP string = resGroup.name
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 
@@ -494,7 +468,8 @@ output AZURE_OPENAI_ENDPOINT string = openAiEndpoint
 output AZURE_OPENAI_EMBEDDING_ENDPOINT string = openAi.outputs.endpoint
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
-output AZURE_OPENAI_DEPLOYMENT string = aoaiGpt4ModelName
+output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelName
+output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
 
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
@@ -507,7 +482,18 @@ output AZURE_STORAGE_RESOURCE_GROUP string = resGroup.name
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.outputs.loginServer
 
-
 output SEND_EMAIL_LOGIC_APP_URL string = sendMailUrl.outputs.url
-output UPDATE_RESULTS_LOGIC_APP_URL string = updateExperimentUrl.outputs.url
-output GET_RESULTS_LOGIC_APP_URL string = getExperimentUrl.outputs.url
+
+output COSMOSDB_ENDPOINT string = cosmosdb.outputs.cosmosDbEndpoint
+output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase
+output COSMOSDB_AIConversations_CONTAINER string = cosmosdb.outputs.cosmosDbAIConversationsContainer
+output COSMOSDB_Customer_CONTAINER string = cosmosdb.outputs.cosmosDbCustomerContainer
+output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbHumanConversationsContainer
+output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
+output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
+output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
+
+output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
+// Add output for Key Vault reference - this will be saved in the .env file
+output BING_SEARCH_API_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)'
+// This doesn't expose the actual key value but instead provides a reference format that can be used by Container Apps

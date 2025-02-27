@@ -1,3 +1,5 @@
+# project-specific files
+src/backend/assets/**/*.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

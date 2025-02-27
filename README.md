@@ -1,32 +1,37 @@
-# Agentic Voice Assistant
+# Realtime Synthetic Call Center Agents
+**Realtime Synthetic Call Center Agents** is a solution that simulates AI-driven contact center scenarios using synthetic data and realtime voice interaction. 
 
-Picture yourself in a busy lab, wearing thick gloves, safety goggles, and a snug lab coat. You can’t tap on a screen or use a keyboard - the gloves are too thick.
+It allows users to ingest own documents (PDF, Word, TXT, HTML etc.) to build an `internal knowledge base` for the `internal kb agent` to query on and instantly synthesize structured data about customers, products, purchases and human-agent interactions for `database agent` to perform actions (read, update) upon, enabling rapid prototyping and demonstration of AI enabled multi-agent pattern. 
 
-Yet you need to jot down a brilliant idea to explore later, or quickly cross check the results of another experiment.
+Addtionally, based on the input company name, a `web search agent` is also available to retrieve up-to-date information for users and ground the answer by the related products from that company. 
 
-![Laboratory as Imagined by Dall-E 3](./docs/images/laboratory.png "Laboratory as imagined by Dalle-E 3")
+![Assistant Interface](./docs/images/Realtime-Synthetic-Call-Center-Agents.webp "AI Assistant Interface")
 
-That’s where our Agentic Voice Assistant steps in.
+The multi-agent system supports internal knowledge base query, web searche (grounded by the synthetic product of a real given company e.g. Microsoft), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
 
-It connects you and all your lab’s systems, from records and notes to instructions and data. Just talk, and it retrieves what you need, makes a note, updates a system or sends a reminder.
+## How to get it work
 
-It works alongside you on your research, keeping you efficient and safe.
-
-## How to use the demo
-
-- [Deploy the demo](#how-to-deploy)
-- Get UI Container App URL from the output of `azd up`
+- [Deploy the application](#how-to-deploy)
+- Click on the backend app URL from the output of `azd up`.
+- read the instructions on the 'Admin' page:
+    - use the 'Ingest Documents' and 'Delete Documents' pages to manage documents for the internal knowledge base.
+    ![Backend Manage Documents](./docs/images/Backend_Manage_Document.png)
+    - use the 'Synthesize Data' page to dynamically synthesize a demo database in Azure CosmosDB with Customer, Product, Purchases tables.
+    ![Backend Synthesize Data](./docs/images/Backend_Synthesize_Data.png)
+- Click on the frontend app URL from the output of `azd up`.
+- Choose one of the customer name to log in.
 - Click on recording button or press 'P'
 - Speak
 
 ### Sample Questions
 
-- What are the personal protection instructions?
-- How do I keep records in the lab?
-- Give me the list of experiments.
-- Update the status of experiment 3 by James Brown to Success. You can validate the record has been updated in CosmosDB experiments container - see ![SQL Statement](./docs/sample_queries/get_experiments.sql)
-- Summarise the record keeping instructions and send them via email to "\<your email>"
-
+- I want to check if you have the up-to-date information about me.
+- Pleae change my address to [any address with street, number, city, postal code, country]
+- What products are currently available from your product catalog?
+- I want to take an new order with 2 units of [any product from the catalog]
+- Send an email to [your real Email address] to confirm my order. 
+- Looking at the internal knowledge base, could you tell me [any question for the document you ingested]
+- What is the latest news about [the company name you synthesized data from or one of its related brand]?
 
 ## How to deploy
 
@@ -41,14 +46,15 @@ It works alongside you on your research, keeping you efficient and safe.
 ### Deployment and setup
 
 ```sh
-git clone https://github.com/Azure-Samples/agentic-voice-assistant.git
-cd agentic-voice-assistant
+git clone [placeholder for the repo URL]
+cd [placeholder for the repo name]
 azd up
 ```
-### Update: added Web Search Agent that uses Bing Search API to enable up-to-date information retrieval.
-- as current limitation of provisioning Bing Search resource in Azure, the bicep file does not include the Bing Search resource provisioning, so you need to have an existing Bing Search resource in your Azure subscription and be able to access the API key.
-- you will be asked to provide your Bing Search API key after executing `azd up`
-- new questions can be asked using voice like "what is the latest news about XXX?"
+Example: initiate deployment
+![azd_up_start](docs/images/azdup.png)
+Example: successful deployment
+![azd_up_final](docs/images/azd_up_final_state.png)
+
 
 >[!NOTE]
 >Once deployed, you need to authorise the solution to use your M365 email account for the outbound email capability.
@@ -61,13 +67,11 @@ azd up
 
 Once the environment has been deployed with `azd up` you can also run the aplication locally.
 
-Please follow the instructions in [the instructions in `src/chainlit`](./src/chainlit/README.md)
+Please follow the instructions in [the instructions in `src/frontend`](./src/frontend/README.md)
 
 ## Architecture
 
-![Architecture Diagram](./docs/images/architecture_v0.0.1.png)
-
-Because the assistant has a modular architecture and powered by Azure Logic Apps, expanding its features is simple. You can add new steps and integrations without tearing everything apart.
+![Architecture Diagram](./docs/images/architecture.png)
 
 ## Contributing
 
@@ -81,3 +85,8 @@ This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for
 
 - [Chainlit Documentation](https://docs.chainlit.io/)
 - [Azure OpenAI Documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
+- [VoiceRAG Documentation](https://techcommunity.microsoft.com/blog/azure-ai-services-blog/voicerag-an-app-pattern-for-rag--voice-using-azure-ai-search-and-the-gpt-4o-real/4259116)
+- This project is derived from the ideas and implementation of the following projects:
+    - [Azure Samples: agentic-voice-assistant](https://github.com/Azure-Samples/agentic-voice-assistant)
+    - [Azure Samples: chat-with-your-data-solution-accelerator](https://github.com/Azure-Samples/chat-with-your-data-solution-accelerator)
+    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Development
+.git
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+__pycache__/
+*.pyc
+.env.local
+.python-version
+
+# Test
+test/
+tests/
+coverage/
+.coverage
+.pytest_cache/
+
+# Documentation
+docs/
+*.md
+
+# Logs
+*.log

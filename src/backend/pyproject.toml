@@ -1,0 +1,16 @@
+[project]
+name = "agentic-voice-assistant"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "azure-search-documents==11.6.0b4",
+    "azure-storage-blob",
+    "azure-identity",
+    "numpy",
+    "python-dotenv",
+    "rich",
+    "streamlit",
+    "azure-monitor-opentelemetry",
+    "openai>=1.64.0",
+    "azure-cosmos>=4.9.0",
+]

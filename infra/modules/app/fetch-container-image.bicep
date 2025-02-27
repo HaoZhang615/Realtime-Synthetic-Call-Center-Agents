@@ -1,8 +1,10 @@
 param exists bool
-param name string
 
-resource existingApp 'Microsoft.App/containerApps@2023-04-01-preview' existing = if (exists) {
-  name: name
-}
+var defaultImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+var image = exists ? defaultImage : defaultImage
 
-output containers array = exists ? existingApp.properties.template.containers : []
+output containers array = [
+  {
+    image: image
+  }
+]
