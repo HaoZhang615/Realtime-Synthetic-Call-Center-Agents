@@ -145,12 +145,7 @@ class DataSynthesizer:
 
     def synthesize_everything(self, company_name, num_customers, num_products, num_conversations):
         
-        # Create required directories
-        for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
-            os.makedirs(os.path.join(self.base_dir, dir_name), exist_ok=True)
-
         # Refresh Cosmos DB containers
-        # create a container for Customer
         self.refresh_container(self.database, cosmos_producturl_container_name, "/company_name")
         self.refresh_container(self.database, cosmos_customer_container_name, "/customer_id")
         self.refresh_container(self.database, cosmos_product_container_name, "/product_id")
@@ -487,6 +482,10 @@ class DataSynthesizer:
 
 def run_synthesis(company_name, num_customers, num_products, num_conversations):
     base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets')
+    # Ensure the assets directory structure exists
+    base_assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
+    for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
+        os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
     # print(f"Base directory: {base_dir}")
     synthesizer = DataSynthesizer(base_dir)
     synthesizer.synthesize_everything(company_name, num_customers, num_products, num_conversations)
