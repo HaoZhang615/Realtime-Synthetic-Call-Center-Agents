@@ -5,7 +5,7 @@ import util
 from typing import Dict, List, Optional, Union
 import logging
 import uuid
-from datetime import datetime  # Add datetime import
+from datetime import datetime, timezone, timedelta  # Add datetime import
 
 util.load_dotenv_from_azd()
 
@@ -75,7 +75,18 @@ class DatabaseAgent:
                 enable_cross_partition_query=True
             ))
             if product_results:
-                product_details = product_results[0]
+                # limit to first result and extract product details of 'name', 'category', 'type', 'brand', 'company', 'unit_price', 'weight', 'color','material'
+                product_details = {
+                    "name": product_results[0]["name"],
+                    "category": product_results[0]["category"],
+                    "type": product_results[0]["type"],
+                    "brand": product_results[0]["brand"],
+                    "company": product_results[0]["company"],
+                    "unit_price": product_results[0]["unit_price"],
+                    "weight": product_results[0]["weight"],
+                    "color": product_results[0].get("color", ""),
+                    "material": product_results[0].get("material", "")
+                }
             else:
                 return f"Product with ID {purchase_record['product_id']} not found"
         else:
@@ -86,7 +97,9 @@ class DatabaseAgent:
             "customer_id": self.customer_id,
             "product_id": purchase_record["product_id"],
             "quantity": purchase_record.get("quantity", 1),  # Default to 1 if not specified
-            "purchasing_date": datetime.utcnow().isoformat(),
+            "purchasing_date": datetime.now(timezone.utc).isoformat(),
+            # Default to current date + 5 days
+            "delivered_date": (datetime.now(timezone.utc) + timedelta(days=5)).isoformat(),
             "order_number": str(uuid.uuid4().hex),
             "product_details": product_details,
             "total_price": product_details.get("unit_price", 0) * purchase_record.get("quantity", 1),
