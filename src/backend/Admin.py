@@ -39,12 +39,12 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
     st.image(os.path.join("images", "logo.png"))
 
-st.write("# Manufacturing Operations Dashboard")
+st.write("# Lindt Shop Floor Operations Admin")
 st.write("## Admin Interface")
 
 st.write(
     """
-    Welcome to the Manufacturing Operations admin interface. Use the navigation menu on the left to:
+    Welcome to the Lindt Shop Floor Operations admin interface. Use the navigation menu on the left to:
     
     * **Ingest Documents**: Upload documents (.pdf, .docx, etc.) to be processed and added to the knowledge base
     * **Delete Documents**: Remove documents from the knowledge base when they are no longer needed

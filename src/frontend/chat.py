@@ -16,25 +16,26 @@ from agents.database_agent import database_agent
 from agents.assistant_agent import assistant_agent
 from agents.web_search_agent import web_search_agent
 
-def load_customers() -> List[Dict]:
+def load_operators() -> List[Dict]:
+    """Load operators from the Operator container"""
     util.load_dotenv_from_azd()
     credential = DefaultAzureCredential()
     cosmos_endpoint = os.getenv("COSMOSDB_ENDPOINT")
     cosmos_client = CosmosClient(cosmos_endpoint, credential)
     database_name = os.getenv("COSMOSDB_DATABASE")
-    customer_container_name = "Customer"
+    operator_container_name = "Operator"
     
     try:
         database = cosmos_client.get_database_client(database_name)
-        container = database.get_container_client(customer_container_name)
+        container = database.get_container_client(operator_container_name)
         
-        # Query all customers
-        query = "SELECT c.customer_id, c.first_name, c.last_name FROM c"
+        # Query all operators
+        query = "SELECT c.OperatorID, c.OperatorName, c.Role FROM c"
         items = list(container.query_items(query, enable_cross_partition_query=True))
         
         return [{
-            'id': item['customer_id'],  # Using customer_id as id for consistency
-            'name': f"{item['first_name']} {item['last_name']}"
+            'id': str(item['OperatorID']),
+            'name': f"{item['OperatorName']} ({item['Role']})"
         } for item in items]
     except exceptions.CosmosResourceNotFoundError as e:
         logger.error(f"CosmosHttpResponseError: {e}")
@@ -42,7 +43,8 @@ def load_customers() -> List[Dict]:
 
 async def setup_openai_realtime():
     """Instantiate and configure the OpenAI Realtime Client"""
-    customer_id = cl.user_session.get("customer_id")
+    machine_id = None  # No active machine by default on startup
+    operator_id = cl.user_session.get("operator_id")
              
     openai_realtime = RealtimeClient(system_prompt = "")
     cl.user_session.set("track_id", str(uuid4()))
@@ -91,34 +93,34 @@ async def setup_openai_realtime():
     # Agents must be registered before the root agent
     openai_realtime.assistant.register_agent(web_search_agent)
     openai_realtime.assistant.register_agent(internal_kb_agent)
-    openai_realtime.assistant.register_agent(database_agent(customer_id))
+    openai_realtime.assistant.register_agent(database_agent(machine_id, operator_id))
     openai_realtime.assistant.register_agent(assistant_agent)
-    openai_realtime.assistant.register_root_agent(root_assistant(customer_id))
+    openai_realtime.assistant.register_root_agent(root_assistant(machine_id, operator_id))
 
 @cl.on_chat_start
 async def start():
-    # Load customer list
-    customers = load_customers()
+    # Load operator list
+    operators = load_operators()
     
-    # Create customer selection dropdown
+    # Create operator selection dropdown
     res = await cl.AskActionMessage(
-        content="Please select a customer to login:",
+        content="Please select an operator to login:",
         actions=[
             cl.Action(
                 name="login",
-                value=str(customer['id']),
-                label=customer['name'],
-                payload={"customer_id": customer['id']}
+                value=str(operator['id']),
+                label=operator['name'],
+                payload={"operator_id": operator['id']}
             )
-            for customer in customers
+            for operator in operators
         ],
     ).send()
     
     if res:
-        # Get customer_id from the payload
-        customer_id = res['payload']['customer_id']
-        print(f"Customer ID: {customer_id}")
-        cl.user_session.set("customer_id", customer_id)
+        # Get operator_id from the payload
+        operator_id = res['payload']['operator_id']
+        print(f"Operator ID: {operator_id}")
+        cl.user_session.set("operator_id", operator_id)
         await cl.Message(content=f"Logged in successfully!").send()
         await setup_openai_realtime()
     else:
@@ -136,8 +138,6 @@ async def on_message(message: cl.Message):
 async def on_audio_start():
     try:
         openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
-        # TODO: might want to recreate items to restore context
-        # openai_realtime.create_conversation_item(item)
         await openai_realtime.connect()
         logger.info("Connected to OpenAI realtime")
         return True

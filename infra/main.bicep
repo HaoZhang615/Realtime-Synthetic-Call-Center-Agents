@@ -298,12 +298,9 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
-      COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
-      COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
-      COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
-      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
-      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
-      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
+      COSMOSDB_MACHINE_CONTAINER: cosmosdb.outputs.cosmosDbMachineContainer
+      COSMOSDB_OPERATIONS_CONTAINER: cosmosdb.outputs.cosmosDbOperationsContainer
+      COSMOSDB_OPERATOR_CONTAINER: cosmosdb.outputs.cosmosDbOperatorContainer
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
     },
     union(
@@ -346,12 +343,9 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_STORAGE_CONTAINER: storageContainerName
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
-      COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
-      COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
-      COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
-      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
-      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
-      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
+      COSMOSDB_MACHINE_CONTAINER: cosmosdb.outputs.cosmosDbMachineContainer
+      COSMOSDB_OPERATIONS_CONTAINER: cosmosdb.outputs.cosmosDbOperationsContainer
+      COSMOSDB_OPERATOR_CONTAINER: cosmosdb.outputs.cosmosDbOperatorContainer
     },
     empty(openAiRealtimeName) ? {} : {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
@@ -490,12 +484,9 @@ output SEND_EMAIL_LOGIC_APP_URL string = sendMailUrl.outputs.url
 
 output COSMOSDB_ENDPOINT string = cosmosdb.outputs.cosmosDbEndpoint
 output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase
-output COSMOSDB_AIConversations_CONTAINER string = cosmosdb.outputs.cosmosDbAIConversationsContainer
-output COSMOSDB_Customer_CONTAINER string = cosmosdb.outputs.cosmosDbCustomerContainer
-output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbHumanConversationsContainer
-output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
-output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
-output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
+output COSMOSDB_MACHINE_CONTAINER string = cosmosdb.outputs.cosmosDbMachineContainer
+output COSMOSDB_OPERATIONS_CONTAINER string = cosmosdb.outputs.cosmosDbOperationsContainer
+output COSMOSDB_OPERATOR_CONTAINER string = cosmosdb.outputs.cosmosDbOperatorContainer
 
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
 // Only include Key Vault reference if a Bing Search API key was provided
