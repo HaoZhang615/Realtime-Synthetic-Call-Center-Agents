@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 # Ensure the assets directory structure exists
 base_assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
-for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
+for dir_name in ['Cosmos_Machine', 'Cosmos_Operations', 'Cosmos_Operator']:
     os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
 
 st.set_page_config(
     page_title="Synthesize Data",
-    page_icon=":studio_microphone:",
+    page_icon=":factory:",
     layout="wide",
     menu_items=None,
 )
@@ -24,26 +24,6 @@ st.set_page_config(
 def load_css(file_path):
     with open(file_path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-products_folder_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'Cosmos_ProductUrl')
-json_file_path = None
-for file_name in os.listdir(products_folder_path):
-    if file_name.endswith('.json'):
-        json_file_path = os.path.join(products_folder_path, file_name)
-        break
-
-if json_file_path:
-    with open(json_file_path, 'r') as file:
-        data = json.load(file)
-    st.session_state.products = data['products']
-    st.session_state.urls = data['urls']
-
-    # set target_company variable to the first word of the filename separated by underscore and add it to the session state
-    st.session_state.target_company = file_name.split('_')[0]
-else:
-    st.session_state.products = []
-    st.session_state.urls = []
-    st.session_state.target_company = "Unknown"
 
 # Load the common CSS
 load_css("pages/common.css")
@@ -54,56 +34,87 @@ def count_json_files(folder_name):
 
 # Count files in each Cosmos folder
 folders = {
-    'customer': 'Cosmos_Customer',
-    'product': 'Cosmos_Product',
-    'purchase': 'Cosmos_Purchases',
-    'human_conversation': 'Cosmos_HumanConversations'
+    'machine': 'Cosmos_Machine',
+    'operations': 'Cosmos_Operations',
+    'operator': 'Cosmos_Operator'
 }
 
 counts = {k: count_json_files(v) for k, v in folders.items()}
 
-# Assign counts to variables for backward compatibility
-customer_count = counts['customer']
-product_count = counts['product']
-purchase_count = counts['purchase']
-human_conversation_count = counts['human_conversation']
+# Assign counts to variables
+machine_count = counts['machine']
+operations_count = counts['operations']
+operator_count = counts['operator']
 
-col1, col2, col3, col4, col5 = st.columns([3, 5, 6, 6, 2])
+st.write("# Manufacturing Operations Data Synthesis")
+
+col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
-    st.write("The synthesized products are:")
-    for product in st.session_state.products:
-        st.markdown(f"- **{product}**",)
-with col2:
-    st.write("The Bing Search is grounded by:")
-    for url in st.session_state.urls:
-        st.markdown(f"- **{url}**")
-with col3:
-    st.write(f"Current Company for synthesization: **{st.session_state.target_company}**")
-    st.write(f"Number of customers synthesized: **{customer_count}**")
-    st.write(f"Number of products synthesized: **{product_count}**")
-    st.write(f"Number of purchases synthesized: **{purchase_count}**")
-    st.write(f"Number of human conversations synthesized: **{human_conversation_count}**")
+    st.markdown("### Current Data Statistics")
+    st.write(f"Number of machines synthesized: **{machine_count}**")
+    st.write(f"Number of operators synthesized: **{operator_count}**")
+    st.write(f"Number of operations synthesized: **{operations_count}**")
     st.markdown("---")
-with col4:
-    st.write("Enter the new company name for synthesization:")
-    st.write("")
-    st.write("Enter the number of customers to synthesize:")
-    st.write("")
-    st.write("Enter the number of products to synthesize:")
-    st.write("")
-    st.write("Enter the number of human conversations to synthesize:")
-with col5:
-    new_company = st.text_input("new company", key="new_company", label_visibility = "collapsed")  
-    number_customer = st.text_input("number customer", key="number_customer", label_visibility = "collapsed")
-    number_product = st.text_input("number product", key="number_product", label_visibility = "collapsed")
-    number_human_conversation = st.text_input("number human conversation", key="number_human_conversation", label_visibility = "collapsed")
+
+with col2:
+    st.markdown("### Manufacturing Data Schema")
+    st.markdown("""
+    **Machine**
+    ```json
+    {
+      "MachineID": 1,
+      "MachineName": "CNC Lathe 5000",
+      "MachineType": "Lathe",
+      "Location": "Section A",
+      "Status": "Running"
+    }
+    ```
+    
+    **Operations**
+    ```json
+    {
+      "OperationID": 101,
+      "MachineID": 1,
+      "StartTime": "2025-03-03T08:00:00Z",
+      "EndTime": "2025-03-03T10:30:00Z",
+      "OperationType": "Cutting",
+      "OperatorID": 201,
+      "Status": "Completed",
+      "OutputQuantity": 150
+    }
+    ```
+    
+    **Operators**
+    ```json
+    {
+      "OperatorID": 201,
+      "OperatorName": "Alice Johnson",
+      "Shift": "Morning",
+      "Role": "Machine Operator"
+    }
+    ```
+    """)
+
+with col3:
+    st.markdown("### Generate New Data")
+    st.write("Enter the number of machines to synthesize:")
+    num_machines = st.number_input("Number of machines", min_value=1, max_value=100, value=10, step=1, key="num_machines", label_visibility="collapsed")
+    
+    st.write("Enter the number of operators to synthesize:")
+    num_operators = st.number_input("Number of operators", min_value=1, max_value=100, value=5, step=1, key="num_operators", label_visibility="collapsed")
+    
+    st.write("Enter the number of operations to synthesize:")
+    num_operations = st.number_input("Number of operations", min_value=1, max_value=200, value=20, step=1, key="num_operations", label_visibility="collapsed")
+    
+    st.write("Enter the company name for the simulation:")
+    company_name = st.text_input("Company name", value="ManufacturingCorp", key="company_name", label_visibility="collapsed")
         
 # Move the log placeholder outside of the column layout
 log_placeholder = st.empty()
 logs = []
 
-# execute the synthesization process by clicking the button and call the notebook assets/scripts/SynthesizeEverything.ipynb
-if st.button("Synthesize"):
+# execute the synthesization process by clicking the button
+if st.button("Synthesize Data"):
     # Define a custom print function to capture output and update the styled container
     import builtins
     original_print = builtins.print
@@ -119,17 +130,17 @@ if st.button("Synthesize"):
 
     try:
         params = {
-            "company_name": new_company,
-            "number_of_customers": int(number_customer),
-            "number_of_product": int(number_product),
-            "number_of_human_conversations": int(number_human_conversation)
+            "company_name": company_name,
+            "num_machines": int(num_machines),
+            "num_operators": int(num_operators),
+            "num_operations": int(num_operations)
         }
         original_print(f"Parameters: {params}")
         run_synthesis(
             company_name=params["company_name"],
-            num_customers=params["number_of_customers"],
-            num_products=params["number_of_product"],
-            num_conversations=params["number_of_human_conversations"]
+            num_machines=params["num_machines"],
+            num_operators=params["num_operators"],
+            num_operations=params["num_operations"]
         )
     finally:
         builtins.print = original_print

@@ -23,7 +23,7 @@ util.load_dotenv_from_azd()
 
 st.set_page_config(
     page_title="Admin",
-    page_icon=":studio_microphone:",
+    page_icon=":factory:",
     layout="wide",
     menu_items=None,
 )
@@ -39,15 +39,15 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
     st.image(os.path.join("images", "logo.png"))
 
-st.write("# Realtime Synthetic Call Center Agents")
+st.write("# Manufacturing Operations Dashboard")
 st.write("## Admin Interface")
 
 st.write(
     """
-    Welcome to the admin interface. Use the navigation menu on the left to:
+    Welcome to the Manufacturing Operations admin interface. Use the navigation menu on the left to:
     
     * **Ingest Documents**: Upload documents (.pdf, .docx, etc.) to be processed and added to the knowledge base
     * **Delete Documents**: Remove documents from the knowledge base when they are no longer needed
-    * **Synthesize Data**: Generate synthetic data to simulate a **Contact Center** scenario with a database comprised of product, customer, purchases history and human-agent conversations.
+    * **Synthesize Data**: Generate synthetic data to simulate a **Manufacturing Plant** scenario with a database comprised of machines, operators and operations history.
     """
 )

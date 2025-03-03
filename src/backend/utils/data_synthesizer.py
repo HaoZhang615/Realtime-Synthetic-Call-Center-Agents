@@ -5,7 +5,7 @@ import random
 from openai import AzureOpenAI
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from utils import load_dotenv_from_azd
 
 
@@ -14,21 +14,22 @@ token_provider = get_bearer_token_provider(
     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
 )
 # Constants for synthesis
-SENTIMENTS_LIST = ['positive', 'negative', 'neutral', 'mixed', 'content', 'upset', 'angry', 'frustrated', 'happy', 'disappointed', 'confused']
-TOPICS_LIST = ['churn', 'assistance', 'support', 'information', 'billing', 'payment', 'account', 'service', 'Quality', 'Sustainability']
-AGENT_LIST = ['adam','betrace','curie','davinci','emil', 'fred']
+MACHINE_TYPES = ['Lathe', 'Milling Machine', 'Drill Press', 'Laser Cutter', 'CNC Router', 'Injection Molding', 'Grinder', 'Punching Machine']
+OPERATION_TYPES = ['Cutting', 'Drilling', 'Milling', 'Grinding', 'Engraving', 'Assembly', 'Inspection', 'Maintenance']
+MACHINE_STATUS = ['Running', 'Idle', 'Maintenance', 'Error', 'Offline']
+OPERATION_STATUS = ['Completed', 'In Progress', 'Scheduled', 'Paused', 'Failed']
+SHIFTS = ['Morning', 'Afternoon', 'Night']
+ROLES = ['Machine Operator', 'Senior Technician', 'Supervisor', 'Maintenance Engineer', 'Quality Control']
+LOCATIONS = ['Section A', 'Section B', 'Section C', 'Section D', 'Section E', 'Assembly Line 1', 'Assembly Line 2', 'Finishing Area']
 FIRST_NAME_LIST = ['Alex','Brian','Chloe','David','Emma','Fiona','George','Hannah','Ian','Julia','Kevin','Lucy','Michael',
     'Nicole','Oliver','Paula','Quinn','Rachel','Samuel','Tara','Ursula','Victor','Wendy','Xander','Yvonne','Zachary']
 LAST_NAME_LIST = ["Anderson", "Brown", "Clark", "Davis", "Evans", "Foster", "Garcia", "Harris", "Ingram", "Johnson", "King", 
                   "Lewis", "Martin", "Nelson", "Owens", "Parker", "Quinn", "Robinson", "Smith", "Taylor", "Underwood", 
                   "Vargas", "Wilson", "Xavier", "Young", "Zimmerman"]
 
-cosmos_customer_container_name = os.environ["COSMOSDB_Customer_CONTAINER"]
-cosmos_product_container_name = os.environ["COSMOSDB_Product_CONTAINER"]
-cosmos_purchases_container_name = os.environ["COSMOSDB_Purchases_CONTAINER"]
-cosmos_ai_conversations_container_name = os.environ["COSMOSDB_AIConversations_CONTAINER"]
-cosmos_human_conversations_container_name = os.environ["COSMOSDB_HumanConversations_CONTAINER"]
-cosmos_producturl_container_name = os.environ["COSMOSDB_ProductUrl_CONTAINER"]
+cosmos_machine_container_name = "Machine"
+cosmos_operations_container_name = "Operations"
+cosmos_operator_container_name = "Operator"
 
 class DataSynthesizer:
     def __init__(self, base_dir):
@@ -48,13 +49,12 @@ class DataSynthesizer:
             DefaultAzureCredential()
         )
         self.database = self.cosmos_client.get_database_client(os.environ["COSMOSDB_DATABASE"])
+    
     def setup_cosmos_containers(self):
         self.containers = {
-            'customer': self.database.get_container_client(cosmos_customer_container_name),
-            'product': self.database.get_container_client(cosmos_product_container_name),
-            'purchases': self.database.get_container_client(cosmos_purchases_container_name),
-            'human_conversations': self.database.get_container_client(cosmos_human_conversations_container_name),
-            'product_url': self.database.get_container_client(cosmos_producturl_container_name),
+            'machine': self.database.get_container_client(cosmos_machine_container_name),
+            'operations': self.database.get_container_client(cosmos_operations_container_name),
+            'operator': self.database.get_container_client(cosmos_operator_container_name),
         }
 
     def container_exists(self, database, container_name):
@@ -65,6 +65,7 @@ class DataSynthesizer:
             return True, container
         except exceptions.CosmosResourceNotFoundError:
             return False, None
+
     # Function to get the partition key path from the container
     def get_partition_key_path(self, container):
         container_properties = container.read()
@@ -96,24 +97,6 @@ class DataSynthesizer:
             print(f"Container '{container_name}' has been created.")
         
         return container
-    def create_document(self, prompt, temperature=0.9, max_tokens=2000):
-        response = self.aoai_client.chat.completions.create(
-            model=os.environ["AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT"],
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant who helps people"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"}
-        )
-        return response.choices[0].message.content
-    # function to create dynamic document name based on the randomized combination of sentiment, topic and product. 
-    def create_document_name(self, i, random_selection1, random_selection2, random_selection3):
-        # Create a name for the document based on the 3 randomly selected values.
-        # if the product name has spaces, replace them with underscores
-        document_name = f"{i}_{random_selection1.replace(' ', '_')}_{random_selection2.replace(' ', '_')}_{random_selection3.replace(' ', '_')}.json"
-        return document_name
 
     def save_json_files_to_cosmos_db(self, directory, container):
         for filename in os.listdir(directory):
@@ -132,6 +115,7 @@ class DataSynthesizer:
                     print(f"Document {filename} has been successfully created in Azure Cosmos DB!")
                 except Exception as e:
                     print(f"Error uploading {filename}: {str(e)}")
+
     # delete all json files in the assets folder recursively
     def delete_json_files(self, base_dir):
         assets_dir = os.path.join(base_dir)
@@ -143,349 +127,156 @@ class DataSynthesizer:
                     os.remove(file_path)
                     print(f"Deleted: {file_path}")  # Optional: Print out deleted file paths for confirmation
 
-    def synthesize_everything(self, company_name, num_customers, num_products, num_conversations):
+    def synthesize_everything(self, company_name, num_machines, num_operators, num_operations):
         
         # Refresh Cosmos DB containers
-        self.refresh_container(self.database, cosmos_producturl_container_name, "/company_name")
-        self.refresh_container(self.database, cosmos_customer_container_name, "/customer_id")
-        self.refresh_container(self.database, cosmos_product_container_name, "/product_id")
-        self.refresh_container(self.database, cosmos_purchases_container_name, "/customer_id")
-        self.refresh_container(self.database, cosmos_human_conversations_container_name, "/customer_id")
-        self.refresh_container(self.database, cosmos_ai_conversations_container_name, "/customer_id")
+        self.refresh_container(self.database, cosmos_machine_container_name, "/MachineID")
+        self.refresh_container(self.database, cosmos_operations_container_name, "/OperationID")
+        self.refresh_container(self.database, cosmos_operator_container_name, "/OperatorID")
         
         # Delete all JSON files in the assets folder
         self.delete_json_files(self.base_dir)
+        
         # Generate all data types
-        self.create_product_and_url_list(company_name, num_products)
-        self.synthesize_customer_profiles(num_customers)
-        self.synthesize_product_profiles(company_name)
-        self.synthesize_purchases()
-        self.synthesize_human_conversations(num_conversations, company_name)
+        self.synthesize_machines(num_machines)
+        self.synthesize_operators(num_operators)
+        self.synthesize_operations(num_operations)
 
         # Upload all data to Cosmos DB
         for folder, container in [
-            ('Cosmos_ProductUrl', self.containers['product_url']),
-            ('Cosmos_Customer', self.containers['customer']),
-            ('Cosmos_Product', self.containers['product']),
-            ('Cosmos_Purchases', self.containers['purchases']),
-            ('Cosmos_HumanConversations', self.containers['human_conversations'])
+            ('Cosmos_Machine', self.containers['machine']),
+            ('Cosmos_Operator', self.containers['operator']),
+            ('Cosmos_Operations', self.containers['operations']),
         ]:
             self.save_json_files_to_cosmos_db(os.path.join(self.base_dir, folder), container)
         print("Data synthesis completed successfully!")
 
-    def create_product_and_url_list(self, company_name, number_of_product):
+    def synthesize_machines(self, num_machines):
+        machines = []
         
-        product_and_url_creation_prompt = f"""generate a json list of {number_of_product} most popular product at brand level of the company {company_name}, and the official website url of those products. 
-                Example for microsoft: Xbox, Surface, Windows, Office, Azure. Example for apple: iPhone, iPad, Mac, Apple Watch, AirPods. Example for Unilever: Dove, Lipton, Hellmann's, Knorr, Ben & Jerry's.
-                The list contains two keys: 'products' and 'urls'. The 'products' key contains the list of products and the 'urls' key contains the list of urls."""
-        # Generate the document using Azure OpenAI
-        generated_document = self.create_document(product_and_url_creation_prompt)
-        # Parse the document and prepare it for CosmosDB
-        data = json.loads(generated_document)
-        enhanced_document = {
-            'company_name': company_name,
-            'id': f"{company_name}_products_and_urls",
-            'products': data['products'],
-            'urls': data['urls']
-        }
-        # Create a dynamic document name
-        document_name = f"{company_name}_products_and_urls.json"
-        
-        # Save the enhanced document to the local folder
-        file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", document_name)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(enhanced_document, f, ensure_ascii=False, indent=4)    
+        for i in range(num_machines):
+            machine_type = random.choice(MACHINE_TYPES)
+            machine = {
+                "MachineID": i + 1,
+                "MachineName": f"{machine_type} {random.randint(1000, 9999)}",
+                "MachineType": machine_type,
+                "Location": random.choice(LOCATIONS),
+                "Status": random.choice(MACHINE_STATUS),
+                "id": f"machine_{i + 1}"
+            }
+            machines.append(machine)
             
-        print(f"Document {document_name} has been successfully created!")
-
-    def synthesize_customer_profiles(self, num_customers):
-        for i in range(num_customers):
-            # Randomly select first and last names
-            random_firstname = random.choice(FIRST_NAME_LIST)
-            random_lastname = random.choice(LAST_NAME_LIST)
-            
-            # Create prompt for Azure OpenAI
-            document_creation_prompt = f"""CREATE a JSON document of a customer profile whose first name is {random_firstname} and last name is {random_lastname}. 
-            The required schema for the document is to follow the example below:
-            {{
-                "first_name": "Alex",
-                "last_name": "Richardson",
-                "email": "alex.richardson@example.com",
-                "address": {{
-                    "street": "Fourth St 19",
-                    "city": "Chicago",
-                    "postal_code": "60601",
-                    "country": "USA"
-                }},
-                "phone_number": "+17845403125"
-            }}
-            Be creative about the values and do not use markdown to format the json object.
-            """
-            
-            # Generate the document using Azure OpenAI
-            generated_document = self.create_document(document_creation_prompt)
-            
-            # Create a dynamic document name
-            document_name = f"{i}_{random_firstname}_{random_lastname}.json"
-            
-            # Save the generated document to the local folder
-            file_path = os.path.join(self.base_dir, "Cosmos_Customer", document_name)
+            # Save each machine to a JSON file
+            filename = f"{i}_{machine['MachineName'].replace(' ', '_')}.json"
+            file_path = os.path.join(self.base_dir, "Cosmos_Machine", filename)
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(generated_document)
-            print(f"Document {document_name} has been successfully created!")
+                json.dump(machine, f, ensure_ascii=False, indent=4)
+            print(f"Machine {filename} has been successfully created!")
         
-        # Update the JSON files with customer_id and id fields
-        directory = os.path.join(self.base_dir, "Cosmos_Customer")
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                customer_profile = json.load(f)
-                customer_id = uuid.uuid3(uuid.NAMESPACE_DNS, f"{customer_profile['first_name']}_{customer_profile['last_name']}").hex
-                customer_profile['customer_id'] = customer_id
-                customer_profile['id'] = f"{filename.split('_')[0]}_{customer_id}"
+        return machines
+
+    def synthesize_operators(self, num_operators):
+        operators = []
+        
+        for i in range(num_operators):
+            first_name = random.choice(FIRST_NAME_LIST)
+            last_name = random.choice(LAST_NAME_LIST)
+            operator = {
+                "OperatorID": 201 + i,
+                "OperatorName": f"{first_name} {last_name}",
+                "Shift": random.choice(SHIFTS),
+                "Role": random.choice(ROLES),
+                "id": f"operator_{201 + i}"
+            }
+            operators.append(operator)
+            
+            # Save each operator to a JSON file
+            filename = f"{i}_{first_name}_{last_name}.json"
+            file_path = os.path.join(self.base_dir, "Cosmos_Operator", filename)
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(customer_profile, f, ensure_ascii=False, indent=4)
-            print(f"Document {filename} has been successfully updated!")
+                json.dump(operator, f, ensure_ascii=False, indent=4)
+            print(f"Operator {filename} has been successfully created!")
+        
+        return operators
 
-    def synthesize_product_profiles(self, company_name):
-        producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
-        with open(producturls_file_path, "r", encoding="utf-8") as f:
-            products_list = json.load(f)["products"]
-        for idx, product in enumerate(products_list):
-            # Create prompt for Azure OpenAI
-            document_creation_prompt = f"""CREATE a JSON document of a product profile. The product is {product} made by {company_name}. 
-            The required schema for the document is to follow the example below:
-            {{
-                "name": "string", 
-                "category": "string", 
-                "type": "string", 
-                "brand": "string", 
-                "company": "string",
-                "unit_price": "number",
-                "weight": {{
-                    "value": "number",
-                    "unit": "string"
-                }},
-                "color": "string", 
-                "material": "string"
-            }}
-            Be creative about the values and do not use markdown to format the json object. if any field is not applicable, leave it empty.
-            the value of the key 'company' should always be: {company_name}.
-            """
+    def synthesize_operations(self, num_operations):
+        # Get the list of machine IDs and operator IDs we've created
+        machine_ids = []
+        operator_ids = []
+        
+        machine_directory = os.path.join(self.base_dir, "Cosmos_Machine")
+        for filename in os.listdir(machine_directory):
+            file_path = os.path.join(machine_directory, filename)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                machine = json.load(f)
+                machine_ids.append(machine["MachineID"])
+        
+        operator_directory = os.path.join(self.base_dir, "Cosmos_Operator")
+        for filename in os.listdir(operator_directory):
+            file_path = os.path.join(operator_directory, filename)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                operator = json.load(f)
+                operator_ids.append(operator["OperatorID"])
+        
+        operations = []
+        
+        # Generate random start dates in the last 30 days
+        now = datetime.now(timezone.utc)
+        
+        for i in range(num_operations):
+            # Randomly choose a machine and operator
+            machine_id = random.choice(machine_ids) if machine_ids else 1
+            operator_id = random.choice(operator_ids) if operator_ids else 201
             
-            # Generate the document using Azure OpenAI
-            generated_document = self.create_document(document_creation_prompt)
+            # Random start time in the last 30 days
+            days_ago = random.randint(0, 30)
+            hours_ago = random.randint(0, 23)
+            start_time = (now - timedelta(days=days_ago, hours=hours_ago)).isoformat()
             
-            # Create a dynamic document name
-            document_name = f"{idx}_{product.replace(' ', '_')}.json"
-            file_path = os.path.join(self.base_dir, "Cosmos_Product", document_name)
+            # Determine if operation is completed
+            status = random.choice(OPERATION_STATUS)
+            operation_type = random.choice(OPERATION_TYPES)
             
-            # Save the generated document to the local folder
+            # If completed, set end time and output quantity
+            end_time = None
+            output_quantity = 0
+            
+            if status == "Completed":
+                duration_hours = random.uniform(0.5, 4.0)  # Operation lasted 0.5 to 4 hours
+                end_time = (now - timedelta(days=days_ago, hours=hours_ago - duration_hours)).isoformat()
+                output_quantity = random.randint(50, 500)
+            elif status == "In Progress":
+                output_quantity = random.randint(0, 50)
+            
+            operation = {
+                "OperationID": 100 + i,
+                "MachineID": machine_id,
+                "StartTime": start_time,
+                "EndTime": end_time,
+                "OperationType": operation_type,
+                "OperatorID": operator_id,
+                "Status": status,
+                "OutputQuantity": output_quantity,
+                "id": f"operation_{100 + i}"
+            }
+            operations.append(operation)
+            
+            # Save each operation to a JSON file
+            filename = f"{i}_{operation_type}_{status}.json"
+            file_path = os.path.join(self.base_dir, "Cosmos_Operations", filename)
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(generated_document)
-            print(f"Document {document_name} has been successfully created!")
+                json.dump(operation, f, ensure_ascii=False, indent=4)
+            print(f"Operation {filename} has been successfully created!")
         
-        # Additional logic to update product profiles:
-        # loop through the files in the local folder Cosmos_Product and update them:
-        # 1. add a product_id field (hash value based on the current file name) to the content
-        # 2. add a id field (hash value based on the prefix value of the current file name and the product_id) to the content
-        # 3. save the updated content back to the file
-        directory = os.path.join(self.base_dir, "Cosmos_Product")
-        for filename in os.listdir(directory):
-            path = os.path.join(directory, filename)
-            with open(path, 'r', encoding='utf-8') as f:
-                product_profile = json.load(f)
-                product_id = uuid.uuid3(uuid.NAMESPACE_DNS, f"{filename}").hex
-                product_profile['product_id'] = product_id
-                product_profile['id'] = f"{filename.split('_')[0]}_{product_id}"
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(product_profile, f, ensure_ascii=False, indent=4)
-            print(f"Document {filename} has been successfully updated!")
-
-    # def create_document_name(self, index, product_id, customer_id, suffix):
-    #     return f"{index}_{product_id}_{customer_id}{suffix}.json"
-
-    def get_today_date(self):
-        return datetime.today().strftime("%B %d, %Y")
-
-    def get_product_profile(self, product_id):
-        # Read the product file directly from the local directory instead of querying
-        product_directory = os.path.join(self.base_dir, "Cosmos_Product")
-        for filename in os.listdir(product_directory):
-            file_path = os.path.join(product_directory, filename)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                product = json.load(f)
-                if product.get('product_id') == product_id:
-                    # Remove technical fields that shouldn't be in product_details
-                    product_details = product.copy()
-                    technical_fields = ['id', '_rid', '_self', '_etag', '_attachments', '_ts']
-                    for field in technical_fields:
-                        product_details.pop(field, None)
-                    return product_details
-        return {}
-
-    def synthesize_purchases(self):
-        # Loop through the files in Cosmos_Customer and Cosmos_Product to gather customer_ids and product_ids
-        customer_ids = []
-        product_ids = []
-        customer_directory = os.path.join(self.base_dir, "Cosmos_Customer")
-        for filename in os.listdir(customer_directory):
-            file_path = os.path.join(customer_directory, filename)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                customer_profile = json.load(f)
-                customer_ids.append(customer_profile.get('customer_id'))
-        
-        product_directory = os.path.join(self.base_dir, "Cosmos_Product")
-        for filename in os.listdir(product_directory):
-            file_path = os.path.join(product_directory, filename)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                product_profile = json.load(f)
-                product_ids.append(product_profile.get('product_id'))
-        
-        # For each customer, generate 2 random purchase records with random product_id
-        for idx, customer_id in enumerate(customer_ids):
-            for i in range(2):
-                random_product_id = random.choice(product_ids)
-                document_creation_prompt = f"""CREATE a JSON document of a purchase record. The product_id is {random_product_id} which is bought by the customer_id {customer_id}. 
-                The required schema for the document is to follow the example below:
-                {{
-                    "customer_id": "string",
-                    "product_id": "string",
-                    "quantity": "number",
-                    "purchasing_date": "datetime",
-                    "delivered_date": "datetime"
-                }}
-                Do not use markdown to format the json object. if any field is not applicable, leave it empty.
-                quantity should be a random number between 1 and 10.
-                Today is {self.get_today_date()}, the purchasing_date and delivered_date should be within the last 6 months of today's date.
-                """
-
-                generated_document = self.create_document(document_creation_prompt)
-                document_name = self.create_document_name(idx*2+i+1, random_product_id, customer_id, "")
-
-                # Save the JSON document to the local folder Cosmos_Purchases
-                file_path = os.path.join(self.base_dir, "Cosmos_Purchases", document_name)
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(generated_document)
-                print(f"Document {document_name} has been successfully created!")
-                # time.sleep(1)
-        
-        # Update the purchase records with additional fields
-        purchases_directory = os.path.join(self.base_dir, "Cosmos_Purchases")
-        for filename in os.listdir(purchases_directory):
-            file_path = os.path.join(purchases_directory, filename)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                purchase = json.load(f)
-                
-                # Get product details for this purchase
-                product_details = self.get_product_profile(purchase.get('product_id', ''))
-                if not product_details:
-                    print(f"Warning: No product details found for product_id: {purchase.get('product_id')} in {filename}")
-                    
-                # Update purchase record
-                order_number = uuid.uuid3(uuid.NAMESPACE_DNS, f"{filename}").hex
-                purchase['order_number'] = order_number
-                purchase['product_details'] = product_details
-                purchase['total_price'] = product_details.get('unit_price', 0) * purchase.get('quantity', 0)
-                purchase['id'] = f"{filename.split('_')[0]}_{order_number}"
-            
-            # Save updated purchase record
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(purchase, f, ensure_ascii=False, indent=4)
-            print(f"Document {filename} has been successfully updated!")
-            # time.sleep(1)
-
-    def randomized_prompt_elements(self, sentiments, topics, products, agents, customers):
-        return (
-            random.choice(sentiments),
-            random.choice(topics),
-            random.choice(products),
-            random.choice(agents),
-            random.choice(customers)
-        )
-
-    def synthesize_human_conversations(self, num_conversations, company_name):
-        # product list is defined by the only json file in the local folder Cosmos_ProductUrl, in the "product" key
-        producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
-        with open(producturls_file_path, "r", encoding="utf-8") as f:
-            PRODUCTS_LIST = json.load(f)["products"]
-        for i in range(num_conversations):
-            # Randomly select elements for the conversation
-            random_sentiment, random_topic, random_product, random_agent, random_customer = self.randomized_prompt_elements(
-                SENTIMENTS_LIST, TOPICS_LIST, PRODUCTS_LIST, AGENT_LIST, FIRST_NAME_LIST
-            )
-            
-            # Create prompt for Azure OpenAI
-            document_creation_prompt = f"""CREATE a JSON document of a conversation between a customer and an agent.
-            Sentiment: {random_sentiment}
-            Topic: {random_topic}
-            Product: {random_product}
-            Agent: {random_agent}
-            Customer: {random_customer}
-            The required schema for the document is to follow the example below:
-            {{
-                "conversation_id": "string",
-                "customer_id": "string",
-                "agent_id": "string",
-                "messages": [
-                    {{
-                        "sender": "customer",
-                        "message": "Hello, I need help with my {random_product}."
-                    }},
-                    {{
-                        "sender": "agent",
-                        "message": "Sure, I'd be happy to assist you with your {random_product}."
-                    }}
-                ],
-                "sentiment": "{random_sentiment}",
-                "topic": "{random_topic}"
-            }}
-            Be creative about the messages and do not use markdown to format the json object.
-            """
-            
-            # Generate the document using Azure OpenAI
-            generated_document = self.create_document(document_creation_prompt)
-            
-            # Create a dynamic document name
-            document_name = self.create_document_name(i, random_sentiment, random_topic, random_product)
-            file_path = os.path.join(self.base_dir, "Cosmos_HumanConversations", document_name)
-            
-            # Save the generated document to the local folder
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(generated_document)
-            print(f"Document {document_name} has been successfully created!")
-        
-        # Additional logic to update human conversations:
-        # loop through the files in the local folder Cosmos_HumanConversations and update them:
-        # 1. read the file and load the content
-        # 2. create a hash value of the combination of customer_id and agent_id and assign it to the conversation_id
-        # 3. add a id field with the value of the current iteration index number plus the conversation_id
-        # 4. save the updated content back to the file
-        directory = os.path.join(self.base_dir, "Cosmos_HumanConversations")
-        for file in os.listdir(directory):
-            file_path = os.path.join(directory, file)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                document = json.load(f)
-                filename = file.split('.')[0]
-                # add the "sentiment", "topic" and "product" key based on the file name to each JSON file
-                sentiment, topic, product = filename.split('_')[1], filename.split('_')[2], filename.split('_')[3]
-                document["sentiment"] = sentiment
-                document["topic"] = topic
-                document["product"] = product
-                session_id = uuid.uuid3(uuid.NAMESPACE_DNS, f"{document['customer_id']}_{document['agent_id']}_{document['sentiment']}_{document['topic']}_{document['product']}").hex
-                document['session_id'] = session_id
-                document['id'] = f"chat_{filename.split('_')[0]}_{session_id}"
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(document, f, ensure_ascii=False, indent=4)
-            print(f"Document {file} has been successfully updated!")
+        return operations
 
 
-def run_synthesis(company_name, num_customers, num_products, num_conversations):
+def run_synthesis(company_name, num_machines, num_operators, num_operations):
     base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets')
     # Ensure the assets directory structure exists
     base_assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
-    for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
+    for dir_name in ['Cosmos_Machine', 'Cosmos_Operations', 'Cosmos_Operator']:
         os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
     # print(f"Base directory: {base_dir}")
     synthesizer = DataSynthesizer(base_dir)
-    synthesizer.synthesize_everything(company_name, num_customers, num_products, num_conversations)
+    synthesizer.synthesize_everything(company_name, num_machines, num_operators, num_operations)
