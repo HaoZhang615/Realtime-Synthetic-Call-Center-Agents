@@ -265,7 +265,7 @@ class DatabaseAgent:
         operator_doc = items[0]
         
         # Extract only updatable fields from parameters
-        updatable_fields = ['OperatorName', 'Shift', 'Role']
+        updatable_fields = ['OperatorName', 'Shift', 'Role', 'Email']
         update_data = {k: v for k, v in parameters.items() if k in updatable_fields}
         
         # Update the document with allowed fields only
@@ -331,7 +331,8 @@ class DatabaseAgent:
                     c.OperatorID,
                     c.OperatorName,
                     c.Shift,
-                    c.Role
+                    c.Role,
+                    c.Email
                 FROM c 
                 WHERE c.OperatorID = @operator_id"""
                 
@@ -350,7 +351,8 @@ class DatabaseAgent:
                     c.OperatorID,
                     c.OperatorName,
                     c.Shift,
-                    c.Role
+                    c.Role,
+                    c.Email
                 FROM c"""
                 items = list(container.query_items(query=query, enable_cross_partition_query=True))
                 return items if items else "No operators found."
@@ -529,7 +531,8 @@ IMPORTANT: Never invent new tool or function names. Always use only the provided
                     "properties": {
                         "OperatorName": {"type": "string", "description": "Operator's full name"},
                         "Shift": {"type": "string", "description": "Operator's shift (Morning, Afternoon, Night)"},
-                        "Role": {"type": "string", "description": "Operator's role"}
+                        "Role": {"type": "string", "description": "Operator's role"},
+                        "Email": {"type": "string", "description": "Operator's email address"}
                     }
                 },
                 "returns": agent.update_operator_record
