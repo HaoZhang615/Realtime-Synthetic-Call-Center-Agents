@@ -181,11 +181,14 @@ class DataSynthesizer:
         for i in range(num_operators):
             first_name = random.choice(FIRST_NAME_LIST)
             last_name = random.choice(LAST_NAME_LIST)
+            # Create an email address for the operator
+            email = f"{first_name.lower()}.{last_name.lower()}@company.com"
             operator = {
                 "OperatorID": 201 + i,
                 "OperatorName": f"{first_name} {last_name}",
                 "Shift": random.choice(SHIFTS),
                 "Role": random.choice(ROLES),
+                "Email": email,
                 "id": f"operator_{201 + i}"
             }
             operators.append(operator)
