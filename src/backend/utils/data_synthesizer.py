@@ -14,10 +14,17 @@ token_provider = get_bearer_token_provider(
     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
 )
 # Constants for synthesis
-MACHINE_TYPES = ['Lathe', 'Milling Machine', 'Drill Press', 'Laser Cutter', 'CNC Router', 'Injection Molding', 'Grinder', 'Punching Machine']
-OPERATION_TYPES = ['Cutting', 'Drilling', 'Milling', 'Grinding', 'Engraving', 'Assembly', 'Inspection', 'Maintenance']
-MACHINE_STATUS = ['Running', 'Idle', 'Maintenance', 'Error', 'Offline']
-OPERATION_STATUS = ['Completed', 'In Progress', 'Scheduled', 'Paused', 'Failed']
+MACHINE_TYPES = ["Roaster","Winnower","Grinder","Tempering Machine","Molding Machine"]
+# Mapping of machine types to their corresponding operation types
+MACHINE_TO_OPERATION_TYPES = {
+    "Roaster": ["Roasting", "Cooling"],
+    "Winnower": ["Cracking", "Separation"],
+    "Grinder": ["Grinding", "Refining"],
+    "Tempering Machine": ["Tempering", "Crystalization Control"],
+    "Molding Machine": ["Molding", "Demolding"]
+}
+MACHINE_STATUS = ["Running", "Idle", "Maintenance", "Fault Detected", "Stopped"]
+OPERATION_STATUS = ["In Progress","Completed","Pending","Paused","Error"]
 SHIFTS = ['Morning', 'Afternoon', 'Night']
 ROLES = ['Machine Operator', 'Senior Technician', 'Supervisor', 'Maintenance Engineer', 'Quality Control']
 LOCATIONS = ['Section A', 'Section B', 'Section C', 'Section D', 'Section E', 'Assembly Line 1', 'Assembly Line 2', 'Finishing Area']
@@ -206,6 +213,7 @@ class DataSynthesizer:
         # Get the list of machine IDs and operator IDs we've created
         machine_ids = []
         operator_ids = []
+        machine_types = {}  # Dictionary to store machine_id -> machine_type mapping
         
         machine_directory = os.path.join(self.base_dir, "Cosmos_Machine")
         for filename in os.listdir(machine_directory):
@@ -213,6 +221,7 @@ class DataSynthesizer:
             with open(file_path, 'r', encoding='utf-8') as f:
                 machine = json.load(f)
                 machine_ids.append(machine["MachineID"])
+                machine_types[machine["MachineID"]] = machine["MachineType"]  # Store the machine type for each ID
         
         operator_directory = os.path.join(self.base_dir, "Cosmos_Operator")
         for filename in os.listdir(operator_directory):
@@ -231,6 +240,10 @@ class DataSynthesizer:
             machine_id = random.choice(machine_ids) if machine_ids else 1
             operator_id = random.choice(operator_ids) if operator_ids else 201
             
+            # Get the machine type and its corresponding operation types
+            machine_type = machine_types.get(machine_id, "Roaster")  # Default to Roaster if not found
+            operation_types = MACHINE_TO_OPERATION_TYPES.get(machine_type, ["Roasting", "Cooling"])  # Default operations if not found
+            
             # Random start time in the last 30 days
             days_ago = random.randint(0, 30)
             hours_ago = random.randint(0, 23)
@@ -238,7 +251,7 @@ class DataSynthesizer:
             
             # Determine if operation is completed
             status = random.choice(OPERATION_STATUS)
-            operation_type = random.choice(OPERATION_TYPES)
+            operation_type = random.choice(operation_types)
             
             # If completed, set end time and output quantity
             end_time = None
