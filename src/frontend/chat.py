@@ -3,19 +3,14 @@ from uuid import uuid4
 from chainlit.logger import logger
 import json
 import os
+import asyncio
 from typing import List, Dict
 from azure.cosmos import CosmosClient, exceptions
 from azure.identity import DefaultAzureCredential
 import util
 
-from realtime2 import RealtimeClient
+from semantic_kernel_realtime import RealtimeConversationHandler
     
-from agents.root import root_assistant
-from agents.internal_kb import internal_kb_agent
-from agents.database_agent import database_agent
-from agents.assistant_agent import assistant_agent
-from agents.web_search_agent import web_search_agent
-
 def load_customers() -> List[Dict]:
     util.load_dotenv_from_azd()
     credential = DefaultAzureCredential()
@@ -40,60 +35,82 @@ def load_customers() -> List[Dict]:
         logger.error(f"CosmosHttpResponseError: {e}")
         return []
 
-async def setup_openai_realtime():
-    """Instantiate and configure the OpenAI Realtime Client"""
+async def setup_conversation_handler():
+    """Instantiate and configure the Semantic Kernel Realtime Conversation Handler"""
     customer_id = cl.user_session.get("customer_id")
-             
-    openai_realtime = RealtimeClient(system_prompt = "")
+    
+    # Create the conversation handler
+    conversation_handler = RealtimeConversationHandler(customer_id=customer_id)
     cl.user_session.set("track_id", str(uuid4()))
-    async def handle_conversation_updated(event):
-        item = event.get("item")
-        delta = event.get("delta")
-        """Currently used to stream audio back to the client."""
-        if event:
-            if "input_audio_transcription" in item["type"]:
-                msg = cl.Message(content=delta["transcript"], author="user")
-                msg.type = "user_message"
-                await msg.send()
-        if delta:
-            if 'audio' in delta:
-                audio = delta['audio']
-                await cl.context.emitter.send_audio_chunk(cl.OutputAudioChunk(mimeType="pcm16", data=audio, track=cl.user_session.get("track_id")))
-            if 'transcript' in delta:
-                transcript = delta['transcript']
-                pass
-            if 'arguments' in delta:
-                arguments = delta['arguments']
-                pass
-            
-    async def handle_item_completed(item):
-        """Used to populate the chat context with transcription once an item is completed."""
-        if item["item"]["type"] == "message":
-            content = item["item"]["content"][0]
-            if content["type"] == "audio":
-                await cl.Message(content=content["transcript"]).send()
     
-    async def handle_conversation_interrupt(event):
-        """Used to cancel the client previous audio playback."""
-        cl.user_session.set("track_id", str(uuid4()))
-        await cl.context.emitter.send_audio_interrupt()
+    # Register event handlers
+    async def handle_text_received(event):
+        """Handle text deltas from the assistant"""
+        text = event.get("text")
+        if text:
+            # We only append to the message if it exists, otherwise create a new one
+            current_message = cl.user_session.get("current_assistant_message")
+            if current_message:
+                await current_message.stream_token(text)
+            else:
+                new_message = cl.Message(content=text, author="Assistant")
+                await new_message.send()
+                cl.user_session.set("current_assistant_message", new_message)
+    
+    async def handle_transcript_received(event):
+        """Handle transcript events"""
+        text = event.get("text")
+        is_user = event.get("is_user", False)
+        is_start = event.get("is_start", False)
         
-    async def handle_error(event):
-        logger.error(event)
+        if is_start:
+            # When a new response starts, reset the current assistant message
+            cl.user_session.set("current_assistant_message", None)
+        elif is_user and text:
+            # Show user transcript
+            msg = cl.Message(content=text, author="user")
+            msg.type = "user_message"
+            await msg.send()
     
-    openai_realtime.on('conversation.updated', handle_conversation_updated)
-    openai_realtime.on('conversation.item.completed', handle_item_completed)
-    openai_realtime.on('conversation.interrupted', handle_conversation_interrupt)
-    openai_realtime.on('error', handle_error)
+    async def handle_audio_received(event):
+        """Handle audio deltas from the assistant"""
+        audio = event.get("audio")
+        if audio and hasattr(audio, "data"):
+            # Send audio chunk to the client
+            await cl.context.emitter.send_audio_chunk(
+                cl.OutputAudioChunk(
+                    mimeType="pcm16",
+                    data=audio.data, 
+                    track=cl.user_session.get("track_id")
+                )
+            )
     
-    cl.user_session.set("openai_realtime", openai_realtime)
+    async def handle_agent_switched(event):
+        """Handle agent switching events"""
+        agent_id = event.get("agent_id")
+        if agent_id:
+            # Notify the user that we're switching agents
+            await cl.Message(
+                content=f"_Switching to {agent_id} agent..._",
+                author="System"
+            ).send()
+            
+            # Reset current message when switching agents
+            cl.user_session.set("current_assistant_message", None)
     
-    # Agents must be registered before the root agent
-    openai_realtime.assistant.register_agent(web_search_agent)
-    openai_realtime.assistant.register_agent(internal_kb_agent)
-    openai_realtime.assistant.register_agent(database_agent(customer_id))
-    openai_realtime.assistant.register_agent(assistant_agent)
-    openai_realtime.assistant.register_root_agent(root_assistant(customer_id))
+    # Register all event handlers
+    conversation_handler.on("text_received", handle_text_received)
+    conversation_handler.on("transcript_received", handle_transcript_received)
+    conversation_handler.on("audio_received", handle_audio_received)
+    conversation_handler.on("agent_switched", handle_agent_switched)
+    
+    # Store in user session
+    cl.user_session.set("conversation_handler", conversation_handler)
+    
+    # Initialize the conversation handler
+    await conversation_handler.initialize()
+    
+    return conversation_handler
 
 @cl.on_chat_start
 async def start():
@@ -117,47 +134,63 @@ async def start():
     if res:
         # Get customer_id from the payload
         customer_id = res['payload']['customer_id']
-        print(f"Customer ID: {customer_id}")
+        logger.info(f"Customer ID: {customer_id}")
         cl.user_session.set("customer_id", customer_id)
         await cl.Message(content=f"Logged in successfully!").send()
-        await setup_openai_realtime()
+        
+        # Setup the conversation handler with the selected customer
+        await setup_conversation_handler()
     else:
         await cl.Message(content="Login failed or timed out. Please refresh to try again.").send()
 
 @cl.on_message
 async def on_message(message: cl.Message):
-    openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
-    if openai_realtime and openai_realtime.is_connected():
-        await openai_realtime.send_user_message_content([{ "type": 'input_text', "text": message.content}])
+    conversation_handler = cl.user_session.get("conversation_handler")
+    if conversation_handler:
+        # Send text message to the conversation
+        await conversation_handler.send_text_message(message.content)
     else:
         await cl.Message(content="Please activate voice mode before sending messages!").send()
 
 @cl.on_audio_start
 async def on_audio_start():
     try:
-        openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
-        # TODO: might want to recreate items to restore context
-        # openai_realtime.create_conversation_item(item)
-        await openai_realtime.connect()
-        logger.info("Connected to OpenAI realtime")
+        conversation_handler = cl.user_session.get("conversation_handler")
+        if not conversation_handler:
+            conversation_handler = await setup_conversation_handler()
+        
+        # Start the conversation handler in a background task
+        task = asyncio.create_task(conversation_handler.start())
+        cl.user_session.set("conversation_task", task)
+        logger.info("Started Semantic Kernel realtime conversation")
         return True
     except Exception as e:
-        await cl.ErrorMessage(content=f"Failed to connect to OpenAI realtime: {e}").send()
+        logger.error(f"Failed to start conversation: {e}")
+        await cl.ErrorMessage(content=f"Failed to connect to realtime service: {e}").send()
         return False
 
 @cl.on_audio_chunk
 async def on_audio_chunk(chunk: cl.InputAudioChunk):
-    openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
-    if openai_realtime:            
-        if openai_realtime.is_connected():
-            await openai_realtime.append_input_audio(chunk.data)
-        else:
-            logger.info("RealtimeClient is not connected")
+    conversation_handler = cl.user_session.get("conversation_handler")
+    if conversation_handler:
+        # Send the audio chunk directly to our conversation handler
+        await conversation_handler.add_audio_chunk(chunk.data)
+    else:
+        logger.warning("Audio chunk received but no conversation handler available")
 
 @cl.on_audio_end
 @cl.on_chat_end
 @cl.on_stop
 async def on_end():
-    openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
-    if openai_realtime and openai_realtime.is_connected():
-        await openai_realtime.disconnect()
+    conversation_handler = cl.user_session.get("conversation_handler")
+    conversation_task = cl.user_session.get("conversation_task")
+    
+    if conversation_task and not conversation_task.done():
+        conversation_task.cancel()
+        try:
+            await conversation_task
+        except asyncio.CancelledError:
+            pass
+    
+    if conversation_handler:
+        await conversation_handler.stop()
