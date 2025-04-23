@@ -36,6 +36,10 @@ param resourceGroupName string = ''
 @description('Tags to be applied to resources.')
 param tags object = { 'azd-env-name': environmentName }
 
+@maxLength(60)
+@description('Name of the container apps environment to deploy. If not specified, a name will be generated. The maximum length is 60 characters.')
+param containerAppsEnvironmentName string = ''
+
 // Add new parameters for Bing Search API to replace dynamic loadJsonContent calls
 @secure()
 @description('Bing Search API Key')
@@ -49,12 +53,28 @@ var abbrs = loadJsonContent('./abbreviations.json')
 // Generate a unique token for resources
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 
-// Organize resources in a resource group
+var _containerAppsEnvironmentName = !empty(containerAppsEnvironmentName)
+  ? containerAppsEnvironmentName
+  : take('${abbrs.appManagedEnvironments}${resourceToken}', 60)
+  
+  // Organize resources in a resource group
 resource resGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: !empty(resourceGroupName) ? resourceGroupName : '${abbrs.resourcesResourceGroups}${environmentName}'
   location: location
   tags: tags
 }
+// Create a single container apps environment for both apps
+module containerAppsEnvironment './modules/app/containerappenv.bicep' = {
+  name: 'containerAppsEnvironment'
+  params: {
+    envName: _containerAppsEnvironmentName
+    location: location
+    tags: tags
+    logAnalyticsWorkspaceName: '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
+  }
+  scope: resGroup
+}
+
 
 // ------------------------
 // [ User Assigned Identity for App to avoid circular dependency ]
@@ -177,6 +197,28 @@ module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
   }
 }
 
+param accounts_aiservice_ms_name string = ''
+var _accounts_aiservice_ms_name = !empty(accounts_aiservice_ms_name) ? accounts_aiservice_ms_name : '${abbrs.cognitiveServicesAccounts}${resourceToken}'
+module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
+  name: 'aiserviceaccountDeployment'
+  scope: resGroup
+  params: {
+    // Required parameters
+    kind: 'AIServices'
+    name: _accounts_aiservice_ms_name
+    // Non-required parameters
+    customSubDomainName: _accounts_aiservice_ms_name
+    location: location
+    disableLocalAuth: false
+    publicNetworkAccess: 'Enabled'
+    secretsExportConfiguration: {
+      accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
+      accessKey2Name: '${_accounts_aiservice_ms_name}-accessKey2'
+      keyVaultResourceId: keyVault.outputs.resourceId
+    }
+  }
+}
+
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
 module monitoring 'modules/monitoring/monitor.bicep' = {
   name: 'monitor'
@@ -279,11 +321,12 @@ module frontendApp 'modules/app/containerapp.bicep' = {
   scope: resGroup
   params: {
     appName: '${abbrs.appContainerApps}frontend-${resourceToken}'
-    serviceName: 'frontend'  // Changed from 'app' to 'frontend'
+    serviceName: 'frontend'
     location: location
     tags: tags
     logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
+    containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: registry.outputs.name
     exists: appExists
     targetPort: 80
@@ -327,9 +370,10 @@ module backendApp 'modules/app/containerapp.bicep' = {
     tags: tags
     logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
+    containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: registry.outputs.name
     exists: appExists
-    targetPort: 80  // Updated targetPort to 80 to match container listening port
+    targetPort: 80
     env: union({
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
@@ -500,3 +544,6 @@ output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUr
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
 // Only include Key Vault reference if a Bing Search API key was provided
 output BING_SEARCH_API_KEY string = !empty(bingSearchApiKey) ? '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)' : ''
+
+output AZURE_AI_SERVICES_ENDPOINT string = account.outputs.endpoint
+output AZURE_AI_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'

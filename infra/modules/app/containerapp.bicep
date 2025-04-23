@@ -9,6 +9,7 @@ param env object = {}
 param identityId string
 param containerRegistryName string
 param logAnalyticsWorkspaceName string
+param containerAppsEnvironmentId string // New parameter to accept environment ID
 param exists bool
 param targetPort int = 80
 
@@ -21,21 +22,7 @@ module fetchLatestImage './fetch-container-image.bicep' = {
   }
 }
 
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2022-10-01' = {
-  name: appName
-  location: location
-  tags: tags
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalyticsWorkspace.properties.customerId
-        sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
-      }
-    }
-    daprAIConnectionString: env.APPLICATIONINSIGHTS_CONNECTION_STRING
-  }
-}
+// Removed containerAppsEnvironment resource as we'll use existing one
 
 resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
   name: appName
@@ -46,9 +33,9 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
     userAssignedIdentities: { '${identityId}': {} }
   }
   properties: {
-    managedEnvironmentId: containerAppsEnvironment.id
+    managedEnvironmentId: containerAppsEnvironmentId // Use the provided environment ID
     configuration: {
-      ingress:  {
+      ingress: {
         external: true
         targetPort: targetPort
         transport: 'auto'
@@ -85,7 +72,7 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
   }
 }
 
-output defaultDomain string = containerAppsEnvironment.properties.defaultDomain
+// Removed defaultDomain output as it's not available anymore
 output name string = app.name
 output uri string = 'https://${app.properties.configuration.ingress.fqdn}'
 output id string = app.id
