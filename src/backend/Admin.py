@@ -2,8 +2,8 @@ import os
 import logging
 import sys
 import streamlit as st
+from utils import load_dotenv_from_azd
 from azure.monitor.opentelemetry import configure_azure_monitor
-import util
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 logger.debug("Starting admin app")
 
 # Load environment variables
-util.load_dotenv_from_azd()
+load_dotenv_from_azd()
 
 st.set_page_config(
     page_title="Admin",

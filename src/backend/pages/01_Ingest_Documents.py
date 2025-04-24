@@ -8,7 +8,7 @@ from azure.storage.blob import BlobServiceClient
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils.file_processor import setup_index, upload_documents
+from utils.file_processor import setup_index, upload_documents, get_keyvault_secret
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,6 @@ try:
 
                     azure_credential = DefaultAzureCredential()
 
-
                     # Ensure index and required components exist
                     setup_index(
                         azure_credential=azure_credential,
@@ -71,7 +70,7 @@ try:
                     upload_documents(
                         azure_credential=azure_credential,
                         source_folder=temp_dir,
-                        indexer_name=os.environ["AZURE_SEARCH_INDEX"],
+                        indexer_name=f"{os.environ["AZURE_SEARCH_INDEX"]}-indexer",
                         azure_search_endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
                         azure_storage_endpoint=os.environ["AZURE_STORAGE_ENDPOINT"],
                         azure_storage_container=os.environ["AZURE_STORAGE_CONTAINER"]
