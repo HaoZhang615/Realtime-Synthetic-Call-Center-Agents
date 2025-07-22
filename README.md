@@ -51,6 +51,24 @@ git clone https://github.com/HaoZhang615/Realtime-Synthetic-Call-Center-Agents.g
 cd .\Realtime-Synthetic-Call-Center-Agents\
 azd up
 ```
+
+#### Zero Trust / Private Networking Deployment
+
+For enterprise environments requiring enhanced security with private communication between Azure services, use the `privatenetworking` branch. This deployment option provides:
+
+- Private endpoints for AI Search, CosmosDB, and Azure Storage
+- Virtual Network integration for Container Apps
+- Zero trust network architecture with no public internet access between services
+
+To deploy with private networking:
+
+```sh
+git clone https://github.com/HaoZhang615/Realtime-Synthetic-Call-Center-Agents.git
+cd .\Realtime-Synthetic-Call-Center-Agents\
+git checkout privatenetworking
+azd up
+```
+
 Example: initiate deployment
 ![azd_up_start](docs/images/azdup.png)
 Example: successful deployment
