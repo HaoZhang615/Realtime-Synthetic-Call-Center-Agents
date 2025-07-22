@@ -13,7 +13,7 @@ The multi-agent system supports internal knowledge base query, web search (groun
 
 This solution implements **enterprise-grade security** with private networking between backend services while maintaining public internet access for the container applications:
 
-### Private Network Architecture
+### Private Network Architecture (detailed documentation in [Networking.md](Networking.md))
 - **Virtual Network (VNet) Integration**: Container Apps Environment deployed with VNet integration using workload profiles
 - **Private Endpoints**: All backend services (Azure Storage, Cosmos DB, Azure AI Search) communicate privately through dedicated private endpoints
 - **Private DNS Zones**: Custom DNS resolution ensures services resolve to private IP addresses within the VNet
@@ -188,6 +188,8 @@ The solution is built on Azure Container Apps with a secure, private networking 
 - **Internal Knowledge Base Agent**: Queries indexed documents using Azure AI Search
 - **Database Agent**: Performs CRUD operations on Cosmos DB collections
 - **Web Search Agent**: Retrieves real-time information via Bing Search API with product grounding
+
+## Architecture Diagram
 
 ![Architecture Diagram](./docs/images/architecture.png)
 
