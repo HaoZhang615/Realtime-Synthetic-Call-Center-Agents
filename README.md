@@ -9,6 +9,28 @@ Addtionally, based on the input company name, a `web search agent` is also avail
 
 The multi-agent system supports internal knowledge base query, web search (grounded by the synthetic product of a real given company e.g. Microsoft), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
 
+## Security & Networking
+
+This solution implements **enterprise-grade security** with private networking between backend services while maintaining public internet access for the container applications:
+
+### Private Network Architecture
+- **Virtual Network (VNet) Integration**: Container Apps Environment deployed with VNet integration using workload profiles
+- **Private Endpoints**: All backend services (Azure Storage, Cosmos DB, Azure AI Search) communicate privately through dedicated private endpoints
+- **Private DNS Zones**: Custom DNS resolution ensures services resolve to private IP addresses within the VNet
+- **Network Security**: Backend services deny public access and only allow communication through private endpoints
+
+### Authentication & Authorization
+- **User-Assigned Managed Identity**: Single managed identity used across all Azure services for secure, keyless authentication
+- **Role-Based Access Control (RBAC)**: Granular permissions assigned to the managed identity for each service
+- **Azure Key Vault**: Secure storage for sensitive configuration like API keys
+- **Azure Trusted Services**: Storage account configured to allow trusted Azure services (like AI Search) access
+
+### Benefits
+- **Enhanced Security**: Backend data and services isolated from public internet
+- **Compliance Ready**: Private networking supports enterprise compliance requirements  
+- **Zero-Trust Architecture**: Services authenticate using managed identities instead of connection strings
+- **Scalable**: VNet integration allows for future expansion with additional subnets and security controls
+
 ## How to get it work
 
 - [Deploy the application](#how-to-deploy)
@@ -35,14 +57,53 @@ The multi-agent system supports internal knowledge base query, web search (groun
 
 ## How to deploy
 
-### Depenendencies
+### Prerequisites
 
+#### Tool Dependencies
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/what-is-azure-cli): `az`
 - [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/overview): `azd`
 - [Python](https://www.python.org/about/gettingstarted/): `python`
 - [UV](https://docs.astral.sh/uv/getting-started/installation/): `uv`
 - Optionally [Docker](https://www.docker.com/get-started/): `docker`
 - Optionally a Bing Search V7 resource API in Azure for the web search agent to work.
+
+#### Azure Permissions Required
+
+**⚠️ Important**: This deployment requires **subscription-level permissions** due to resource group creation, managed identity provisioning, and role assignments.
+
+The deploying user must have **one of the following** at the subscription level:
+
+1. **Owner role** (Recommended)
+   - Full access to create and manage all resources
+   - Can assign roles to managed identities
+
+2. **Contributor + User Access Administrator roles**
+   - Contributor: Create and manage Azure resources
+   - User Access Administrator: Assign roles for managed identity authentication
+
+3. **Custom role** with these specific permissions:
+   ```json
+   {
+     "permissions": [
+       {
+         "actions": [
+           "Microsoft.Resources/subscriptions/resourceGroups/write",
+           "Microsoft.Authorization/roleAssignments/write", 
+           "Microsoft.Authorization/roleAssignments/read",
+           "Microsoft.ManagedIdentity/userAssignedIdentities/*/action",
+           "Microsoft.Resources/deployments/*",
+           "*"
+         ]
+       }
+     ]
+   }
+   ```
+
+**Why subscription-level permissions are needed:**
+- Creates a new resource group (if not specified)
+- Provisions user-assigned managed identity
+- Assigns RBAC roles across multiple Azure services (Storage, AI Search, Cosmos DB, Key Vault)
+- Deploys infrastructure with subscription-scoped Bicep template
 
 ### Deployment and setup
 
@@ -51,6 +112,13 @@ git clone https://github.com/HaoZhang615/Realtime-Synthetic-Call-Center-Agents.g
 cd .\Realtime-Synthetic-Call-Center-Agents\
 azd up
 ```
+
+The deployment process automatically provisions:
+- **Azure Container Apps Environment** with VNet integration and workload profiles
+- **Private networking** with VNet, private endpoints, and DNS zones for backend services
+- **Managed identity** with appropriate RBAC permissions across all services
+- **Secure storage** configuration with trusted services access for AI Search indexing
+
 Example: initiate deployment
 ![azd_up_start](docs/images/azdup.png)
 Example: successful deployment
@@ -98,6 +166,29 @@ Please follow the instructions in [the instructions in `src/frontend`](./src/fro
 
 ## Architecture
 
+The solution is built on Azure Container Apps with a secure, private networking architecture:
+
+### Core Components
+- **Frontend**: Chainlit-based voice interface running in Azure Container Apps
+- **Backend**: Streamlit admin interface for document management and data synthesis
+- **Azure AI Search**: Vector search with built-in skillsets for document processing and embeddings
+- **Azure Cosmos DB**: NoSQL database for storing customer, product, and transaction data
+- **Azure Storage**: Blob storage for document ingestion with private endpoint access
+- **Azure OpenAI**: GPT-4o models for chat completion and text-embedding-3-large for vector embeddings
+- **Azure Logic Apps**: Email automation workflows using Office 365 connectors
+
+### Networking Architecture
+- **Virtual Network**: Dedicated VNet with segregated subnets for apps and backend services
+- **Container Apps Environment**: VNet-integrated with workload profiles for enhanced security
+- **Private Endpoints**: Secure, private connections to Azure Storage, Cosmos DB, and AI Search
+- **Private DNS Zones**: Custom DNS resolution for private endpoint connectivity
+- **Managed Identity**: User-assigned managed identity for secure, keyless service authentication
+
+### Multi-Agent System
+- **Internal Knowledge Base Agent**: Queries indexed documents using Azure AI Search
+- **Database Agent**: Performs CRUD operations on Cosmos DB collections
+- **Web Search Agent**: Retrieves real-time information via Bing Search API with product grounding
+
 ![Architecture Diagram](./docs/images/architecture.png)
 
 ## Contributing
@@ -119,6 +210,7 @@ This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for
     - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)$
 
 ## to-do
+- [x] **Implement enterprise-grade security with private networking and managed identity authentication**
 - [ ] add a demo video
 - [ ] add logic to log the conversation into CosmosDB under container `human_agent_conversations`
 - [ ] add PowerBI dashboard integration for Post-Call Analysis

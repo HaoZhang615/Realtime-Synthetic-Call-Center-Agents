@@ -51,7 +51,7 @@ param bingSearchApiEndpoint string = 'https://api.bing.microsoft.com/v7.0/search
 // Load abbreviations from JSON file
 var abbrs = loadJsonContent('./abbreviations.json')
 // Generate a unique token for resources
-var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
+var resourceToken = toLower(uniqueString(subscription().id, location, environmentName))
 
 var _containerAppsEnvironmentName = !empty(containerAppsEnvironmentName)
   ? containerAppsEnvironmentName
@@ -63,7 +63,19 @@ resource resGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   location: location
   tags: tags
 }
-// Create a single container apps environment for both apps
+
+// Create VNet and subnets
+module vnet './modules/network/vnet.bicep' = {
+  name: 'vnet'
+  scope: resGroup
+  params: {
+    vnetName: 'vnet-${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+// Create a single container apps environment for both apps, integrated with VNet
 module containerAppsEnvironment './modules/app/containerappenv.bicep' = {
   name: 'containerAppsEnvironment'
   params: {
@@ -71,8 +83,83 @@ module containerAppsEnvironment './modules/app/containerappenv.bicep' = {
     location: location
     tags: tags
     logAnalyticsWorkspaceName: '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
+    appSubnetId: vnet.outputs.appSubnetId
   }
   scope: resGroup
+}
+
+// Private Endpoints for backend services
+module storagePrivateEndpoint './modules/network/private-endpoint.bicep' = {
+  name: 'storage-pe'
+  scope: resGroup
+  params: {
+    name: 'storage-pe-${resourceToken}'
+    location: location
+    subnetId: vnet.outputs.backendSubnetId
+    groupId: 'blob'
+    privateLinkResourceId: storage.outputs.resourceId
+    tags: tags
+  }
+}
+
+module cosmosPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+  name: 'cosmos-pe'
+  scope: resGroup
+  params: {
+    name: 'cosmos-pe-${resourceToken}'
+    location: location
+    subnetId: vnet.outputs.backendSubnetId
+    groupId: 'Sql'
+    privateLinkResourceId: cosmosdb.outputs.cosmosDbAccountId
+    tags: tags
+  }
+}
+
+module searchPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+  name: 'search-pe'
+  scope: resGroup
+  params: {
+    name: 'search-pe-${resourceToken}'
+    location: location
+    subnetId: vnet.outputs.backendSubnetId
+    groupId: 'searchService'
+    privateLinkResourceId: searchService.outputs.resourceId
+    tags: tags
+  }
+}
+
+// Private DNS Zones for proper DNS resolution
+module cosmosPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+  name: 'cosmos-dns-zone'
+  scope: resGroup
+  params: {
+    privateEndpointId: cosmosPrivateEndpoint.outputs.id
+    privateDnsZoneName: 'privatelink.documents.azure.com'
+    vnetId: vnet.outputs.vnetId
+    tags: tags
+  }
+}
+
+module storagePrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+  name: 'storage-dns-zone'
+  scope: resGroup
+  params: {
+    privateEndpointId: storagePrivateEndpoint.outputs.id
+    privateDnsZoneName: 'privatelink.blob.${environment().suffixes.storage}'
+    vnetId: vnet.outputs.vnetId
+    tags: tags
+  }
+}
+
+module searchPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+  name: 'search-dns-zone'
+  scope: resGroup
+  params: {
+    privateEndpointId: searchPrivateEndpoint.outputs.id
+    privateDnsZoneName: 'privatelink.search.windows.net'
+    vnetId: vnet.outputs.vnetId
+    tags: tags
+  }
 }
 
 
@@ -118,7 +205,7 @@ var realtimeDeployment =    [{
     }
     sku: { 
       name: 'GlobalStandard'
-      capacity:  2
+      capacity:  1
     }
   }]
 
@@ -324,7 +411,6 @@ module frontendApp 'modules/app/containerapp.bicep' = {
     serviceName: 'frontend'
     location: location
     tags: tags
-    logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
     containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: registry.outputs.name
@@ -368,7 +454,6 @@ module backendApp 'modules/app/containerapp.bicep' = {
     serviceName: 'backend'
     location: location
     tags: tags
-    logAnalyticsWorkspaceName: logAnalyticsName
     identityId: appIdentity.outputs.identityId
     containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: registry.outputs.name
@@ -385,8 +470,8 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
-      AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.core.windows.net'
-      AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
+      AZURE_STORAGE_ENDPOINT: storage.outputs.primaryBlobEndpoint
+      AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name};'
       AZURE_STORAGE_CONTAINER: storageContainerName
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
@@ -416,8 +501,7 @@ module searchService 'br/public:avm/res/search/search-service:0.7.1' = {
     sku: 'standard'
     replicaCount: 1
     semanticSearch: 'standard'
-    // An outbound managed identity is required for integrated vectorization to work,
-    // and is only supported on non-free tiers:
+    publicNetworkAccess: 'Disabled'
     managedIdentities: { userAssignedResourceIds: [appIdentity.outputs.identityId] }
     roleAssignments: [
       {
@@ -464,9 +548,9 @@ module storage 'br/public:avm/res/storage/storage-account:0.9.1' = {
     tags: tags
     kind: 'StorageV2'
     skuName: 'Standard_LRS'
-    publicNetworkAccess: 'Enabled' // Necessary for uploading documents to storage container
+    publicNetworkAccess: 'Disabled'
     networkAcls: {
-      defaultAction: 'Allow'
+      defaultAction: 'Deny'
       bypass: 'AzureServices'
     }
     allowBlobPublicAccess: false
@@ -512,6 +596,7 @@ output AZURE_LOCATION string = location
 output AZURE_TENANT_ID string = tenant().tenantId
 output AZURE_CLIENT_ID string = appIdentity.outputs.clientId
 output AZURE_RESOURCE_GROUP string = resGroup.name
+output RESOURCE_GROUP_ID string = resGroup.id
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 
 output AZURE_OPENAI_ENDPOINT string = openAiEndpoint
@@ -524,9 +609,9 @@ output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
 
-output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.blob.core.windows.net'
+output AZURE_STORAGE_ENDPOINT string = storage.outputs.primaryBlobEndpoint
 output AZURE_STORAGE_ACCOUNT string = storage.outputs.name
-output AZURE_STORAGE_CONNECTION_STRING string = 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
+output AZURE_STORAGE_CONNECTION_STRING string = 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name};'
 output AZURE_STORAGE_CONTAINER string = storageContainerName
 output AZURE_STORAGE_RESOURCE_GROUP string = resGroup.name
 
@@ -544,8 +629,7 @@ output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesC
 output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
 
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
-// Only include Key Vault reference if a Bing Search API key was provided
-output BING_SEARCH_API_KEY string = !empty(bingSearchApiKey) ? '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)' : ''
+// Bing Search API Key is stored in Key Vault - applications should retrieve it from there
 
 output AZURE_AI_SERVICES_ENDPOINT string = account.outputs.endpoint
 output AZURE_AI_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'

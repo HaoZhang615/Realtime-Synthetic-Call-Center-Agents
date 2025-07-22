@@ -32,6 +32,10 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
         name: 'EnableServerless'
       }
     ]
+    publicNetworkAccess: 'Disabled'
+    isVirtualNetworkFilterEnabled: true
+    virtualNetworkRules: [] // Only allow access via private endpoints
+    ipRules: []
   }
 }
 
@@ -221,3 +225,4 @@ output cosmosDbProductContainer string = ProductContainer.name
 output cosmosDbPurchasesContainer string = PurchasesContainer.name
 output cosmosDbProductUrlContainer string = ProductUrlContainer.name
 output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint
+output cosmosDbAccountId string = cosmosDbAccount.id

@@ -12,7 +12,10 @@
       "value": "${AZURE_PRINCIPAL_ID}"
     },
     "location": {
-      "value": "${AZURE_LOCATION=eastus2}"
+      "value": "${AZURE_LOCATION}"
+    },
+    "resourceGroupName": {
+      "value": "rg-${AZURE_ENV_NAME}"
     },
     "openAiRealtimeName": {
       "value": "${AZURE_OPENAI_REALTIME_NAME}"
