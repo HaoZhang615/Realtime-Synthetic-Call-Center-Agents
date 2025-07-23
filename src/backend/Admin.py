@@ -49,5 +49,6 @@ st.write(
     * **Ingest Documents**: Upload documents (.pdf, .docx, etc.) to be processed and added to the knowledge base
     * **Delete Documents**: Remove documents from the knowledge base when they are no longer needed
     * **Synthesize Data**: Generate synthetic data to simulate a **Contact Center** scenario with a database comprised of product, customer, purchases history and human-agent conversations.
+    * **VoiceBot Classic**: Test the Azure OpenAI powered voice chatbot with speech-to-text and text-to-speech capabilities
     """
 )
