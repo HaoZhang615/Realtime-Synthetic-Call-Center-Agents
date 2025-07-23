@@ -14,3 +14,11 @@ def load_dotenv_from_azd():
     else:
         logging.info("AZD environment not found. Trying to load from .env file...")
         load_dotenv()
+
+# Make conversation manager available
+try:
+    from .conversation_manager import ConversationManager
+    __all__ = ['load_dotenv_from_azd', 'ConversationManager']
+except ImportError:
+    # Conversation manager dependencies not available
+    __all__ = ['load_dotenv_from_azd']
