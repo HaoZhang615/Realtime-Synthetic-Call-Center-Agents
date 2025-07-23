@@ -95,6 +95,12 @@ param aoaiGpt4oMiniModelName string = 'gpt-4o-mini'
 param aoaiGpt4oMiniModelVersion string = '2024-07-18'
 param embedModel string = 'text-embedding-3-large'
 
+// Audio models for VoiceBot Classic
+param aoaiTranscribeModelName string = 'gpt-4o-mini-transcribe'
+param aoaiTranscribeModelVersion string = '2025-03-20'
+param aoaiTtsModelName string = 'gpt-4o-mini-tts'
+param aoaiTtsModelVersion string = '2025-03-20'
+
 var embeddingDeployment = [
   {
     name: embedModel
@@ -135,7 +141,35 @@ var gpt4ominiDeployment =    [{
     }
   }]
 
-var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment)
+// Audio models deployment for VoiceBot Classic
+var audioModelsDeployment = [
+  {
+    name: aoaiTranscribeModelName
+    model: {
+      format: 'OpenAI'
+      name: aoaiTranscribeModelName
+      version: aoaiTranscribeModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity: 50
+    }
+  }
+  {
+    name: aoaiTtsModelName
+    model: {
+      format: 'OpenAI'
+      name: aoaiTtsModelName
+      version: aoaiTtsModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity: 50
+    }
+  }
+]
+
+var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment, audioModelsDeployment)
 
 // Add Key Vault to store secrets like Bing Search API Key
 module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
@@ -383,6 +417,8 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
       AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
+      AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT: aoaiTranscribeModelName
+      AZURE_OPENAI_TTS_DEPLOYMENT: aoaiTtsModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.core.windows.net'
@@ -520,6 +556,8 @@ output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
 output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelName
 output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
+output AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT string = aoaiTranscribeModelName
+output AZURE_OPENAI_TTS_DEPLOYMENT string = aoaiTtsModelName
 
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName

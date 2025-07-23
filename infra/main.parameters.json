@@ -12,7 +12,7 @@
       "value": "${AZURE_PRINCIPAL_ID}"
     },
     "location": {
-      "value": "${AZURE_LOCATION=eastus2}"
+      "value": "${AZURE_LOCATION}"
     },
     "openAiRealtimeName": {
       "value": "${AZURE_OPENAI_REALTIME_NAME}"
