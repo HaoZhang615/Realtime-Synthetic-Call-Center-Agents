@@ -50,5 +50,6 @@ st.write(
     * **Delete Documents**: Remove documents from the knowledge base when they are no longer needed
     * **Synthesize Data**: Generate synthetic data to simulate a **Contact Center** scenario with a database comprised of product, customer, purchases history and human-agent conversations.
     * **VoiceBot Classic**: Test the Azure OpenAI powered voice chatbot with speech-to-text and text-to-speech capabilities
+    * **VoiceBot Realtime**: Experience the next-generation GPT-4o Realtime voice assistant with WebRTC for ultra-low latency conversations
     """
 )
