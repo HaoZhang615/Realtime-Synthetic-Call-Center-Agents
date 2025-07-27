@@ -64,14 +64,6 @@ if "messages" not in st.session_state:
 
 @st.fragment(run_every=1)
 def conversation_display():
-    """Display the conversation using proper chat interface"""
-    if st.session_state.realtime_client is None:
-        st.info("🔗 Connect to Azure OpenAI to start chatting")
-        return
-    
-    if not st.session_state.realtime_client.is_connected():
-        st.warning("⚠️ Not connected to Azure OpenAI. Please connect first.")
-        return
     
     # Get conversation items from the realtime client (structured approach like realtime2.py)
     conversation_items = getattr(st.session_state.realtime_client, 'conversation_items', [])
@@ -296,6 +288,49 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # Voice Recording Section
+    st.subheader("🎤 Voice Recording")
+    
+    # Check if we're connected before allowing interaction
+    is_connected = (st.session_state.realtime_client and 
+                    st.session_state.realtime_client.is_connected())
+    
+    # Recording button
+    button_text = "🛑 Stop Recording" if st.session_state.recording else "🎤 Start Recording"
+    button_type = "secondary" if st.session_state.recording else "primary"
+    
+    def voice_recording_callback():
+        toggle_recording(
+            st.session_state,
+            st.session_state.realtime_client,
+            st.session_state.recorder,
+            st.session_state.selected_voice,
+            send_on_stop=False  # Just drop the buffer without sending to AI
+        )
+    
+    if st.button(
+        button_text, 
+        on_click=voice_recording_callback, 
+        type=button_type, 
+        key="audio_button",
+        disabled=not is_connected,
+        help="Start/Stop recording (stops without sending to AI)" if is_connected else "Connect to Azure OpenAI first",
+        use_container_width=True
+    ):
+        pass  # Callback handles the logic
+    
+    # Recording status indicator
+    if not is_connected:
+        st.info("🔌 Connect to Azure OpenAI to enable voice recording")
+    elif st.session_state.recording:
+        st.success("🔴 **Recording in progress...**")
+        st.caption("Click 'Stop Recording' to drop audio without sending")
+    else:
+        st.info("⚪ **Ready to record**")
+        st.caption("Click 'Start Recording' to begin voice input")
+    
+    st.markdown("---")
+    
     # Conversation Management Section
     st.subheader("💬 Conversation")
     if st.session_state.messages:
@@ -320,82 +355,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Connection status
-    endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
-    if not endpoint:
-        st.error("⚠️ Azure OpenAI not configured")
-        st.write("Required: `AZURE_OPENAI_ENDPOINT`")
-    else:
-        st.success("✅ Azure OpenAI configured")
-        deployment = os.environ.get('AZURE_OPENAI_GPT4O_REALTIME_DEPLOYMENT', 'gpt-4o-realtime-preview')
-        st.write(f"Endpoint: {endpoint.split('//')[1] if '//' in endpoint else endpoint}")
-        st.write(f"Deployment: {deployment}")
-    
-    # Audio status indicator
-    status_type, status_message = get_audio_status(st.session_state)
-    if status_type == "playing":
-        st.success(status_message)
-    elif status_type == "recording":
-        st.info(status_message)
-    else:
-        st.caption(status_message)
-    
-    # Connection debug info
-    if st.session_state.realtime_client:
-        connection_status = "Connected" if st.session_state.realtime_client.is_connected() else "Disconnected"
-        st.caption(f"**Status:** {connection_status}")
-        if hasattr(st.session_state.realtime_client, 'ws') and st.session_state.realtime_client.ws:
-            try:
-                ws_state = st.session_state.realtime_client.ws.state.name
-                st.caption(f"**WebSocket:** {ws_state}")
-            except (AttributeError, ImportError):
-                st.caption("**WebSocket:** Unknown state")
-        
-        # Debug: Show transcript content
-        if st.session_state.realtime_client.transcript:
-            with st.expander("🔍 Debug: Raw Transcript", expanded=False):
-                st.text(st.session_state.realtime_client.transcript)
-                st.write(f"**Transcript length:** {len(st.session_state.realtime_client.transcript)}")
-        
-        # Debug: Show conversation items
-        conversation_items = getattr(st.session_state.realtime_client, 'conversation_items', [])
-        if conversation_items:
-            with st.expander("💬 Debug: Conversation Items", expanded=False):
-                st.write(f"**Total items:** {len(conversation_items)}")
-                for i, item in enumerate(conversation_items[-5:]):  # Show last 5 items
-                    st.json({
-                        "index": len(conversation_items) - 5 + i,
-                        "role": item.get("role"),
-                        "content": item.get("content", "")[:100] + "..." if len(item.get("content", "")) > 100 else item.get("content", ""),
-                        "source": item.get("source"),
-                        "timestamp": item.get("timestamp", "")[:19] if item.get("timestamp") else ""
-                    })
-        
-        # Debug: Show recent events
-        if hasattr(st.session_state.realtime_client, 'logs') and st.session_state.realtime_client.logs:
-            with st.expander("📋 Debug: Recent Events", expanded=False):
-                recent_logs = st.session_state.realtime_client.logs[-15:]  # Show last 15 events
-                for timestamp, event_type, event_data in recent_logs:
-                    # Highlight transcription events
-                    if "transcription" in event_type or "input_audio" in event_type:
-                        st.success(f"[{timestamp}] **{event_type}**: {event_data[:150]}...")
-                    else:
-                        st.text(f"[{timestamp}] {event_type}: {event_data[:100]}...")  # Truncate long events
-    else:
-        st.caption("**Status:** Not initialized")
-    
-    # Show automatic connection status
-    if endpoint:
-        if st.session_state.realtime_client and st.session_state.realtime_client.is_connected():
-            st.success("🔗 **Auto-connected to Azure OpenAI**")
-        elif st.session_state.connection_attempted:
-            st.error("❌ **Auto-connection failed**")
-            st.caption("Check your Azure credentials with `az login`")
-        else:
-            st.info("� **Connecting automatically...**")
-    else:
-        st.error("⚠️ **Azure OpenAI not configured**")
-        st.caption("Set AZURE_OPENAI_ENDPOINT environment variable")
 
 # Main content area
 # Show connection status at the top
@@ -417,76 +376,37 @@ else:
     st.info("� **Connecting automatically...**")
 
 # Create a container with fixed height and scroll bar for conversation history
-conversation_container = st.container(height=500, border=True)
+st.markdown("### 💬 Conversation")
+conversation_container = st.container(height=600, border=True)
 
 with conversation_container:
     conversation_display()
 
-# Check if we're connected before allowing interaction
-is_connected = (st.session_state.realtime_client and 
-                st.session_state.realtime_client.is_connected())
+# Check if we're connected before allowing interaction (moved to sidebar)
+# is_connected is now defined in the sidebar
 
 # Debug: Show connection state for troubleshooting
-if not is_connected:
-    st.info(f"🔍 **Debug:** realtime_client exists: {st.session_state.realtime_client is not None}, "
-           f"is_connected: {st.session_state.realtime_client.is_connected() if st.session_state.realtime_client else 'N/A'}, "
-           f"connection_attempted: {st.session_state.connection_attempted}")
+if st.session_state.realtime_client:
+    is_connected_main = st.session_state.realtime_client.is_connected()
+    if not is_connected_main:
+        st.info(f"🔍 **Debug:** realtime_client exists: {st.session_state.realtime_client is not None}, "
+               f"is_connected: {is_connected_main}, "
+               f"connection_attempted: {st.session_state.connection_attempted}")
 
-# Handle new text message using chat_input
+# Handle new text message using chat_input  
 if text_prompt := st.chat_input(
-    "Type your message here..." if is_connected else "Connect to Azure OpenAI first...",
-    disabled=not is_connected
+    "Type your message here..." if (st.session_state.realtime_client and st.session_state.realtime_client.is_connected()) else "Connect to Azure OpenAI first...",
+    disabled=not (st.session_state.realtime_client and st.session_state.realtime_client.is_connected())
 ):
-    if is_connected and text_prompt.strip():
+    if (st.session_state.realtime_client and 
+        st.session_state.realtime_client.is_connected() and 
+        text_prompt.strip()):
         # Send the message to the realtime API (this will add it to conversation_items)
         send_text_message(
             text_prompt.strip(),
             st.session_state.realtime_client,
             st.session_state.selected_voice
         )
-
-# Voice input section
-st.markdown("---")
-st.markdown("### 🎤 Voice Chat")
-
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    button_text = "🛑 Stop Recording" if st.session_state.recording else "🎤 Start Recording"
-    button_type = "secondary" if st.session_state.recording else "primary"
-    
-    def voice_recording_callback():
-        toggle_recording(
-            st.session_state,
-            st.session_state.realtime_client,
-            st.session_state.recorder,
-            st.session_state.selected_voice,
-            send_on_stop=False  # Just drop the buffer without sending to AI
-        )
-    
-    st.button(
-        button_text, 
-        on_click=voice_recording_callback, 
-        type=button_type, 
-        key="audio_button",
-        disabled=not is_connected,
-        help="Start/Stop recording (stops without sending to AI)" if is_connected else "Connect to Azure OpenAI first"
-    )
-
-with col2:
-    if not is_connected:
-        st.info("🔌 Connect to Azure OpenAI to enable voice chat")
-    elif st.session_state.recording:
-        st.success("🔴 Recording... Click 'Stop Recording' to drop audio without sending")
-    else:
-        st.info("⚪ Click 'Start Recording' to record voice. 'Stop Recording' drops audio without sending to AI.")
-        
-        # Show transcript status for debugging
-        if (st.session_state.realtime_client and 
-            st.session_state.realtime_client.transcript and 
-            len(st.session_state.realtime_client.transcript.strip()) > 0):
-            transcript_preview = st.session_state.realtime_client.transcript.replace('\n\n', ' | ')[:100]
-            st.caption(f"📝 Latest transcript: {transcript_preview}...")
 
 # Start audio components
 audio_player()

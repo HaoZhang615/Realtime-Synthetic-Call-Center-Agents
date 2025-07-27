@@ -11,6 +11,8 @@ import hashlib
 from utils import load_dotenv_from_azd
 from utils.conversation_manager import ConversationManager
 from azure.monitor.opentelemetry import configure_azure_monitor
+from datetime import datetime
+import pytz
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -210,7 +212,11 @@ Be friendly, helpful, and concise in your responses."""
         conv_doc = st.session_state.conversation_doc
         st.write(f"**Session ID:** `{conv_doc['session_id'][:8]}...`")
         st.write(f"**Messages:** {len(conv_doc['messages'])}")
-        st.write(f"**Created:** {conv_doc['created_at'][:19].replace('T', ' ')}")
+        # Convert UTC ISO timestamp to CET
+        created_utc = datetime.fromisoformat(conv_doc['created_at'].replace('Z', '+00:00'))
+        cet = pytz.timezone('Europe/Zurich')
+        created_cet = created_utc.astimezone(cet)
+        st.write(f"**Created:** {created_cet.strftime('%Y-%m-%d %H:%M:%S')} (CET)")
         
         # Button to start new conversation
         if st.button("🔄 Start New Conversation"):
@@ -222,34 +228,6 @@ Be friendly, helpful, and concise in your responses."""
             # Re-initialize
             initialize_conversation()
             st.rerun()
-            
-        # Show recent conversations
-        with st.expander("📚 Recent Conversations"):
-            if conversation_manager:
-                try:
-                    customer_id = get_customer_id()
-                    recent_convs = conversation_manager.get_recent_conversations(customer_id, limit=5)
-                    
-                    if recent_convs:
-                        for conv in recent_convs:
-                            with st.container():
-                                st.write(f"**{conv['created_at'][:19].replace('T', ' ')}**")
-                                st.write(f"Messages: {len(conv['messages'])}")
-                                if st.button(f"Load", key=f"load_{conv['id'][:8]}"):
-                                    # Load this conversation
-                                    st.session_state.conversation_doc = conv
-                                    st.session_state.messages = [
-                                        {"role": msg["role"], "content": msg["content"]} 
-                                        for msg in conv["messages"]
-                                    ]
-                                    st.rerun()
-                                st.markdown("---")
-                    else:
-                        st.write("No recent conversations found")
-                except Exception as e:
-                    st.error(f"Error loading conversations: {e}")
-            else:
-                st.write("Conversation manager not available")
     else:
         st.write("No active conversation")
 
