@@ -19,6 +19,8 @@ from utils.realtime_voice_utils import (
     toggle_recording,
     process_audio_chunks,
     cleanup_resources,
+    clear_audio_buffer,
+    force_clear_audio_buffer,
     audio_buffer
 )
 
@@ -56,9 +58,13 @@ def get_session_id():
     return st.session_state.session_id
 
 
+# Initialize session state attributes  
+if "messages" not in st.session_state:  
+    st.session_state.messages = []
+
 @st.fragment(run_every=1)
 def conversation_display():
-    """Display the conversation transcript with real-time updates"""
+    """Display the conversation using proper chat interface"""
     if st.session_state.realtime_client is None:
         st.info("🔗 Connect to Azure OpenAI to start chatting")
         return
@@ -67,33 +73,90 @@ def conversation_display():
         st.warning("⚠️ Not connected to Azure OpenAI. Please connect first.")
         return
     
-    # Display conversation transcript
-    transcript = st.session_state.realtime_client.transcript
+    # Get conversation items from the realtime client (structured approach like realtime2.py)
+    conversation_items = getattr(st.session_state.realtime_client, 'conversation_items', [])
     
-    if transcript.strip():
-        # Split transcript into messages and format them
-        messages = transcript.split('\n\n')
+    # Check if conversation items have changed and force rerun if needed
+    current_items_count = len(conversation_items)
+    if current_items_count != st.session_state.get('last_items_count', 0):
+        st.session_state.last_items_count = current_items_count
+    
+    # Build messages list from structured conversation items
+    all_messages = []
+    
+    # Add conversation items (both text and voice)
+    for item in conversation_items:
+        if item.get("type") == "message" and item.get("content"):
+            message = {
+                "role": item["role"],
+                "content": item["content"],
+                "source": item.get("source", "unknown"),
+                "timestamp": item.get("timestamp", "")
+            }
+            all_messages.append(message)
+            
+    # If no structured items available, fallback to transcript parsing for backward compatibility
+    if not all_messages:
+        # Fallback to old transcript parsing
+        transcript = st.session_state.realtime_client.transcript
         
-        for message in messages:
-            if message.strip():
-                if message.startswith("**You:**"):
-                    # User message
-                    user_text = message.replace("**You:**", "").strip()
+        if transcript.strip():
+            message_blocks = transcript.split('\n\n')
+            
+            for block in message_blocks:
+                block = block.strip()
+                if not block:
+                    continue
+                
+                # Parse user messages (voice input)
+                if block.startswith("**You:**"):
+                    user_text = block.replace("**You:**", "").strip()
                     if user_text:
-                        with st.chat_message("user"):
-                            st.markdown(user_text)
-                elif message.startswith("**Assistant:**"):
-                    # Assistant message
-                    assistant_text = message.replace("**Assistant:**", "").strip()
+                        all_messages.append({
+                            "role": "user", 
+                            "content": user_text,
+                            "source": "voice"
+                        })
+                
+                # Parse assistant messages (voice responses)
+                elif block.startswith("**Assistant:**"):
+                    assistant_text = block.replace("**Assistant:**", "").strip()
                     if assistant_text:
-                        with st.chat_message("assistant"):
-                            st.markdown(assistant_text)
-                            
-                            # Show audio indicator if audio is playing
-                            if len(audio_buffer) > 0:
-                                st.caption("🔊 *Playing audio response...*")
-    else:
-        st.caption("*Start a conversation by typing a message or recording audio*")
+                        all_messages.append({
+                            "role": "assistant", 
+                            "content": assistant_text,
+                            "source": "voice"
+                        })
+    
+    # Update session state with all messages
+    st.session_state.messages = all_messages
+    
+    # Display all messages using Streamlit's chat interface
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            
+            # Show source indicator
+            source_indicator = "🎤" if message.get("source") == "voice" else "⌨️" if message.get("source") == "text" else ""
+            if source_indicator:
+                st.caption(f"{source_indicator} {message.get('source', 'unknown').title()}")
+            
+            # Show timestamp if available
+            if message.get("timestamp"):
+                try:
+                    from datetime import datetime
+                    ts = datetime.fromisoformat(message["timestamp"].replace('Z', '+00:00'))
+                    st.caption(f"⏰ {ts.strftime('%H:%M:%S')}")
+                except:
+                    pass
+            
+            # Show audio indicator if this is an assistant message and audio is playing
+            if message["role"] == "assistant" and len(audio_buffer) > 0:
+                st.caption("🔊 *Playing audio response...*")
+    
+    # Show empty state if no messages
+    if not st.session_state.messages:
+        st.info("💬 Start a conversation by typing a message or recording audio below")
 
 
 @st.fragment(run_every=1)
@@ -116,7 +179,19 @@ def audio_recorder():
 
 
 # Initialize Streamlit page
-st.title("Azure OpenAI Realtime Voice Assistant")
+st.set_page_config(
+    page_title="Realtime Voice Assistant",
+    page_icon="🎤",
+    layout="wide"
+)
+
+st.title("🎤 Azure OpenAI Realtime Voice Assistant")
+st.markdown("Experience real-time voice and text conversations with Azure OpenAI GPT-4o")
+
+# Load CSS styling if available
+css_path = os.path.join(os.path.dirname(__file__), "common.css")
+if os.path.exists(css_path):
+    load_css(css_path)
 
 # Register cleanup function to run on app shutdown
 if "cleanup_registered" not in st.session_state:
@@ -156,6 +231,51 @@ if "audio_stream_started" not in st.session_state:
 if "audio_output_stream" not in st.session_state:
     st.session_state.audio_output_stream = None
 
+# Track conversation items count for detecting changes
+if "last_items_count" not in st.session_state:
+    st.session_state.last_items_count = 0
+
+# Track connection attempts to avoid infinite loops
+if "connection_attempted" not in st.session_state:
+    st.session_state.connection_attempted = False
+
+# Automatic connection on page load
+endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
+if endpoint and not st.session_state.connection_attempted:
+    st.session_state.connection_attempted = True
+    
+    try:
+        # Initialize client if not already done
+        if st.session_state.realtime_client is None:
+            st.session_state.realtime_client = setup_realtime_client(
+                st.session_state.event_loop
+            )
+        
+        if st.session_state.realtime_client is not None:
+            # Check if already connected, if not then connect
+            if not st.session_state.realtime_client.is_connected():
+                logger.info("🔗 Auto-connecting to Azure OpenAI Realtime API...")
+                
+                # Connect to Azure OpenAI
+                run_async_in_loop(
+                    st.session_state.realtime_client.connect(),
+                    st.session_state.event_loop
+                )
+                
+                if st.session_state.realtime_client.is_connected():
+                    logger.info("✅ Successfully auto-connected to Azure OpenAI Realtime API")
+                else:
+                    logger.warning("❌ Auto-connection to Azure OpenAI Realtime API failed")
+            else:
+                logger.info("✅ Already connected to Azure OpenAI Realtime API")
+        else:
+            logger.error("❌ Failed to initialize Azure OpenAI client")
+            
+    except (ValueError, OSError, ConnectionError) as e:
+        logger.error(f"❌ Auto-connection error: {str(e)}")
+        if "authentication" in str(e).lower():
+            logger.info("💡 Authentication error - may need to run `az login`")
+
 # Voice selection in sidebar
 with st.sidebar:
     st.subheader("🎤 Voice Settings")
@@ -167,8 +287,36 @@ with st.sidebar:
     st.session_state.selected_voice = st.selectbox(
         "Select Voice:",
         available_voices,
-        index=available_voices.index(st.session_state.selected_voice)
+        index=available_voices.index(st.session_state.selected_voice),
+        help="Choose the voice for AI audio responses"
     )
+    
+    # Show current voice info
+    st.caption(f"🔊 Current voice: **{st.session_state.selected_voice}**")
+    
+    st.markdown("---")
+    
+    # Conversation Management Section
+    st.subheader("💬 Conversation")
+    if st.session_state.messages:
+        st.write(f"**Messages:** {len(st.session_state.messages)}")
+        
+        # Count user vs assistant messages
+        user_msgs = len([m for m in st.session_state.messages if m["role"] == "user"])
+        assistant_msgs = len([m for m in st.session_state.messages if m["role"] == "assistant"])
+        st.write(f"**You:** {user_msgs} | **Assistant:** {assistant_msgs}")
+        
+        # Button to clear conversation
+        if st.button("🗑️ Clear Conversation"):
+            st.session_state.messages = []
+            # Also clear the realtime client transcript and conversation items
+            if st.session_state.realtime_client:
+                st.session_state.realtime_client.transcript = ""
+                if hasattr(st.session_state.realtime_client, 'conversation_items'):
+                    st.session_state.realtime_client.conversation_items = []
+            st.rerun()
+    else:
+        st.write("No messages yet")
     
     st.markdown("---")
     
@@ -202,136 +350,118 @@ with st.sidebar:
                 st.caption(f"**WebSocket:** {ws_state}")
             except (AttributeError, ImportError):
                 st.caption("**WebSocket:** Unknown state")
+        
+        # Debug: Show transcript content
+        if st.session_state.realtime_client.transcript:
+            with st.expander("🔍 Debug: Raw Transcript", expanded=False):
+                st.text(st.session_state.realtime_client.transcript)
+                st.write(f"**Transcript length:** {len(st.session_state.realtime_client.transcript)}")
+        
+        # Debug: Show conversation items
+        conversation_items = getattr(st.session_state.realtime_client, 'conversation_items', [])
+        if conversation_items:
+            with st.expander("💬 Debug: Conversation Items", expanded=False):
+                st.write(f"**Total items:** {len(conversation_items)}")
+                for i, item in enumerate(conversation_items[-5:]):  # Show last 5 items
+                    st.json({
+                        "index": len(conversation_items) - 5 + i,
+                        "role": item.get("role"),
+                        "content": item.get("content", "")[:100] + "..." if len(item.get("content", "")) > 100 else item.get("content", ""),
+                        "source": item.get("source"),
+                        "timestamp": item.get("timestamp", "")[:19] if item.get("timestamp") else ""
+                    })
+        
+        # Debug: Show recent events
+        if hasattr(st.session_state.realtime_client, 'logs') and st.session_state.realtime_client.logs:
+            with st.expander("📋 Debug: Recent Events", expanded=False):
+                recent_logs = st.session_state.realtime_client.logs[-15:]  # Show last 15 events
+                for timestamp, event_type, event_data in recent_logs:
+                    # Highlight transcription events
+                    if "transcription" in event_type or "input_audio" in event_type:
+                        st.success(f"[{timestamp}] **{event_type}**: {event_data[:150]}...")
+                    else:
+                        st.text(f"[{timestamp}] {event_type}: {event_data[:100]}...")  # Truncate long events
     else:
         st.caption("**Status:** Not initialized")
     
-    # Connect button
-    if st.button("🔗 Connect", type="primary", disabled=not endpoint):
-        if not endpoint:
-            st.error("Please configure AZURE_OPENAI_ENDPOINT first")
+    # Show automatic connection status
+    if endpoint:
+        if st.session_state.realtime_client and st.session_state.realtime_client.is_connected():
+            st.success("🔗 **Auto-connected to Azure OpenAI**")
+        elif st.session_state.connection_attempted:
+            st.error("❌ **Auto-connection failed**")
+            st.caption("Check your Azure credentials with `az login`")
         else:
-            with st.spinner("Connecting with Entra ID..."):
-                try:
-                    # Initialize client if not already done
-                    if st.session_state.realtime_client is None:
-                        st.session_state.realtime_client = setup_realtime_client(
-                            st.session_state.event_loop
-                        )
-                    
-                    if st.session_state.realtime_client is None:
-                        st.error("Failed to initialize Azure OpenAI client")
-                    else:
-                        # Disconnect first if already connected
-                        if st.session_state.realtime_client.is_connected():
-                            run_async_in_loop(
-                                st.session_state.realtime_client.disconnect(),
-                                st.session_state.event_loop
-                            )
-                        
-                        # Connect to Azure OpenAI
-                        run_async_in_loop(
-                            st.session_state.realtime_client.connect(),
-                            st.session_state.event_loop
-                        )
-                        
-                        if st.session_state.realtime_client.is_connected():
-                            st.success("Connected to Azure OpenAI Realtime API")
-                            # Don't call st.rerun() to avoid losing connection state
-                        else:
-                            st.error("Failed to connect to Azure OpenAI Realtime API")
-                except (ValueError, OSError, ConnectionError) as e:
-                    st.error(f"Error connecting: {str(e)}")
-                    if "authentication" in str(e).lower():
-                        st.info("💡 Try running `az login` in your terminal first")
-    
-    # Show disconnect button if connected
-    if (st.session_state.realtime_client and 
-        st.session_state.realtime_client.is_connected() and 
-        st.button("🔌 Disconnect", type="secondary")):
-        try:
-            run_async_in_loop(
-                st.session_state.realtime_client.disconnect(),
-                st.session_state.event_loop
-            )
-            st.success("Disconnected from Azure OpenAI Realtime API")
-        except (OSError, RuntimeError) as e:
-            st.error(f"Error disconnecting: {str(e)}")
+            st.info("� **Connecting automatically...**")
+    else:
+        st.error("⚠️ **Azure OpenAI not configured**")
+        st.caption("Set AZURE_OPENAI_ENDPOINT environment variable")
 
 # Main content area
 # Show connection status at the top
 if st.session_state.realtime_client and st.session_state.realtime_client.is_connected():
-    st.success("✅ **Connected to Azure OpenAI Realtime API**")
+    st.success("✅ **Connected to Azure OpenAI Realtime API** (Auto-connected)")
 elif not endpoint:
     st.warning("⚠️ **Azure OpenAI not configured.** Please set the `AZURE_OPENAI_ENDPOINT` environment variable.")
-elif st.session_state.realtime_client and not st.session_state.realtime_client.is_connected():
-    st.warning("⚠️ **Disconnected from Azure OpenAI.** Please reconnect using the sidebar.")
+elif st.session_state.connection_attempted:
+    # Auto-connection was attempted but failed
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.error("❌ **Auto-connection failed.** Check your Azure credentials.")
+    with col2:
+        if st.button("🔄 Retry", key="retry_connection"):
+            # Reset connection attempt flag and try again
+            st.session_state.connection_attempted = False
+            st.rerun()
 else:
-    st.info("🔗 **Ready to connect.** Click the Connect button in the sidebar.")
+    st.info("� **Connecting automatically...**")
 
-# Conversation container
-with st.container(height=400, border=True):
+# Create a container with fixed height and scroll bar for conversation history
+conversation_container = st.container(height=500, border=True)
+
+with conversation_container:
     conversation_display()
 
-# Input section
-st.markdown("### 💬 Chat with the Assistant")
-
-# Check if we're connected before allowing text interaction
+# Check if we're connected before allowing interaction
 is_connected = (st.session_state.realtime_client and 
                 st.session_state.realtime_client.is_connected())
 
-# Text input
-with st.form(key="text_message_form", clear_on_submit=True):
-    text_input = st.text_area(
-        "Type your message:", 
-        height=100,
-        placeholder="Ask me anything..." if is_connected else "Connect to Azure OpenAI first...",
-        key="form_text_input",
-        disabled=not is_connected
-    )
-    
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        submitted = st.form_submit_button(
-            "💬 Send", 
-            type="primary",
-            disabled=not is_connected
+# Debug: Show connection state for troubleshooting
+if not is_connected:
+    st.info(f"🔍 **Debug:** realtime_client exists: {st.session_state.realtime_client is not None}, "
+           f"is_connected: {st.session_state.realtime_client.is_connected() if st.session_state.realtime_client else 'N/A'}, "
+           f"connection_attempted: {st.session_state.connection_attempted}")
+
+# Handle new text message using chat_input
+if text_prompt := st.chat_input(
+    "Type your message here..." if is_connected else "Connect to Azure OpenAI first...",
+    disabled=not is_connected
+):
+    if is_connected and text_prompt.strip():
+        # Send the message to the realtime API (this will add it to conversation_items)
+        send_text_message(
+            text_prompt.strip(),
+            st.session_state.realtime_client,
+            st.session_state.selected_voice
         )
-    
-    with col2:
-        if not is_connected:
-            st.caption("🔌 Connect to Azure OpenAI to enable chat")
-        elif text_input.strip():
-            st.caption(f"Message length: {len(text_input)} characters")
-    
-    if submitted and is_connected:
-        if text_input.strip():
-            if send_text_message(
-                text_input.strip(),
-                st.session_state.realtime_client,
-                st.session_state.selected_voice
-            ):
-                st.success("Message sent!")
-                # Don't call st.rerun() to avoid connection issues
-        else:
-            st.warning("Please enter a message")
 
-# Voice input
+# Voice input section
+st.markdown("---")
 st.markdown("### 🎤 Voice Chat")
-col1, col2 = st.columns([1, 1])
 
-# Check if we're connected before allowing voice interaction
-is_connected = (st.session_state.realtime_client and 
-                st.session_state.realtime_client.is_connected())
+col1, col2 = st.columns([1, 2])
 
 with col1:
     button_text = "🛑 Stop Recording" if st.session_state.recording else "🎤 Start Recording"
     button_type = "secondary" if st.session_state.recording else "primary"
+    
     def voice_recording_callback():
         toggle_recording(
             st.session_state,
             st.session_state.realtime_client,
             st.session_state.recorder,
-            st.session_state.selected_voice
+            st.session_state.selected_voice,
+            send_on_stop=False  # Just drop the buffer without sending to AI
         )
     
     st.button(
@@ -340,16 +470,23 @@ with col1:
         type=button_type, 
         key="audio_button",
         disabled=not is_connected,
-        help="Connect to Azure OpenAI first" if not is_connected else None
+        help="Start/Stop recording (stops without sending to AI)" if is_connected else "Connect to Azure OpenAI first"
     )
 
 with col2:
     if not is_connected:
-        st.warning("🔌 Not connected - Connect first")
+        st.info("🔌 Connect to Azure OpenAI to enable voice chat")
     elif st.session_state.recording:
-        st.success("🔴 Recording in progress...")
+        st.success("🔴 Recording... Click 'Stop Recording' to drop audio without sending")
     else:
-        st.info("⚪ Ready to record")
+        st.info("⚪ Click 'Start Recording' to record voice. 'Stop Recording' drops audio without sending to AI.")
+        
+        # Show transcript status for debugging
+        if (st.session_state.realtime_client and 
+            st.session_state.realtime_client.transcript and 
+            len(st.session_state.realtime_client.transcript.strip()) > 0):
+            transcript_preview = st.session_state.realtime_client.transcript.replace('\n\n', ' | ')[:100]
+            st.caption(f"📝 Latest transcript: {transcript_preview}...")
 
 # Start audio components
 audio_player()

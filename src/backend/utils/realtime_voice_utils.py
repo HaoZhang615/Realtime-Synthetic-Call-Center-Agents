@@ -47,9 +47,14 @@ class SimpleRealtimeClient:
         self.debug = debug
         self.event_loop = event_loop
         self.logs = []
-        self.transcript = ""
+        
+        # Change: Use structured conversation items instead of single transcript string
+        self.conversation_items = []  # List of conversation items
+        self.transcript = ""  # Keep for backward compatibility
+        
         self.current_text_response = ""
         self.current_audio_transcript = ""
+        self.response_cancelled = False  # Track if current response was cancelled
         self.ws = None
         self._message_handler_task = None
         self.audio_buffer_cb = audio_buffer_cb
@@ -110,7 +115,7 @@ class SimpleRealtimeClient:
             # Start the message handler
             self._message_handler_task = self.event_loop.create_task(self._message_handler())
             
-            # Configure the session for audio output
+            # Configure the session for audio output with server VAD for interruption
             session_config = {
                 "modalities": ["text", "audio"],
                 "instructions": "You are a helpful AI assistant for a call center. Be friendly, concise, and professional.",
@@ -119,6 +124,12 @@ class SimpleRealtimeClient:
                 "output_audio_format": "pcm16",
                 "input_audio_transcription": {
                     "model": "whisper-1"
+                },
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.5,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 200
                 }
             }
             
@@ -181,42 +192,122 @@ class SimpleRealtimeClient:
         return True
 
     def handle_audio(self, event):
-        if event.get("type") == "response.audio_transcript.delta":
-            self.current_audio_transcript += event.get("delta", "")
+        # Check if we should ignore audio events (e.g., after cancellation)
+        event_type = event.get("type", "")
+        
+        if event_type == "response.audio_transcript.delta":
+            if not self.response_cancelled:
+                self.current_audio_transcript += event.get("delta", "")
 
-        if event.get("type") == "response.text.delta":
-            self.current_text_response += event.get("delta", "")
+        elif event_type == "response.text.delta":
+            if not self.response_cancelled:
+                self.current_text_response += event.get("delta", "")
 
-        if event.get("type") == "response.audio.delta" and self.audio_buffer_cb:
-            b64_audio_chunk = event.get("delta")
-            if b64_audio_chunk:
-                try:
-                    decoded_audio_chunk = base64.b64decode(b64_audio_chunk)
-                    pcm_audio_chunk = np.frombuffer(decoded_audio_chunk, dtype=np.int16)
-                    self.audio_buffer_cb(pcm_audio_chunk)
-                except Exception as e:
-                    logger.error(f"❌ Error processing audio chunk: {e}")
+        elif event_type == "response.audio.delta" and self.audio_buffer_cb:
+            # Only process audio if we haven't been interrupted
+            if not self.response_cancelled:
+                b64_audio_chunk = event.get("delta")
+                if b64_audio_chunk:
+                    try:
+                        decoded_audio_chunk = base64.b64decode(b64_audio_chunk)
+                        pcm_audio_chunk = np.frombuffer(decoded_audio_chunk, dtype=np.int16)
+                        self.audio_buffer_cb(pcm_audio_chunk)
+                    except Exception as e:
+                        logger.error(f"❌ Error processing audio chunk: {e}")
 
         # Handle response completion
-        if event.get("type") == "response.done":
-            final_response = self.current_text_response or self.current_audio_transcript
-            if final_response.strip():
-                self.transcript += f"\n\n**Assistant:** {final_response.strip()}"
+        elif event_type == "response.done":
+            # Only process completion if not cancelled
+            if not self.response_cancelled:
+                final_response = self.current_text_response or self.current_audio_transcript
+                if final_response.strip():
+                    # Add to conversation items
+                    conversation_item = {
+                        "id": f"assistant_{int(datetime.now().timestamp() * 1000)}",
+                        "type": "message",
+                        "role": "assistant",
+                        "content": final_response.strip(),
+                        "source": "voice",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    self.conversation_items.append(conversation_item)
+                    
+                    # Also update transcript for backward compatibility
+                    self.transcript += f"\n\n**Assistant:** {final_response.strip()}"
+            
+            # Always reset response state
             self.current_text_response = ""
             self.current_audio_transcript = ""
+            self.response_cancelled = False
 
     def receive(self, event):
         self.log_event("server", event)
+        
+        # Handle speech started - immediate interruption like realtime2.py
+        if event.get("type") == "input_audio_buffer.speech_started":
+            logger.info("🎤 Speech detected - interrupting current response")
+            # Mark response as cancelled
+            self.response_cancelled = True
+            # Immediately clear audio buffer to stop current playback
+            force_clear_audio_buffer()
+            # Cancel any ongoing response
+            try:
+                self.send("response.cancel")
+            except Exception as e:
+                logger.error(f"Error cancelling response: {e}")
+        
+        # Handle response start - reset cancellation flag
+        elif event.get("type") == "response.created":
+            self.response_cancelled = False
+            logger.info("🤖 New response started")
         
         # Handle all response-related events
         if any(keyword in event.get("type", "") for keyword in ["response.audio", "response.text", "response.done"]):
             self.handle_audio(event)
         
-        # Handle input audio transcription
+        # Handle input audio transcription - improved handling
         if event.get("type") == "conversation.item.input_audio_transcription.completed":
             transcript = event.get("transcript", "")
+            item_id = event.get("item_id", "")
+            
             if transcript.strip():
+                # Add to conversation items
+                conversation_item = {
+                    "id": item_id,
+                    "type": "message",
+                    "role": "user",
+                    "content": transcript.strip(),
+                    "source": "voice",
+                    "timestamp": datetime.now().isoformat()
+                }
+                self.conversation_items.append(conversation_item)
+                
+                # Also update transcript for backward compatibility
                 self.transcript += f"\n\n**You:** {transcript.strip()}"
+                
+                logger.info(f"🎤 Voice input transcribed: {transcript.strip()[:50]}...")
+        
+        # Handle conversation item creation
+        if event.get("type") == "conversation.item.created":
+            item = event.get("item", {})
+            if item.get("role") == "assistant":
+                # This is an assistant response
+                content = ""
+                if "content" in item:
+                    for content_part in item["content"]:
+                        if content_part.get("type") == "text":
+                            content += content_part.get("text", "")
+                
+                if content.strip():
+                    conversation_item = {
+                        "id": item.get("id", ""),
+                        "type": "message", 
+                        "role": "assistant",
+                        "content": content.strip(),
+                        "source": "voice",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    self.conversation_items.append(conversation_item)
         
         return True
 
@@ -332,6 +423,33 @@ def audio_buffer_cb(pcm_audio_chunk):
         audio_buffer = np.concatenate([audio_buffer, pcm_audio_chunk])
 
 
+def clear_audio_buffer():
+    """Clear the audio buffer to stop current playback"""
+    global audio_buffer
+    
+    with buffer_lock:
+        audio_buffer = np.array([], dtype=np.int16)
+        logger.info("🔇 Audio buffer cleared")
+
+
+def force_clear_audio_buffer():
+    """Aggressively clear audio buffer and force stop playback immediately"""
+    global audio_buffer
+    
+    # Clear the buffer multiple times to ensure it's empty
+    with buffer_lock:
+        audio_buffer = np.array([], dtype=np.int16)
+    
+    # Force another clear after a tiny delay to catch any race conditions
+    import time
+    time.sleep(0.001)
+    
+    with buffer_lock:
+        audio_buffer = np.array([], dtype=np.int16)
+        
+    logger.info("🔇 Audio buffer force-cleared for interruption")
+
+
 # Callback function for real-time playback using sounddevice
 def sd_audio_cb(outdata, frames, time, status):
     """Callback for sounddevice audio output stream"""
@@ -420,7 +538,24 @@ def send_text_message(message, realtime_client, selected_voice):
         return False, "Client not connected. Please connect to Azure OpenAI first."
     
     try:
-        # Add user message to transcript
+        # Force clear audio buffer to stop any current playback when sending new message
+        force_clear_audio_buffer()
+        
+        # Cancel any pending response to interrupt current AI response  
+        realtime_client.send("response.cancel")
+        
+        # Add user message to conversation items
+        conversation_item = {
+            "id": f"msg_{int(datetime.now().timestamp() * 1000)}",
+            "type": "message",
+            "role": "user", 
+            "content": message.strip(),
+            "source": "text",
+            "timestamp": datetime.now().isoformat()
+        }
+        realtime_client.conversation_items.append(conversation_item)
+        
+        # Add user message to transcript for backward compatibility
         realtime_client.transcript += f"\n\n**You:** {message.strip()}"
         
         # Send the message as a conversation item
@@ -451,8 +586,16 @@ def send_text_message(message, realtime_client, selected_voice):
         return False, f"Error sending message: {str(e)}"
 
 
-def toggle_recording(session_state, realtime_client, recorder, selected_voice):
-    """Toggle audio recording state"""
+def toggle_recording(session_state, realtime_client, recorder, selected_voice, send_on_stop=False):
+    """Toggle audio recording state
+    
+    Args:
+        session_state: Streamlit session state
+        realtime_client: WebSocket client
+        recorder: Audio recorder instance
+        selected_voice: Voice for AI response
+        send_on_stop: If True, sends audio buffer to AI when stopping. If False, just drops the buffer.
+    """
     if realtime_client is None or not realtime_client.is_connected():
         return False, "Client not connected. Please connect to Azure OpenAI first."
         
@@ -460,6 +603,12 @@ def toggle_recording(session_state, realtime_client, recorder, selected_voice):
         session_state.recording = not session_state.recording
 
         if session_state.recording:
+            # Force clear audio buffer to stop any current playback when starting new recording
+            force_clear_audio_buffer()
+            
+            # Cancel any pending response to interrupt current AI response
+            realtime_client.send("response.cancel")
+            
             # Clear any existing audio queue before starting
             while not recorder.audio_queue.empty():
                 try:
@@ -474,21 +623,32 @@ def toggle_recording(session_state, realtime_client, recorder, selected_voice):
             recorder.stop_recording()
             logger.info("🛑 Stopped recording")
             
-            # Send the committed audio and request response
-            try:
-                realtime_client.send("input_audio_buffer.commit")
-                # Request response with audio
-                realtime_client.send("response.create", {
-                    "response": {
-                        "modalities": ["text", "audio"],
-                        "voice": selected_voice
-                    }
-                })
-                logger.info("📤 Sent audio buffer and requested response")
-                return True, "Recording stopped and sent"
-            except Exception as e:
-                logger.error(f"❌ Error sending audio: {e}")
-                return False, f"Error processing audio: {str(e)}"
+            if send_on_stop:
+                # Send the committed audio and request response
+                try:
+                    realtime_client.send("input_audio_buffer.commit")
+                    # Request response with audio
+                    realtime_client.send("response.create", {
+                        "response": {
+                            "modalities": ["text", "audio"],
+                            "voice": selected_voice
+                        }
+                    })
+                    logger.info("📤 Sent audio buffer and requested response")
+                    return True, "Recording stopped and sent"
+                except Exception as e:
+                    logger.error(f"❌ Error sending audio: {e}")
+                    return False, f"Error processing audio: {str(e)}"
+            else:
+                # Just drop the audio buffer without sending anything to AI
+                try:
+                    # Clear the input audio buffer on the server side to drop recorded audio
+                    realtime_client.send("input_audio_buffer.clear")
+                    logger.info("🗑️ Dropped audio buffer without sending to AI")
+                    return True, "Recording stopped and dropped"
+                except Exception as e:
+                    logger.error(f"❌ Error clearing audio buffer: {e}")
+                    return False, f"Error clearing buffer: {str(e)}"
                 
     except Exception as e:
         logger.error(f"❌ Error in toggle_recording: {e}")
