@@ -21,6 +21,11 @@ param runningOnGh string = ''
 @description('Whether the deployment is running on Azure DevOps Pipeline')
 param runningOnAdo string = ''
 
+@description('Model deployment configurations')
+var deployments = loadYamlContent('./deployments.yaml')
+
+var _aiFoundryAgentModelDeploymentName = deployments[0].name
+
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
 var principalType = empty(runningOnGh) && empty(runningOnAdo) ? 'User' : 'ServicePrincipal'
@@ -233,24 +238,58 @@ module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
 
 param accounts_aiservice_ms_name string = ''
 var _accounts_aiservice_ms_name = !empty(accounts_aiservice_ms_name) ? accounts_aiservice_ms_name : '${abbrs.cognitiveServicesAccounts}${resourceToken}'
-module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
-  name: 'aiserviceaccountDeployment'
+
+module aiFoundryAccount 'br/public:avm/res/cognitive-services/account:0.11.0' = {
+  name: 'aifoundryaccountDeployment'
   scope: resGroup
   params: {
-    // Required parameters
-    kind: 'AIServices'
     name: _accounts_aiservice_ms_name
-    // Non-required parameters
-    customSubDomainName: _accounts_aiservice_ms_name
     location: location
-    disableLocalAuth: false
+    tags: tags
+    kind: 'AIServices'
+    customSubDomainName: _accounts_aiservice_ms_name
+    allowProjectManagement: true
     publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+    }
+    disableLocalAuth: false
+    sku: 'S0'
+    deployments: deployments
+    managedIdentities: {
+      systemAssigned: true
+    }
+    roleAssignments: [
+      {
+        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
+        principalId: appIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
+      {
+        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
+        principalId: principalId
+        principalType: principalType
+      }
+    ]
     secretsExportConfiguration: {
       accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
       accessKey2Name: '${_accounts_aiservice_ms_name}-accessKey2'
       keyVaultResourceId: keyVault.outputs.resourceId
     }
   }
+}
+
+module aiFoundryAccountProject 'modules/aifoundry/project.bicep' = {
+  name: 'aiFoundryProject'
+  scope: resGroup
+  params: {
+    aiFoundryAccountName: _accounts_aiservice_ms_name
+    projectName: 'aifoundryproject-${resourceToken}'
+    location: location
+  }
+  dependsOn: [
+    aiFoundryAccount
+  ]
 }
 
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
@@ -421,7 +460,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_TTS_DEPLOYMENT: aoaiTtsModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
-      AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.core.windows.net'
+      AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.${environment().suffixes.storage}'
       AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
       AZURE_STORAGE_CONTAINER: storageContainerName
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
@@ -432,7 +471,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
-      AZURE_AI_SERVICES_ENDPOINT: account.outputs.endpoint
+      AZURE_AI_SERVICES_ENDPOINT: aiFoundryAccount.outputs.endpoint
       AZURE_AI_SERVICES_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
     },
     empty(openAiRealtimeName) ? {} : {
@@ -558,11 +597,13 @@ output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelNam
 output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
 output AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT string = aoaiTranscribeModelName
 output AZURE_OPENAI_TTS_DEPLOYMENT string = aoaiTtsModelName
+@description('AI Foundry Agent Model Deployment Name')
+output AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME string = _aiFoundryAgentModelDeploymentName
 
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
 
-output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.blob.core.windows.net'
+output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.blob.${environment().suffixes.storage}'
 output AZURE_STORAGE_ACCOUNT string = storage.outputs.name
 output AZURE_STORAGE_CONNECTION_STRING string = 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
 output AZURE_STORAGE_CONTAINER string = storageContainerName
@@ -582,8 +623,7 @@ output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesC
 output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
 
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
-// Only include Key Vault reference if a Bing Search API key was provided
-output BING_SEARCH_API_KEY string = !empty(bingSearchApiKey) ? '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)' : ''
+// Bing Search API Key is stored securely in Key Vault and should not be exposed in outputs
 
-output AZURE_AI_SERVICES_ENDPOINT string = account.outputs.endpoint
-output AZURE_AI_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
+output AZURE_AI_FOUNDRY_ENDPOINT string = aiFoundryAccount.outputs.endpoint
+output AZURE_AI_FOUNDRY_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
