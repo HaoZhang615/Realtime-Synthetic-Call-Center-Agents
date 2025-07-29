@@ -292,6 +292,21 @@ module aiFoundryAccountProject 'modules/aifoundry/project.bicep' = {
   ]
 }
 
+module aiFoundrySearchConnection 'modules/aifoundry/connection-aisearch.bicep' = {
+  name: 'aiFoundrySearchConnection'
+  scope: resGroup
+  params: {
+    aiFoundryAccountName: _accounts_aiservice_ms_name
+    searchServiceName: searchService.outputs.name
+    searchServiceLocation: !empty(searchServiceLocation) ? searchServiceLocation : location
+    searchServiceResourceId: searchService.outputs.resourceId
+    projectPrincipalId: aiFoundryAccountProject.outputs.projectPrincipalId
+  }
+  dependsOn: [
+    aiFoundryAccount
+  ]
+}
+
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
 module monitoring 'modules/monitoring/monitor.bicep' = {
   name: 'monitor'
@@ -627,3 +642,4 @@ output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
 
 output AZURE_AI_FOUNDRY_ENDPOINT string = aiFoundryAccount.outputs.endpoint
 output AZURE_AI_FOUNDRY_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
+output AZURE_AI_FOUNDRY_SEARCH_CONNECTION_NAME string = aiFoundrySearchConnection.outputs.connectionName
