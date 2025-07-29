@@ -186,12 +186,12 @@ def setup_index(
             )
         )
     # step 2.5: Create the skillset if it doesn't exist
-    ai_services_key = os.environ.get('AZURE_AI_SERVICES_KEY', '')
+    ai_services_key = os.environ.get('AZURE_AI_FOUNDRY_SERVICES_KEY', '')
     ai_services_endpoint = os.environ.get('AZURE_AI_SERVICES_ENDPOINT', '')
     
     # Check if the AI Services Key is a Key Vault reference and resolve it
     if ai_services_key and ai_services_key.startswith('@Microsoft.KeyVault'):
-        logging.info("Resolving AI Service Key from Key Vault")
+        logging.info("Resolving AI Foundry Service Key from Key Vault")
         ai_services_key = get_keyvault_secret(azure_credential, ai_services_key)
     
     logging.info(f"Creating skillset: {index_name}")
