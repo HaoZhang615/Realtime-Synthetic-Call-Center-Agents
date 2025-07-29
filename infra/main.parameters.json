@@ -40,6 +40,27 @@
     },
     "bingSearchApiEndpoint": {
       "value": "https://api.bing.microsoft.com/v7.0/search"
+    },
+    "bingSearchServiceName": {
+      "value": "${BING_SEARCH_SERVICE_NAME=}"
+    },
+    "bingSearchSkuName": {
+      "value": "${BING_SEARCH_SKU_NAME=G2}"
+    },
+    "bingSearchAllowedDomains": {
+      "value": []
+    },
+    "bingSearchBlockedDomains": {
+      "value": []
+    },
+    "bingGroundingServiceName": {
+      "value": "${BING_GROUNDING_SERVICE_NAME=}"
+    },
+    "bingGroundingSkuName": {
+      "value": "${BING_GROUNDING_SKU_NAME=G1}"
+    },
+    "bingGroundingStatisticsEnabled": {
+      "value": false
     }
   }
 }
