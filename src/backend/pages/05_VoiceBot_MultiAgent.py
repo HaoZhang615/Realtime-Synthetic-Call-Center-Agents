@@ -140,55 +140,52 @@ def create_connected_agents():
             conn_id = bing_connection_id
             bing = BingGroundingTool(connection_id=conn_id)
 
-            # Check for existing stock price agent or create new one
-            existing_stock_agent = find_existing_agent_by_name(project_client, "stock_price_bot")
-            stock_price_agent_reused = existing_stock_agent is not None
-            
-            if not existing_stock_agent:
-                # Create stock price agent using project client
-                with project_client:
-                    stock_price_agent = project_client.agents.create_agent(
-                        model=model_deployment,
-                        name="stock_price_bot",
-                        instructions="Your job is to use the Bing Search tool to get the stock price of a company.",
-                        tools=bing.definitions,
-                    )
-                    logger.info(f"Created new stock price agent, ID: {stock_price_agent.id}")
+            # Check for existing web search agent or create new one
+            existing_web_search_agent = find_existing_agent_by_name(project_client, "WebSearchAgent")
+
+            if not existing_web_search_agent:
+                # Create web search agent using project client
+                web_search_agent = project_client.agents.create_agent(
+                    model=model_deployment,
+                    name="WebSearchAgent",
+                    instructions="Your job is to do web search upon user query and summarize the retrieved knowledge in your response. You will do nothing else but searching the web.",
+                    tools=bing.definitions,
+                )
+                logger.info(f"Created new web search agent, ID: {web_search_agent.id}")
             else:
-                stock_price_agent = existing_stock_agent
-                logger.info(f"Reusing existing stock price agent, ID: {stock_price_agent.id}")
-                
+                web_search_agent = existing_web_search_agent
+                logger.info(f"Reusing existing web search agent, ID: {web_search_agent.id}")
+
             # Initialize Connected Agent tool
-            connected_agent = ConnectedAgentTool(
-                id=stock_price_agent.id,
-                name="stock_price_bot",
-                description="Gets the stock price of a company"
+            connected_web_search_agent = ConnectedAgentTool(
+                id=web_search_agent.id,
+                name="web_search_agent",
+                description="Gets the web search results for a query"
             )
             
             # Check for existing main agent or create new one
-            existing_main_agent = find_existing_agent_by_name(project_client, "triage_agent")
-            main_agent_reused = existing_main_agent is not None
-            
-            if not existing_main_agent:
-                # Create main agent with connected agent tool using project_client
-                main_agent = project_client.agents.create_agent(
+            existing_concierge_agent = find_existing_agent_by_name(project_client, "ConciergeAgent")
+
+            if not existing_concierge_agent:
+                # Create concierge agent with connected agent tool using project_client
+                concierge_agent = project_client.agents.create_agent(
                     model=model_deployment,
-                    name="triage_agent",
+                    name="ConciergeAgent",
                     instructions=st.session_state.system_message,
-                    tools=connected_agent.definitions,
+                    tools=connected_web_search_agent.definitions,
                 )
-                logger.info(f"Created new main agent, ID: {main_agent.id}")
+                logger.info(f"Created new concierge agent, ID: {concierge_agent.id}")
             else:
-                main_agent = existing_main_agent
-                logger.info(f"Reusing existing main agent, ID: {main_agent.id}")
+                concierge_agent = existing_concierge_agent
+                logger.info(f"Reusing existing concierge agent, ID: {concierge_agent.id}")
                 # Update instructions for existing agent in case they changed
                 try:
-                    main_agent = project_client.agents.update_agent(
-                        agent_id=main_agent.id,
+                    concierge_agent = project_client.agents.update_agent(
+                        agent_id=concierge_agent.id,
                         instructions=st.session_state.system_message,
-                        tools=connected_agent.definitions,
+                        tools=connected_web_search_agent.definitions,
                     )
-                    logger.info(f"Updated existing main agent instructions")
+                    logger.info(f"Updated existing concierge agent instructions")
                 except Exception as e:
                     logger.warning(f"Could not update agent instructions: {e}")
             
@@ -198,17 +195,12 @@ def create_connected_agents():
             
             # Store agents in session state
             st.session_state.connected_agents = {
-                "stock_price_agent": stock_price_agent,
-                "main_agent": main_agent,
-                "connected_agent_tool": connected_agent
+                "web_search_agent": web_search_agent,
+                "concierge_agent": concierge_agent,
+                "connected_web_search_agent": connected_web_search_agent,
+
             }
             st.session_state.agent_thread = thread
-            
-            # Track agent creation status for UI display
-            st.session_state.agent_creation_status = {
-                "stock_price_agent_reused": stock_price_agent_reused,
-                "main_agent_reused": main_agent_reused
-            }
             
         except Exception as e:
             logger.error(f"Error creating connected agents: {e}")
@@ -224,8 +216,8 @@ def cleanup_agents():
             agents = st.session_state.connected_agents
             # Note: Cleanup commented out to preserve agents across sessions
             # Uncomment if you want to delete agents after each session
-            # agents_client.delete_agent(agents["main_agent"].id)
-            # agents_client.delete_agent(agents["stock_price_agent"].id)
+            # agents_client.delete_agent(agents["concierge_agent"].id)
+            # agents_client.delete_agent(agents["web_search_agent"].id)
             logger.info("Agents cleanup completed")
         except Exception as e:
             logger.error(f"Error during agent cleanup: {e}")
@@ -260,7 +252,7 @@ def multi_agent_chat(user_request):
     
     try:
         thread = st.session_state.agent_thread
-        main_agent = st.session_state.connected_agents["main_agent"]
+        concierge_agent = st.session_state.connected_agents["concierge_agent"]
         
         # Create message in thread
         message = project_client.agents.messages.create(
@@ -273,7 +265,7 @@ def multi_agent_chat(user_request):
         # Create and process agent run
         run = project_client.agents.runs.create_and_process(
             thread_id=thread.id,
-            agent_id=main_agent.id
+            agent_id=concierge_agent.id
         )
         logger.info(f"Run finished with status: {run.status}")
         
@@ -386,18 +378,18 @@ with st.sidebar:
     if "system_message" not in st.session_state:
         st.session_state.system_message = """You are a sophisticated AI assistant with access to specialized agents. You can help users with various tasks including:
 
-1. **Stock Information**: Use the stock price agent to get current stock prices and market information
-2. **General Assistance**: Provide helpful information and answer questions
-3. **Problem Solving**: Break down complex problems and use appropriate tools
+1. **web search**: Use the web_search_agent to search the internet for information
+2. **internal knowledge base search**: use ai_search_agent to provide helpful information and answer questions about internal knowledge
+3. **send Email**: Use the email_agent to send emails on behalf of the user
 
 You should:
 - Be professional, helpful, and concise
-- Leverage your connected agents when appropriate
-- Explain what information you're looking up when using specialized agents
 - Provide accurate, up-to-date information
 - Ask clarifying questions if needed
-
-When users ask about stock prices or financial information, use your stock price agent. For other queries, use your general knowledge and capabilities."""
+- Always summarize findings clearly. Make sure to provide the reference link if you have used web_search_agent.
+- Use tools only when necessary, otherwise provide direct answers
+- Maintain a friendly, engaging tone
+"""
 
     st.session_state.system_message = st.text_area(
         "🧠 System Instructions:",
@@ -405,31 +397,6 @@ When users ask about stock prices or financial information, use your stock price
         height=150,
         help="Define the AI assistant's behavior and capabilities"
     )
-    
-    st.markdown("---")
-    
-    # Agent Status
-    st.subheader("🤖 Agent Status")
-    if "connected_agents" in st.session_state:
-        st.success("✅ Multi-agent system active")
-        agents = st.session_state.connected_agents
-        
-        # Show agent IDs with reuse status
-        if "agent_creation_status" in st.session_state:
-            status = st.session_state.agent_creation_status
-            main_status = "♻️ Reused" if status["main_agent_reused"] else "🆕 Created"
-            stock_status = "♻️ Reused" if status["stock_price_agent_reused"] else "🆕 Created"
-            st.write(f"**Main Agent:** `{agents['main_agent'].id[:8]}...` ({main_status})")
-            st.write(f"**Stock Agent:** `{agents['stock_price_agent'].id[:8]}...` ({stock_status})")
-        else:
-            st.write(f"**Main Agent:** `{agents['main_agent'].id[:8]}...`")
-            st.write(f"**Stock Agent:** `{agents['stock_price_agent'].id[:8]}...`")
-            
-        if "agent_thread" in st.session_state:
-            st.write(f"**Thread:** `{st.session_state.agent_thread.id[:8]}...` (🆕 New)")
-    else:
-        st.info("🔄 Agents will initialize on first message")
-        st.caption("💡 Existing agents will be reused if found")
     
     st.markdown("---")
     
@@ -475,7 +442,7 @@ if "messages" not in st.session_state:
 conversation_container = st.container(height=600, border=False)
 
 # Handle new messages
-if text_prompt := st.chat_input("Ask me anything! I can help with stock prices and more..."):
+if text_prompt := st.chat_input("Ask me anything!"):
     prompt = text_prompt
 elif custom_audio_bytes and "voice_prompt" in st.session_state:
     prompt = st.session_state.voice_prompt
@@ -523,28 +490,6 @@ with conversation_container:
             if message["role"] != "system":
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
-
-# Display example queries when no conversation exists
-if not st.session_state.messages:
-    st.markdown("### 💡 Try asking me:")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **📈 Stock Information:**
-        - "What's Microsoft's current stock price?"
-        - "How is Apple stock performing?"
-        - "Get me the latest Tesla stock price"
-        """)
-    
-    with col2:
-        st.markdown("""
-        **💼 General Help:**
-        - "Tell me about market trends"
-        - "Help me understand investment basics"
-        - "What should I know about tech stocks?"
-        """)
 
 # Cleanup on app shutdown (this runs when the script ends)
 import atexit
