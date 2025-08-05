@@ -10,6 +10,8 @@ dependencies = [
     { name = "aiofiles" },
     { name = "audio-recorder-streamlit" },
     { name = "av" },
+    { name = "azure-ai-agents" },
+    { name = "azure-ai-projects" },
     { name = "azure-cosmos" },
     { name = "azure-identity" },
     { name = "azure-keyvault" },
@@ -31,6 +33,8 @@ requires-dist = [
     { name = "aiofiles", specifier = ">=23.0.0" },
     { name = "audio-recorder-streamlit" },
     { name = "av", specifier = ">=10.0.0" },
+    { name = "azure-ai-agents" },
+    { name = "azure-ai-projects" },
     { name = "azure-cosmos", specifier = ">=4.9.0" },
     { name = "azure-identity" },
     { name = "azure-keyvault" },
@@ -151,6 +155,36 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/00/48/26b7e5d911c807f5f017a285362470ba16f44e8ea46f8b09ab5e348dd15b/av-14.4.0-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:573314cb9eafec2827dc98c416c965330dc7508193adbccd281700d8673b9f0a", size = 34414492, upload_time = "2025-05-16T19:10:36.023Z" },
     { url = "https://files.pythonhosted.org/packages/6d/26/2f4badfa5b5b7b8f5f83d562b143a83ed940fa458eea4cad495ce95c9741/av-14.4.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:f82ab27ee57c3b80eb50a5293222307dfdc02f810ea41119078cfc85ea3cf9a8", size = 37245826, upload_time = "2025-05-16T19:10:39.562Z" },
     { url = "https://files.pythonhosted.org/packages/f4/02/88dbb6f5a05998b730d2e695b05060297af127ac4250efbe0739daa446d5/av-14.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:9f682003bbcaac620b52f68ff0e85830fff165dea53949e217483a615993ca20", size = 27898395, upload_time = "2025-05-16T19:13:02.653Z" },
+]
+
+[[package]]
+name = "azure-ai-agents"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d2/e4/aad4e2288134bc2efb44fbec3a219813b43bb07b206d6cb3a227ac08735a/azure_ai_agents-1.0.2.tar.gz", hash = "sha256:b9d349f42f5b944578b9e9428d5508935071cffa8a4cbe376fff62ecf8d07c23", size = 300772, upload_time = "2025-07-01T19:38:03.504Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/c8/3c511d1648eaf0fed577db2cbf67f39720a165921e7152b4c731c35b1943/azure_ai_agents-1.0.2-py3-none-any.whl", hash = "sha256:6d5a541b4cb91a3a3341b2f2b5063be898fb4d840d8a9193fe643765c7910d94", size = 189807, upload_time = "2025-07-01T19:38:05.077Z" },
+]
+
+[[package]]
+name = "azure-ai-projects"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-ai-agents" },
+    { name = "azure-core" },
+    { name = "azure-storage-blob" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/dd/95/9c04cb5f658c7f856026aa18432e0f0fa254ead2983a3574a0f5558a7234/azure_ai_projects-1.0.0.tar.gz", hash = "sha256:b5f03024ccf0fd543fbe0f5abcc74e45b15eccc1c71ab87fc71c63061d9fd63c", size = 130798, upload_time = "2025-07-31T02:09:27.912Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/db/7149cdf71e12d9737f186656176efc94943ead4f205671768c1549593efe/azure_ai_projects-1.0.0-py3-none-any.whl", hash = "sha256:81369ed7a2f84a65864f57d3fa153e16c30f411a1504d334e184fb070165a3fa", size = 115188, upload_time = "2025-07-31T02:09:29.362Z" },
 ]
 
 [[package]]

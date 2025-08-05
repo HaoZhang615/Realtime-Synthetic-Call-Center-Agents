@@ -3,7 +3,9 @@
 
 param aiFoundryName string
 param bingGroundingServiceId string
+param bingGroundingServiceName string
 param apiKey string
+param location string
 
 // Refers to your existing Azure AI Foundry resource
 resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' existing = {
@@ -13,7 +15,7 @@ resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' exi
 
 // Creates the Azure Foundry connection to your Bing Grounding resource
 resource bingGroundingConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
-  name: 'grounding-bing-search'
+  name: replace(replace(bingGroundingServiceName, '-', ''), '_', '')
   parent: aiFoundry
   properties: {
     category: 'ApiKey'
@@ -27,6 +29,7 @@ resource bingGroundingConnection 'Microsoft.CognitiveServices/accounts/connectio
       ApiType: 'Azure'
       Type: 'bing_grounding'
       ResourceId: bingGroundingServiceId
+      Location: location
     }
   }
 }

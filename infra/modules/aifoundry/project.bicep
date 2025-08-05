@@ -23,3 +23,4 @@ resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-04
 output projectName string = aiFoundryProject.name
 output projectId string = aiFoundryProject.id
 output projectPrincipalId string = aiFoundryProject.identity.principalId
+output projectEndpoint string = aiFoundryProject.properties.endpoints['AI Foundry API']

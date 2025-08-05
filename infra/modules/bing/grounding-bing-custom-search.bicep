@@ -2,7 +2,7 @@
 // This module deploys a Bing Custom Search service specifically designed for AI grounding scenarios
 // It provides controlled search results from specified domains for more accurate AI responses
 
-param bingSearchServiceName string
+param bingCustomSearchServiceName string
 param location string = 'global'
 param tags object = {}
 
@@ -19,7 +19,7 @@ param blockedDomains array = []
 // Bing Custom Search Service for Grounding
 // Reference: https://github.com/microsoft/semantic-kernel/blob/main/python/samples/concepts/agents/azure_ai_agent/azure_ai_agent_bing_grounding.py
 resource bingSearchService 'Microsoft.Bing/accounts@2025-05-01-preview' = {
-  name: bingSearchServiceName
+  name: bingCustomSearchServiceName
   location: location
   tags: tags
   sku: {
@@ -44,8 +44,8 @@ resource bingCustomSearchConfiguration 'Microsoft.Bing/accounts/customSearchConf
 }
 
 // Outputs
-output bingSearchServiceId string = bingSearchService.id
-output bingSearchServiceName string = bingSearchService.name
+output bingCustomSearchServiceId string = bingSearchService.id
+output bingCustomSearchServiceName string = bingSearchService.name
 output bingCustomSearchConfigurationId string = !empty(allowedDomains) ? bingCustomSearchConfiguration.id : ''
 output endpoint string = 'https://api.bing.microsoft.com/v7.0/custom/search'
 output customConfigId string = !empty(allowedDomains) ? bingCustomSearchConfiguration.name : ''
