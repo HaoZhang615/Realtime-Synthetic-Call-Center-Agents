@@ -18,7 +18,7 @@ from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.ai.agents import AgentsClient
 from azure.ai.projects import AIProjectClient
-from azure.ai.agents.models import ConnectedAgentTool, MessageRole, BingGroundingTool
+from azure.ai.agents.models import ConnectedAgentTool, MessageRole, BingGroundingTool, AzureAISearchQueryType, AzureAISearchTool, ListSortOrder
 from audio_recorder_streamlit import audio_recorder
 from azure.monitor.opentelemetry import configure_azure_monitor
 
@@ -134,11 +134,12 @@ def create_connected_agents():
     """Create and initialize connected agents."""
     if "connected_agents" not in st.session_state:
         try:
-            # Create Bing Grounding tool
+        #----------reuse or create web search agent --------------------------------#
+            # prepare Bing Grounding tool
             bing_connection_name = os.environ["BING_GROUNDING_CONNECTION_NAME"]
             bing_connection_id = project_client.connections.get(name=bing_connection_name).id
-            conn_id = bing_connection_id
-            bing = BingGroundingTool(connection_id=conn_id)
+            bing_conn_id = bing_connection_id
+            bing = BingGroundingTool(connection_id=bing_conn_id)
 
             # Check for existing web search agent or create new one
             existing_web_search_agent = find_existing_agent_by_name(project_client, "WebSearchAgent")
@@ -155,24 +156,60 @@ def create_connected_agents():
             else:
                 web_search_agent = existing_web_search_agent
                 logger.info(f"Reusing existing web search agent, ID: {web_search_agent.id}")
-
             # Initialize Connected Agent tool
             connected_web_search_agent = ConnectedAgentTool(
                 id=web_search_agent.id,
                 name="web_search_agent",
-                description="Gets the web search results for a query"
+                description="Gets web search results for a query"
+            )
+        #----------reuse or create AI search agent --------------------------------#
+            # prepare AI Search tool
+            ai_search_connection_name = os.environ["AZURE_AI_SEARCH_CONNECTION_NAME"] 
+            ai_search_connection_id = project_client.connections.get(name=ai_search_connection_name).id
+            ai_search_conn_id = ai_search_connection_id
+            ai_search = AzureAISearchTool(
+                index_connection_id=ai_search_conn_id,
+                index_name=os.environ["AZURE_AI_SEARCH_INDEX"],  # Name of the search index
+                query_type=AzureAISearchQueryType.VECTOR_SEMANTIC_HYBRID,  # Query type (e.g., SIMPLE, FULL)
+                top_k=3,  # Number of top results to retrieve
+                filter="",  # Optional filter for search results
             )
             
+            existing_ai_search_agent = find_existing_agent_by_name(project_client, "AISearchAgent")
+
+            if not existing_ai_search_agent:
+                # Create AI search agent using project client
+                ai_search_agent = project_client.agents.create_agent(
+                    model=model_deployment,
+                    name="AISearchAgent",
+                    instructions="Your job is to search the internal knowledge base (a Azure AI Search Index) and return the summarized search result back to the user. ",
+                    tools=ai_search.definitions,
+                    tool_resources=ai_search.resources,
+                )
+                logger.info(f"Created new AI search agent, ID: {ai_search_agent.id}")
+            else:
+                ai_search_agent = existing_ai_search_agent
+                logger.info(f"Reusing existing AI search agent, ID: {ai_search_agent.id}")
+
+            # Initialize Connected Agent tool
+            connected_ai_search_agent = ConnectedAgentTool(
+                id=ai_search_agent.id,
+                name="ai_search_agent",
+                description="Gets the internal knowledge base search results for a query"
+            )
+        #----------reuse or create concierge agent --------------------------------#
             # Check for existing main agent or create new one
             existing_concierge_agent = find_existing_agent_by_name(project_client, "ConciergeAgent")
 
             if not existing_concierge_agent:
                 # Create concierge agent with connected agent tool using project_client
+                # Initialize Connected Agent tools for both agents
+
                 concierge_agent = project_client.agents.create_agent(
                     model=model_deployment,
                     name="ConciergeAgent",
                     instructions=st.session_state.system_message,
-                    tools=connected_web_search_agent.definitions,
+                    tools=connected_web_search_agent.definitions + connected_ai_search_agent.definitions,
                 )
                 logger.info(f"Created new concierge agent, ID: {concierge_agent.id}")
             else:

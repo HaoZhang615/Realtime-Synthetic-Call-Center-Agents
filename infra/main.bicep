@@ -340,7 +340,6 @@ module bingGroundingService 'modules/bing/grounding-bing-search.bicep' = {
   scope: resGroup
   params: {
     bingGroundingServiceName: _bingGroundingServiceName
-    location: 'global'
     tags: tags
     skuName: bingGroundingSkuName
     statisticsEnabled: bingGroundingStatisticsEnabled
@@ -356,7 +355,6 @@ module aiFoundryBingGroundingConnection 'modules/aifoundry/connection-bing-groun
     bingGroundingServiceId: bingGroundingService.outputs.bingGroundingServiceId
     bingGroundingServiceName: bingGroundingService.outputs.bingGroundingServiceName
     apiKey: bingSearchApiKey
-    location: location
   }
   dependsOn: [
     aiFoundryAccount
@@ -496,8 +494,8 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
       AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: aoaiGpt4oRealtimeModelName
-      AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
-      AZURE_SEARCH_INDEX: searchIndexName
+      AZURE_AI_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
+      AZURE_AI_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
@@ -516,6 +514,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
       BING_GROUNDING_ENDPOINT: aiFoundryBingGroundingConnection.outputs.endpoint
       AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiFoundryAccountProject.outputs.projectEndpoint
+      AZURE_AI_SEARCH_CONNECTION_NAME: aiFoundrySearchConnection.outputs.azureAISearchConnectionName
     },
     union(
       empty(openAiRealtimeName) ? {} : {
@@ -553,8 +552,8 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
       AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT: aoaiTranscribeModelName
       AZURE_OPENAI_TTS_DEPLOYMENT: aoaiTtsModelName
-      AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
-      AZURE_SEARCH_INDEX: searchIndexName
+      AZURE_AI_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
+      AZURE_AI_SEARCH_INDEX: searchIndexName
       AZURE_STORAGE_ENDPOINT: 'https://${storage.outputs.name}.blob.${environment().suffixes.storage}'
       AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name}'
       AZURE_STORAGE_CONTAINER: storageContainerName
@@ -575,6 +574,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       BING_GROUNDING_SERVICE_ID: bingGroundingService.outputs.bingGroundingServiceId
       BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
       AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiFoundryAccountProject.outputs.projectEndpoint
+      AZURE_AI_SEARCH_CONNECTION_NAME: aiFoundrySearchConnection.outputs.azureAISearchConnectionName
     },
     empty(openAiRealtimeName) ? {} : {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
@@ -702,8 +702,8 @@ output AZURE_OPENAI_TTS_DEPLOYMENT string = aoaiTtsModelName
 @description('AI Foundry Agent Model Deployment Name')
 output AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME string = _aiFoundryAgentModelDeploymentName
 
-output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
-output AZURE_SEARCH_INDEX string = searchIndexName
+output AZURE_AI_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
+output AZURE_AI_SEARCH_INDEX string = searchIndexName
 
 output AZURE_STORAGE_ENDPOINT string = 'https://${storage.outputs.name}.blob.${environment().suffixes.storage}'
 output AZURE_STORAGE_ACCOUNT string = storage.outputs.name
@@ -736,7 +736,8 @@ output BING_CUSTOM_SEARCH_CONFIG_ID string = bingCustomSearch.outputs.customConf
 output AZURE_AI_FOUNDRY_ENDPOINT string = aiFoundryAccount.outputs.endpoint
 output AZURE_AI_FOUNDRY_PROJECT_ENDPOINT string = aiFoundryAccountProject.outputs.projectEndpoint
 output AZURE_AI_FOUNDRY_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
-output AZURE_AI_FOUNDRY_SEARCH_CONNECTION_NAME string = aiFoundrySearchConnection.outputs.connectionName
+output AZURE_AI_FOUNDRY_SEARCH_CONNECTION_NAME string = aiFoundrySearchConnection.outputs.azureAISearchConnectionName
+output AZURE_AI_SEARCH_CONNECTION_NAME string = aiFoundrySearchConnection.outputs.azureAISearchConnectionName
 
 // Bing Grounding (AI Foundry connection) outputs
 output BING_GROUNDING_SERVICE_ID string = bingGroundingService.outputs.bingGroundingServiceId

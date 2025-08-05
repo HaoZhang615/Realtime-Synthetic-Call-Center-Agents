@@ -69,5 +69,5 @@ resource aiSearchConnection 'Microsoft.CognitiveServices/accounts/connections@20
   ]
 }
 
-output connectionName string = aiSearchConnection.name
-output connectionId string = aiSearchConnection.id
+output azureAISearchConnectionName string = aiSearchConnection.name
+output azureAISearchConnectionId string = aiSearchConnection.id

@@ -3,7 +3,6 @@
 // It provides general web search capabilities for AI applications
 
 param bingGroundingServiceName string
-param location string = 'global'
 param tags object = {}
 
 @description('SKU for the Bing Grounding service')
@@ -16,7 +15,7 @@ param statisticsEnabled bool = false
 // Creates a new Bing Grounding resource
 resource bingGroundingService 'Microsoft.Bing/accounts@2020-06-10' = {
   name: bingGroundingServiceName
-  location: location
+  location: 'global'
   tags: tags
   sku: {
     name: skuName
@@ -30,4 +29,5 @@ resource bingGroundingService 'Microsoft.Bing/accounts@2020-06-10' = {
 // Outputs
 output bingGroundingServiceId string = bingGroundingService.id
 output bingGroundingServiceName string = bingGroundingService.name
+output bingGroundingServiceLocation string = bingGroundingService.location
 output endpoint string = 'https://api.bing.microsoft.com/'
