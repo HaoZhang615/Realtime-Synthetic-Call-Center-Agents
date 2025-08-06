@@ -21,6 +21,7 @@ dependencies = [
     "sounddevice>=0.5.0",
     "tzlocal>=5.2",
     "azure-ai-agents",
-    "azure-ai-projects"
-
+    "azure-ai-projects",
+    "azure-mgmt-logic",
+    "jsonref",
 ]

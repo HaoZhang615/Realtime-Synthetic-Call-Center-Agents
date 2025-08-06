@@ -15,9 +15,11 @@ dependencies = [
     { name = "azure-cosmos" },
     { name = "azure-identity" },
     { name = "azure-keyvault" },
+    { name = "azure-mgmt-logic" },
     { name = "azure-monitor-opentelemetry" },
     { name = "azure-search-documents" },
     { name = "azure-storage-blob" },
+    { name = "jsonref" },
     { name = "numpy" },
     { name = "openai" },
     { name = "python-dotenv" },
@@ -38,9 +40,11 @@ requires-dist = [
     { name = "azure-cosmos", specifier = ">=4.9.0" },
     { name = "azure-identity" },
     { name = "azure-keyvault" },
+    { name = "azure-mgmt-logic" },
     { name = "azure-monitor-opentelemetry" },
     { name = "azure-search-documents", specifier = "==11.6.0b8" },
     { name = "azure-storage-blob" },
+    { name = "jsonref" },
     { name = "numpy" },
     { name = "openai", specifier = ">=1.64.0" },
     { name = "python-dotenv" },
@@ -307,6 +311,32 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/51/53/188681c8b7ec49b6945605efdb91ec9a86ebfa77f8eab8b9a50f458c504a/azure_keyvault_secrets-4.9.0.tar.gz", hash = "sha256:2a03bb2ffd9a0d6c8ad1c330d9d0310113985a9de06607ece378fd72a5889fe1", size = 97722, upload_time = "2024-10-17T23:27:40.825Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/ad/e5dd4c09ed80196b1b35f107502b12e32d06eb2d965adf4673df0d5cf85e/azure_keyvault_secrets-4.9.0-py3-none-any.whl", hash = "sha256:33c7e2aca2cc2092cebc8c6e96eca36a5cc30c767e16ea429c5fa21270e9fba6", size = 87006, upload_time = "2024-10-17T23:27:42.846Z" },
+]
+
+[[package]]
+name = "azure-mgmt-core"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/99/fa9e7551313d8c7099c89ebf3b03cd31beb12e1b498d575aa19bb59a5d04/azure_mgmt_core-1.6.0.tar.gz", hash = "sha256:b26232af857b021e61d813d9f4ae530465255cb10b3dde945ad3743f7a58e79c", size = 30818, upload_time = "2025-07-03T02:02:24.093Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/26/c79f962fd3172b577b6f38685724de58b6b4337a51d3aad316a43a4558c6/azure_mgmt_core-1.6.0-py3-none-any.whl", hash = "sha256:0460d11e85c408b71c727ee1981f74432bc641bb25dfcf1bb4e90a49e776dbc4", size = 29310, upload_time = "2025-07-03T02:02:25.203Z" },
+]
+
+[[package]]
+name = "azure-mgmt-logic"
+version = "10.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-common" },
+    { name = "azure-mgmt-core" },
+    { name = "msrest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fc/89/47e9b71d49ee05782cebcf3a9e4b04e974c76b19f4b2d68fd9ea9c4e358a/azure-mgmt-logic-10.0.0.zip", hash = "sha256:b3fa4864f14aaa7af41d778d925f051ed29b6016f46344765ecd0f49d0f04dd6", size = 250261, upload_time = "2022-06-13T01:38:29.884Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/66/0d8ae9ca4d75e57746026a1f9a10a7e25029511c128cf20166fce516bda9/azure_mgmt_logic-10.0.0-py3-none-any.whl", hash = "sha256:525c78afedf3edb35eb0a16152c8beba89769ee1bc6af01bcdc42842a551e443", size = 235433, upload_time = "2022-06-13T01:38:27.333Z" },
 ]
 
 [[package]]
@@ -706,6 +736,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/78/0f/77a63ca7aa5fed9a1b9135af57e190d905bcd3702b36aca46a01090d39ad/jiter-0.9.0-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:f0b2827fb88dda2cbecbbc3e596ef08d69bda06c6f57930aec8e79505dc17001", size = 317281, upload_time = "2025-03-10T21:36:22.959Z" },
     { url = "https://files.pythonhosted.org/packages/f9/39/a3a1571712c2bf6ec4c657f0d66da114a63a2e32b7e4eb8e0b83295ee034/jiter-0.9.0-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:062b756ceb1d40b0b28f326cba26cfd575a4918415b036464a52f08632731e5a", size = 350273, upload_time = "2025-03-10T21:36:24.414Z" },
     { url = "https://files.pythonhosted.org/packages/ee/47/3729f00f35a696e68da15d64eb9283c330e776f3b5789bac7f2c0c4df209/jiter-0.9.0-cp313-cp313t-win_amd64.whl", hash = "sha256:6f7838bc467ab7e8ef9f387bd6de195c43bad82a569c1699cb822f6609dd4cdf", size = 206867, upload_time = "2025-03-10T21:36:25.843Z" },
+]
+
+[[package]]
+name = "jsonref"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/aa/0d/c1f3277e90ccdb50d33ed5ba1ec5b3f0a242ed8c1b1a85d3afeb68464dca/jsonref-1.1.0.tar.gz", hash = "sha256:32fe8e1d85af0fdefbebce950af85590b22b60f9e95443176adbde4e1ecea552", size = 8814, upload_time = "2023-01-16T16:10:04.455Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/ec/e1db9922bceb168197a558a2b8c03a7963f1afe93517ddd3cf99f202f996/jsonref-1.1.0-py3-none-any.whl", hash = "sha256:590dc7773df6c21cbf948b5dac07a72a251db28b0238ceecce0a2abfa8ec30a9", size = 9425, upload_time = "2023-01-16T16:10:02.255Z" },
 ]
 
 [[package]]

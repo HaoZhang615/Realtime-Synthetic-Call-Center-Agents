@@ -11,6 +11,8 @@ import hashlib
 import streamlit as st
 import io
 import re
+import atexit
+import requests
 from datetime import datetime
 import pytz
 
@@ -18,7 +20,7 @@ from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.ai.agents import AgentsClient
 from azure.ai.projects import AIProjectClient
-from azure.ai.agents.models import ConnectedAgentTool, MessageRole, BingGroundingTool, AzureAISearchQueryType, AzureAISearchTool, ListSortOrder
+from azure.ai.agents.models import ConnectedAgentTool, MessageRole, BingGroundingTool, AzureAISearchQueryType, AzureAISearchTool, ListSortOrder, ToolSet, FunctionTool
 from audio_recorder_streamlit import audio_recorder
 from azure.monitor.opentelemetry import configure_azure_monitor
 
@@ -26,6 +28,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from utils import load_dotenv_from_azd
 from utils.conversation_manager import ConversationManager
+
+# Import AzureLogicAppTool and the function factory from utils
+from utils.user_logic_apps import AzureLogicAppTool, create_send_email_function
 
 # Configure logging
 logging.captureWarnings(True)
@@ -59,6 +64,9 @@ tts_model = os.environ.get("AZURE_OPENAI_TTS_DEPLOYMENT", "gpt-4o-mini-tts")
 project_endpoint = os.environ["AZURE_AI_FOUNDRY_PROJECT_ENDPOINT"]
 model_deployment = os.environ["AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME"]
 bing_connection_name = os.environ["BING_GROUNDING_CONNECTION_NAME"]
+
+# Logic App Configuration for SendEmail agent
+send_email_logic_app_url = os.environ.get("SEND_EMAIL_LOGIC_APP_URL")
 
 # Initialize clients
 client = AzureOpenAI(
@@ -197,6 +205,63 @@ def create_connected_agents():
                 name="ai_search_agent",
                 description="Gets the internal knowledge base search results for a query"
             )
+        #----------reuse or create email agent --------------------------------#
+            # Create AzureLogicAppTool instance for email functionality
+            subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
+            resource_group = os.environ.get("AZURE_RESOURCE_GROUP")
+            logic_app_name = os.environ.get("SEND_EMAIL_LOGIC_APP_NAME")
+            trigger_name = os.environ.get("SEND_EMAIL_LOGIC_APP_TRIGGER_NAME", "When_a_HTTP_request_is_received")
+            
+            email_agent = None
+            connected_email_agent = None
+            
+            # Only create email agent if Logic App configuration is available
+            if subscription_id and resource_group and logic_app_name:
+                try:
+                    # Create AzureLogicAppTool instance
+                    logic_app_tool = AzureLogicAppTool(subscription_id, resource_group, DefaultAzureCredential())
+                    
+                    # Register the Logic App
+                    logic_app_tool.register_logic_app(logic_app_name, trigger_name)
+                    logger.info("Logic App registered successfully!")
+                    
+                    # Create the send email function
+                    send_email_func = create_send_email_function(logic_app_tool, logic_app_name)
+                    
+                    # Prepare the function tools for the agent
+                    functions_to_use = {send_email_func}
+                    functions = FunctionTool(functions=functions_to_use)
+                    
+                    # Check for existing email agent or create new one
+                    existing_email_agent = find_existing_agent_by_name(project_client, "SendEmailAgent")
+                    
+                    if not existing_email_agent:
+                        # Create email agent using project client
+                        email_agent = project_client.agents.create_agent(
+                            model=model_deployment,
+                            name="SendEmailAgent",
+                            instructions="You are a specialized agent for sending emails. When asked to send an email, always ask for recipient email address if not provided, craft professional and appropriate email content, include current date/time when relevant, and confirm email details before sending.",
+                            tools=functions.definitions,
+                        )
+                        logger.info(f"Created new email agent, ID: {email_agent.id}")
+                    else:
+                        email_agent = existing_email_agent
+                        logger.info(f"Reusing existing email agent, ID: {email_agent.id}")
+                    
+                    # Initialize Connected Agent tool for email
+                    connected_email_agent = ConnectedAgentTool(
+                        id=email_agent.id,
+                        name="email_agent",
+                        description="Sends emails to specified recipients with custom subject and body content"
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Error creating email agent: {e}")
+                    email_agent = None
+                    connected_email_agent = None
+            else:
+                logger.warning("Email agent configuration not available - Logic App environment variables missing")
+
         #----------reuse or create concierge agent --------------------------------#
             # Check for existing main agent or create new one
             existing_concierge_agent = find_existing_agent_by_name(project_client, "ConciergeAgent")
@@ -204,12 +269,20 @@ def create_connected_agents():
             if not existing_concierge_agent:
                 # Create concierge agent with connected agent tool using project_client
                 # Initialize Connected Agent tools for both agents
+                
+                # Build tools list based on availability
+                agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
+                
+                # Add email agent tools if available
+                if connected_email_agent:
+                    agent_tools += connected_email_agent.definitions
+                    logger.info("Email agent tools added to concierge agent")
 
                 concierge_agent = project_client.agents.create_agent(
                     model=model_deployment,
                     name="ConciergeAgent",
                     instructions=st.session_state.system_message,
-                    tools=connected_web_search_agent.definitions + connected_ai_search_agent.definitions,
+                    tools=agent_tools,
                 )
                 logger.info(f"Created new concierge agent, ID: {concierge_agent.id}")
             else:
@@ -217,10 +290,18 @@ def create_connected_agents():
                 logger.info(f"Reusing existing concierge agent, ID: {concierge_agent.id}")
                 # Update instructions for existing agent in case they changed
                 try:
+                    # Build tools list based on availability
+                    agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
+                    
+                    # Add email agent tools if available
+                    if connected_email_agent:
+                        agent_tools += connected_email_agent.definitions
+                        logger.info("Email agent tools added to existing concierge agent")
+                        
                     concierge_agent = project_client.agents.update_agent(
                         agent_id=concierge_agent.id,
                         instructions=st.session_state.system_message,
-                        tools=connected_web_search_agent.definitions,
+                        tools=agent_tools,
                     )
                     logger.info(f"Updated existing concierge agent instructions")
                 except Exception as e:
@@ -233,11 +314,25 @@ def create_connected_agents():
             # Store agents in session state
             st.session_state.connected_agents = {
                 "web_search_agent": web_search_agent,
+                "ai_search_agent": ai_search_agent,
                 "concierge_agent": concierge_agent,
                 "connected_web_search_agent": connected_web_search_agent,
-
+                "connected_ai_search_agent": connected_ai_search_agent,
             }
+            
+            # Add email agent to session state if available
+            if email_agent and connected_email_agent:
+                st.session_state.connected_agents["email_agent"] = email_agent
+                st.session_state.connected_agents["connected_email_agent"] = connected_email_agent
+                logger.info("Email agent added to session state")
+            
             st.session_state.agent_thread = thread
+            
+            logger.info("All agents successfully initialized and stored in session state")
+            agent_ids = f"Web: {web_search_agent.id}, AI Search: {ai_search_agent.id}, Concierge: {concierge_agent.id}"
+            if email_agent:
+                agent_ids += f", Email: {email_agent.id}"
+            logger.info(f"Agent IDs - {agent_ids}")
             
         except Exception as e:
             logger.error(f"Error creating connected agents: {e}")
@@ -253,8 +348,11 @@ def cleanup_agents():
             agents = st.session_state.connected_agents
             # Note: Cleanup commented out to preserve agents across sessions
             # Uncomment if you want to delete agents after each session
-            # agents_client.delete_agent(agents["concierge_agent"].id)
-            # agents_client.delete_agent(agents["web_search_agent"].id)
+            # project_client.agents.delete_agent(agents["concierge_agent"].id)
+            # project_client.agents.delete_agent(agents["web_search_agent"].id)
+            # project_client.agents.delete_agent(agents["ai_search_agent"].id)
+            # if "email_agent" in agents:
+            #     project_client.agents.delete_agent(agents["email_agent"].id)
             logger.info("Agents cleanup completed")
         except Exception as e:
             logger.error(f"Error during agent cleanup: {e}")
@@ -415,16 +513,22 @@ with st.sidebar:
     if "system_message" not in st.session_state:
         st.session_state.system_message = """You are a sophisticated AI assistant with access to specialized agents. You can help users with various tasks including:
 
-1. **web search**: Use the web_search_agent to search the internet for information
-2. **internal knowledge base search**: use ai_search_agent to provide helpful information and answer questions about internal knowledge
-3. **send Email**: Use the email_agent to send emails on behalf of the user
+1. **Web Search**: Use the web_search_agent to search the internet for current information and news
+2. **Internal Knowledge Base**: Use the ai_search_agent to search internal company documents and knowledge
+3. **Send Emails**: Use the email_agent to send emails to specified recipients with custom subject and body content
+
+For email tasks specifically:
+- Always ask for recipient email address if not provided
+- Craft professional and appropriate email content
+- Include current date/time when relevant
+- Confirm email details before sending
 
 You should:
 - Be professional, helpful, and concise
 - Provide accurate, up-to-date information
 - Ask clarifying questions if needed
-- Always summarize findings clearly. Make sure to provide the reference link if you have used web_search_agent.
-- Use tools only when necessary, otherwise provide direct answers
+- Always summarize findings clearly and provide reference links when using web search
+- Use the appropriate specialized agent for each task
 - Maintain a friendly, engaging tone
 """
 

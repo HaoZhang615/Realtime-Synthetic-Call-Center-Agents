@@ -515,6 +515,11 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       BING_GROUNDING_ENDPOINT: aiFoundryBingGroundingConnection.outputs.endpoint
       AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiFoundryAccountProject.outputs.projectEndpoint
       AZURE_AI_SEARCH_CONNECTION_NAME: aiFoundrySearchConnection.outputs.azureAISearchConnectionName
+      AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME: _aiFoundryAgentModelDeploymentName
+      SEND_EMAIL_LOGIC_APP_NAME: '${abbrs.logicWorkflows}sendemail-${resourceToken}'
+      SEND_EMAIL_LOGIC_APP_TRIGGER_NAME: 'When_a_HTTP_request_is_received'
+      AZURE_SUBSCRIPTION_ID: subscription().subscriptionId
+      AZURE_RESOURCE_GROUP: resGroup.name
     },
     union(
       empty(openAiRealtimeName) ? {} : {
@@ -575,6 +580,11 @@ module backendApp 'modules/app/containerapp.bicep' = {
       BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
       AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiFoundryAccountProject.outputs.projectEndpoint
       AZURE_AI_SEARCH_CONNECTION_NAME: aiFoundrySearchConnection.outputs.azureAISearchConnectionName
+      AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME: _aiFoundryAgentModelDeploymentName
+      SEND_EMAIL_LOGIC_APP_NAME: '${abbrs.logicWorkflows}sendemail-${resourceToken}'
+      SEND_EMAIL_LOGIC_APP_TRIGGER_NAME: 'When_a_HTTP_request_is_received'
+      AZURE_SUBSCRIPTION_ID: subscription().subscriptionId
+      AZURE_RESOURCE_GROUP: resGroup.name
     },
     empty(openAiRealtimeName) ? {} : {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
@@ -714,6 +724,11 @@ output AZURE_STORAGE_RESOURCE_GROUP string = resGroup.name
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.outputs.loginServer
 
 output SEND_EMAIL_LOGIC_APP_URL string = sendMailUrl.outputs.url
+
+// Logic App configuration for sending emails
+output SEND_EMAIL_LOGIC_APP_NAME string = '${abbrs.logicWorkflows}sendemail-${resourceToken}'
+output SEND_EMAIL_LOGIC_APP_TRIGGER_NAME string = 'When_a_HTTP_request_is_received'
+output AZURE_SUBSCRIPTION_ID string = subscription().subscriptionId
 
 output COSMOSDB_ENDPOINT string = cosmosdb.outputs.cosmosDbEndpoint
 output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase
