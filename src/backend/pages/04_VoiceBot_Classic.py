@@ -1,273 +1,43 @@
-from openai import AzureOpenAI
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from audio_recorder_streamlit import audio_recorder
 import streamlit as st
-import io
-import re
 import os
 import sys
 import logging
-import hashlib
-from utils import load_dotenv_from_azd
-from utils.conversation_manager import ConversationManager
-from azure.monitor.opentelemetry import configure_azure_monitor
+import re
 from datetime import datetime
 import pytz
 
+from audio_recorder_streamlit import audio_recorder
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-logging.captureWarnings(True)
-logging.basicConfig(level=os.getenv("LOGLEVEL", "INFO").upper())
-# Raising the azure log level to WARN as it is too verbose
-logging.getLogger("azure").setLevel(os.environ.get("LOGLEVEL_AZURE", "WARN").upper())
+# Import common utilities
+from utils import (
+    setup_logging_and_monitoring, initialize_azure_clients, get_session_id,
+    get_customer_id, initialize_conversation, save_conversation_to_cosmos,
+    speech_to_text, text_to_speech, save_conversation_message,
+    setup_sidebar_voice_controls, setup_sidebar_conversation_info,
+    display_conversation_history, cleanup_response_for_tts, get_default_system_message,
+    setup_page_header, setup_sidebar_header, setup_voice_input_recorder,
+    setup_system_message_input, setup_voice_instruction_examples,
+    create_chat_container, handle_audio_recording, initialize_session_messages,
+    add_message_to_session, handle_chat_flow
+)
 
-if os.getenv("APPLICATIONINSIGHTS_ENABLED", "false").lower() == "true":
-    configure_azure_monitor()
+# Configure logging and monitoring
+setup_logging_and_monitoring()
 
 logger = logging.getLogger(__name__)
 logger.debug("Starting VoiceBot Classic page")
 
-# Load environment variables from azd
-load_dotenv_from_azd()
-token_provider = get_bearer_token_provider(
-    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-)
-# Azure Open AI Configuration
-api_base = os.environ["AZURE_OPENAI_ENDPOINT"]
-api_version = "2025-03-01-preview"  # Updated to match streaming sample
+# Initialize Azure clients
+client, token_provider, conversation_manager = initialize_azure_clients()
+
+# Get model deployment names
 gpt4omini = os.environ["AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT"]
-
-# Audio model configurations from environment
-transcribe_model = os.environ.get("AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT", "gpt-4o-mini-transcribe")
-tts_model = os.environ.get("AZURE_OPENAI_TTS_DEPLOYMENT", "gpt-4o-mini-tts")
-
-client = AzureOpenAI(
-    azure_endpoint=api_base,
-    azure_ad_token_provider=token_provider,
-    api_version=api_version
-)
-
-# Initialize conversation manager
-try:
-    conversation_manager = ConversationManager()
-    logger.info("Conversation manager initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize conversation manager: {e}")
-    conversation_manager = None
 
 def load_css(file_path):
     with open(file_path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-def get_session_id():
-    """Generate a unique session ID for the current Streamlit session."""
-    if "session_id" not in st.session_state:
-        # Use Streamlit's session state to create a consistent session ID
-        session_data = str(st.session_state)
-        st.session_state.session_id = hashlib.md5(session_data.encode()).hexdigest()[:16]
-    return st.session_state.session_id
-
-def get_customer_id():
-    """Generate or get customer ID for conversation partitioning."""
-    if "customer_id" not in st.session_state:
-        # For demo purposes, use session ID as customer ID
-        # In production, this would be the actual authenticated user ID
-        st.session_state.customer_id = f"demo_user_{get_session_id()}"
-    return st.session_state.customer_id
-
-def initialize_conversation():
-    """Initialize or load conversation from Cosmos DB."""
-    if "conversation_doc" not in st.session_state and conversation_manager:
-        customer_id = get_customer_id()
-        session_id = get_session_id()
-        
-        # Create new conversation document
-        st.session_state.conversation_doc = conversation_manager.create_conversation_document(
-            customer_id=customer_id,
-            session_id=session_id
-        )
-        
-        logger.info(f"Initialized new conversation: {st.session_state.conversation_doc['id']}")
-
-def save_conversation_to_cosmos():
-    """Save current conversation to Cosmos DB."""
-    if conversation_manager and "conversation_doc" in st.session_state:
-        success = conversation_manager.save_conversation(st.session_state.conversation_doc)
-        if success:
-            logger.debug("Conversation saved to Cosmos DB")
-        else:
-            logger.error("Failed to save conversation to Cosmos DB")
-
-# Function STT
-def speech_to_text(audio: bytes) -> str:
-    buffer = io.BytesIO(audio)
-    buffer.name = "audio.wav"
-    transcription_result = client.audio.transcriptions.create(
-    file=buffer,
-    model=transcribe_model,
-    # language="en",  # Optional
-    # prompt="Audio is a tech podcast, expect technical terms",  # Optional
-    response_format="json"  # Optional
-)
-    buffer.close()
-    return transcription_result.text
-
-
-# Function TTS - Using raw response pattern
-def text_to_speech(text_input: str):
-    response = client.audio.speech.create(
-        model=tts_model,
-        voice=st.session_state.selected_voice,  # Use selected voice from sidebar
-        input=text_input,
-        response_format="wav",
-        instructions=st.session_state.tts_instructions  # Use custom instructions from sidebar
-    )
-    return response.content
-
-st.title("Azure OpenAI powered Self Service Chatbot")
-
-# Initialize conversation on page load
-initialize_conversation()
-
-
-# Sidebar Configuration -- BEGIN
-with st.sidebar:
-    # add toggle to turn on and off the audio player
-    if "voice_on" not in st.session_state:
-        st.session_state.voice_on = False
-    st.session_state.voice_on = st.toggle(label="Enable Voice Output", value=st.session_state.voice_on)
-    
-    # Voice selection dropdown
-    available_voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
-    if "selected_voice" not in st.session_state:
-        st.session_state.selected_voice = "shimmer"  # Default voice
-    st.session_state.selected_voice = st.selectbox(
-        "Select Voice:",
-        available_voices,
-        index=available_voices.index(st.session_state.selected_voice)
-    )
-    
-    # TTS Instructions input
-    if "tts_instructions" not in st.session_state:
-        st.session_state.tts_instructions = "Speak with a Swiss German accent."  # Default instruction
-    st.session_state.tts_instructions = st.text_input(
-        "Voice Instructions:",
-        value=st.session_state.tts_instructions,
-        placeholder="Enter custom instructions for the voice (e.g., accent, tone, style...)",
-        help="Customize how the AI should speak (accent, emotion, pace, etc.)"
-    )
-    # Expandable section with examples
-    with st.expander("💡 Voice Instruction Examples"):
-        st.markdown("""
-        **🎭 Accents & Languages:**
-        - "Speak with a British accent"
-        - "Use an American Southern drawl"
-        - "Speak with a French accent"
-        - "Use a New York accent"
-        
-        **😊 Emotions & Tone:**
-        - "Speak cheerfully and enthusiastically"
-        - "Use a calm, soothing tone"
-        - "Sound excited and energetic"
-        - "Speak in a professional, serious tone"
-        
-        **⚡ Style & Pace:**
-        - "Speak slowly and clearly"
-        - "Use a fast, energetic pace"
-        - "Speak like a news anchor"
-        - "Use a conversational, friendly tone"
-        
-        **🎯 Character & Role:**
-        - "Speak like a wise teacher"
-        - "Sound like a helpful customer service agent"
-        - "Use the tone of a storyteller"
-        - "Speak like a confident presenter"
-        
-        **✨ Creative Examples:**
-        - "Whisper mysteriously"
-        - "Speak dramatically like in a movie"
-        - "Use an upbeat radio DJ voice"
-        - "Sound like you're giving a motivational speech"
-        """)
-    
-    # System Message Configuration
-    if "system_message" not in st.session_state:
-        st.session_state.system_message = """You are a voice-based AI agent designed to assist Mobi 24 with car insurance claims handling. Your role is to interact with customers over the phone in a natural, empathetic, and efficient manner. Your primary objectives are:
-
-Gather Information: Ask relevant questions to collect all necessary details about the car insurance claim, including:
-
-Personal and contact information of the caller
-Vehicle details (make, model, registration number)
-Incident details (date, time, location, description of the event)
-Involvement of third parties or injuries
-Immediate assistance needs (e.g. towing, roadside help)
-Confirm Completeness: Summarise the collected information and confirm with the caller that all details are correct and complete.
-
-Output Structured Data: At the end of the call, generate a structured JSON object containing all the collected information, clearly labelled and ready for downstream processing by a human validator or automated system.
-
-You must:
-
-Be polite, clear, and concise.
-Ask follow-up questions if information is missing or unclear.
-Handle interruptions or corrections gracefully.
-Ensure the conversation flows naturally while staying on task.
-Do not make assumptions or provide legal or policy advice. If the caller asks something outside your scope, politely redirect them to a human agent."""
-    st.session_state.system_message = st.text_area(
-        "System Message:",
-        value=st.session_state.system_message,
-        height=100,
-        placeholder="Enter the system message to define the assistant's behavior...",
-        help="Define how the AI assistant should behave and respond to users"
-    )
-    
-    
-    st.markdown("---")  # Add a separator line
-    
-    # Conversation Management Section
-    st.subheader("💬 Conversation Info")
-    if "conversation_doc" in st.session_state and st.session_state.conversation_doc:
-        conv_doc = st.session_state.conversation_doc
-        st.write(f"**Session ID:** `{conv_doc['session_id'][:8]}...`")
-        st.write(f"**Messages:** {len(conv_doc['messages'])}")
-        # Convert UTC ISO timestamp to CET
-        created_utc = datetime.fromisoformat(conv_doc['created_at'].replace('Z', '+00:00'))
-        cet = pytz.timezone('Europe/Zurich')
-        created_cet = created_utc.astimezone(cet)
-        st.write(f"**Created:** {created_cet.strftime('%Y-%m-%d %H:%M:%S')} (CET)")
-        
-        # Button to start new conversation
-        if st.button("🔄 Start New Conversation"):
-            # Clear current conversation from session state
-            if "conversation_doc" in st.session_state:
-                del st.session_state.conversation_doc
-            if "messages" in st.session_state:
-                st.session_state.messages = []
-            # Re-initialize
-            initialize_conversation()
-            st.rerun()
-    else:
-        st.write("No active conversation")
-
-    st.markdown("---")  # Add a separator line
-
-    custom_audio_bytes = audio_recorder(
-        text="Click the microphone to start recording\n",
-        recording_color="#e8b62c",
-        neutral_color="#6aa36f",
-        icon_size="3x",
-        sample_rate=41_000,
-        # auto_start=False,
-    )
-    
-    if custom_audio_bytes:
-        # st.audio(custom_audio_bytes, format="audio/wav")
-        # call speech to text function and display the result
-        st.session_state.voice_prompt = speech_to_text(custom_audio_bytes)
-# Sidebar Configuration -- END
-
-# Initialize session state attributes  
-if "messages" not in st.session_state:  
-    st.session_state.messages = []
 
 # Basic chat function without web search or customer data
 def basic_chat(user_request, conversation_history=None):
@@ -295,57 +65,81 @@ def basic_chat(user_request, conversation_history=None):
     
     assistant_response = response.choices[0].message.content
     
-    # Save to Cosmos DB if conversation manager is available
-    if conversation_manager and "conversation_doc" in st.session_state:
-        try:
-            # Add user message to conversation document
-            conversation_manager.add_message_to_conversation(
-                st.session_state.conversation_doc,
-                role="user",
-                content=user_request
-            )
-            
-            # Add assistant response to conversation document
-            conversation_manager.add_message_to_conversation(
-                st.session_state.conversation_doc,
-                role="assistant", 
-                content=assistant_response
-            )
-            
-            # Save to Cosmos DB
-            save_conversation_to_cosmos()
-            
-        except Exception as e:
-            logger.error(f"Error saving conversation to Cosmos DB: {e}")
+    # Save conversation to Cosmos DB using common utility
+    save_conversation_message(user_request, assistant_response, conversation_manager)
     
     return assistant_response
-  
-# create a container with fixed height and scroll bar for conversation history
-conversation_container = st.container(height = 600, border=False)
-# Handle new message  
+# Set up page header
+setup_page_header("Azure OpenAI powered Self Service Chatbot")
+
+# Initialize conversation on page load
+initialize_conversation(conversation_manager)
+
+# Set up sidebar configuration
+setup_sidebar_header()
+
+# Voice controls
+voice_on, selected_voice, tts_instructions = setup_sidebar_voice_controls()
+
+# System message configuration
+default_system_message = """You are a voice-based AI agent designed to assist Mobi 24 with car insurance claims handling. Your role is to interact with customers over the phone in a natural, empathetic, and efficient manner. Your primary objectives are:
+
+Gather Information: Ask relevant questions to collect all necessary details about the car insurance claim, including:
+
+Personal and contact information of the caller
+Vehicle details (make, model, registration number)
+Incident details (date, time, location, description of the event)
+Involvement of third parties or injuries
+Immediate assistance needs (e.g. towing, roadside help)
+Confirm Completeness: Summarise the collected information and confirm with the caller that all details are correct and complete.
+
+Output Structured Data: At the end of the call, generate a structured JSON object containing all the collected information, clearly labelled and ready for downstream processing by a human validator or automated system.
+
+You must:
+
+Be polite, clear, and concise.
+Ask follow-up questions if information is missing or unclear.
+Handle interruptions or corrections gracefully.
+Ensure the conversation flows naturally while staying on task.
+Do not make assumptions or provide legal or policy advice. If the caller asks something outside your scope, politely redirect them to a human agent."""
+
+system_message = setup_system_message_input(default_system_message)
+
+# Voice instruction examples
+setup_voice_instruction_examples()
+
+# Conversation info
+setup_sidebar_conversation_info()
+
+# Voice input recorder
+custom_audio_bytes = setup_voice_input_recorder()
+
+# Handle audio recording
+if custom_audio_bytes:
+    handle_audio_recording(custom_audio_bytes, lambda audio: speech_to_text(audio, client))
+
+# Initialize session messages
+initialize_session_messages()
+
+# Create conversation container
+conversation_container = create_chat_container(600)
+
+# Handle new message input
 if text_prompt := st.chat_input("type your request here..."):
     prompt = text_prompt
-elif custom_audio_bytes:
+elif "voice_prompt" in st.session_state:
     prompt = st.session_state.voice_prompt
-    # Clear voice prompt after processing
-    if "voice_prompt" in st.session_state:
-        del st.session_state.voice_prompt
+    del st.session_state.voice_prompt
 else:
     prompt = None
 
 with conversation_container:
     if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        # Display the conversation history
-        for message in st.session_state.messages:
-            if message["role"] != "system":  
-                with st.chat_message(message["role"]):  
-                    st.markdown(message["content"]) 
-        with st.chat_message("assistant"):  
-            result = basic_chat(prompt, st.session_state.messages)
-            audio_text = re.sub(r'\([^)]*\)', '', result)
-            # trim the result to remove all occurances of text wrapped within brackets, e.g. (source_page: "Microsoft") and (source_url: "https://www.microsoft.com/")
-            st.markdown(result)
-            if st.session_state.voice_on:
-                st.audio(text_to_speech(audio_text), format="audio/mp3", autoplay=True)
-        st.session_state.messages.append({"role": "assistant", "content": result})
+        # Use the common chat flow handler
+        def tts_func(text):
+            return text_to_speech(text, client)
+        
+        handle_chat_flow(prompt, basic_chat, voice_on, tts_func)
+    else:
+        # Display existing conversation
+        display_conversation_history(st.session_state.messages)
