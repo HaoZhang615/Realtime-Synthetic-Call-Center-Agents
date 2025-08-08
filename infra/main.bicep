@@ -47,11 +47,11 @@ param containerAppsEnvironmentName string = ''
 
 // Add new parameters for Bing Search API to replace dynamic loadJsonContent calls
 @secure()
-@description('Bing Search API Key')
-param bingSearchApiKey string
+// @description('Bing Search API Key')
+// param bingSearchApiKey string
 
-@description('Bing Search API Endpoint')
-param bingSearchApiEndpoint string = 'https://api.bing.microsoft.com/v7.0/search'
+// @description('Bing Search API Endpoint')
+// param bingSearchApiEndpoint string = 'https://api.bing.microsoft.com/v7.0/search'
 
 // Parameters for Bing Custom Search service
 @description('Name of the Bing Custom Search service. If not specified, a name will be generated.')
@@ -103,6 +103,10 @@ module containerAppsEnvironment './modules/app/containerappenv.bicep' = {
     logAnalyticsWorkspaceName: '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
   }
   scope: resGroup
+  // Ensure the Log Analytics workspace exists before creating the Container Apps Environment
+  dependsOn: [
+    monitoring
+  ]
 }
 
 
@@ -222,12 +226,12 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
       }
     ]
     secrets: {
-      secureList: !empty(bingSearchApiKey) ? [
-        {
-          name: 'bingSearchApiKey'
-          value: bingSearchApiKey
-        }
-      ] : []
+      // secureList: !empty(bingSearchApiKey) ? [
+      //   {
+      //     name: 'bingSearchApiKey'
+      //     value: bingSearchApiKey
+      //   }
+      // ] : []
     }
   }
 }
@@ -295,6 +299,16 @@ module aiFoundryAccount 'br/public:avm/res/cognitive-services/account:0.11.0' = 
         principalId: principalId
         principalType: principalType
       }
+      {
+        roleDefinitionIdOrName: 'Cognitive Services User'
+        principalId: appIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
+      {
+        roleDefinitionIdOrName: 'Cognitive Services User'
+        principalId: principalId
+        principalType: principalType
+      }
     ]
     secretsExportConfiguration: {
       accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
@@ -354,7 +368,7 @@ module aiFoundryBingGroundingConnection 'modules/aifoundry/connection-bing-groun
     aiFoundryName: _accounts_aiservice_ms_name
     bingGroundingServiceId: bingGroundingService.outputs.bingGroundingServiceId
     bingGroundingServiceName: bingGroundingService.outputs.bingGroundingServiceName
-    apiKey: bingSearchApiKey
+    apiKey: bingGroundingService.outputs.apiKey
   }
   dependsOn: [
     aiFoundryAccount
@@ -505,7 +519,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
-      BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
+      // BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
       BING_CUSTOM_SEARCH_SERVICE_NAME: bingCustomSearch.outputs.bingCustomSearchServiceName
       BING_CUSTOM_SEARCH_ENDPOINT: bingCustomSearch.outputs.endpoint
       BING_CUSTOM_SEARCH_CONFIG_ID: bingCustomSearch.outputs.customConfigId
@@ -521,14 +535,9 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       AZURE_SUBSCRIPTION_ID: subscription().subscriptionId
       AZURE_RESOURCE_GROUP: resGroup.name
     },
-    union(
-      empty(openAiRealtimeName) ? {} : {
-        AZURE_OPENAI_API_KEY: openAiRealtimeKey
-      },
-      !empty(bingSearchApiKey) ? {
-        BING_SEARCH_API_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)'
-      } : {}
-    ))
+    empty(openAiRealtimeName) ? {} : {
+      AZURE_OPENAI_API_KEY: openAiRealtimeKey
+    })
   }
 }
 
@@ -571,7 +580,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
       AZURE_AI_FOUNDRY_ENDPOINT: aiFoundryAccount.outputs.endpoint
-      AZURE_AI_FOUNDRY_SERVICES_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
+      // Using managed identity for AI Services, no key needed
       BING_CUSTOM_SEARCH_SERVICE_NAME: bingCustomSearch.outputs.bingCustomSearchServiceName
       BING_CUSTOM_SEARCH_ENDPOINT: bingCustomSearch.outputs.endpoint
       BING_CUSTOM_SEARCH_CONFIG_ID: bingCustomSearch.outputs.customConfigId
@@ -739,7 +748,7 @@ output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductConta
 output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
 output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
 
-output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
+// output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
 // Bing Search API Key is stored securely in Key Vault and should not be exposed in outputs
 
 // Bing Custom Search outputs

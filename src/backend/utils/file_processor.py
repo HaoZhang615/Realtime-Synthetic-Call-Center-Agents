@@ -187,7 +187,30 @@ def setup_index(
         )
     # step 2.5: Create the skillset if it doesn't exist
     ai_services_key = os.environ.get('AZURE_AI_FOUNDRY_SERVICES_KEY', '')
-    ai_services_endpoint = os.environ.get('AZURE_AI_SERVICES_ENDPOINT', '')
+    ai_services_endpoint = os.environ.get('AZURE_AI_FOUNDRY_ENDPOINT', '')
+    # Normalize and provide a fallback for AI Services subdomain URL
+    if ai_services_endpoint:
+        ai_services_endpoint = ai_services_endpoint.strip()
+        # Ensure it starts with https:// and has no trailing whitespace
+        if not ai_services_endpoint.startswith('http'):
+            ai_services_endpoint = f"https://{ai_services_endpoint}"
+        # Trim trailing slash for consistency
+        ai_services_endpoint = ai_services_endpoint.rstrip('/')
+    if not ai_services_endpoint:
+        # Fallback: derive from AZURE_AI_FOUNDRY_PROJECT_ENDPOINT host (cog-xxxx.services.ai.azure.com)
+        project_ep = os.environ.get('AZURE_AI_FOUNDRY_PROJECT_ENDPOINT', '').strip()
+        if project_ep:
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(project_ep).hostname or ''
+                # Convert host like cog-xxxx.services.ai.azure.com -> cog-xxxx.cognitiveservices.azure.com
+                account = host.split('.')[0] if host else ''
+                if account:
+                    ai_services_endpoint = f"https://{account}.cognitiveservices.azure.com"
+            except Exception:
+                pass
+    if not ai_services_endpoint:
+        raise ValueError("AZURE_AI_FOUNDRY_ENDPOINT is not set. Unable to configure skillset 'cognitive_services_account'.")
     
     # Check if the AI Services Key is a Key Vault reference and resolve it
     if ai_services_key and ai_services_key.startswith('@Microsoft.KeyVault'):

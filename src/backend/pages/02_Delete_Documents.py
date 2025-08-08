@@ -36,8 +36,8 @@ try:
     # Initialize Azure clients
     azure_credential = DefaultAzureCredential()
     search_client = SearchClient(
-        endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
-        index_name=os.environ["AZURE_SEARCH_INDEX"],
+        endpoint=os.environ["AZURE_AI_SEARCH_ENDPOINT"],
+        index_name=os.environ["AZURE_AI_SEARCH_INDEX"],
         credential=azure_credential
     )
     blob_client = BlobServiceClient(

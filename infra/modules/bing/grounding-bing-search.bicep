@@ -31,3 +31,5 @@ output bingGroundingServiceId string = bingGroundingService.id
 output bingGroundingServiceName string = bingGroundingService.name
 output bingGroundingServiceLocation string = bingGroundingService.location
 output endpoint string = 'https://api.bing.microsoft.com/'
+@secure()
+output apiKey string = bingGroundingService.listKeys().key1

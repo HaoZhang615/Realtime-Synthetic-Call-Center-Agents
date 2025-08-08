@@ -56,8 +56,8 @@ try:
                     setup_index(
                         azure_credential=azure_credential,
                         uami_id=os.environ["AZURE_USER_ASSIGNED_IDENTITY_ID"],
-                        index_name=os.environ["AZURE_SEARCH_INDEX"],
-                        azure_search_endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
+                        index_name=os.environ["AZURE_AI_SEARCH_INDEX"],
+                        azure_search_endpoint=os.environ["AZURE_AI_SEARCH_ENDPOINT"],
                         azure_storage_connection_string=os.environ["AZURE_STORAGE_CONNECTION_STRING"],
                         azure_storage_container=os.environ["AZURE_STORAGE_CONTAINER"],
                         azure_openai_embedding_endpoint=os.environ["AZURE_OPENAI_EMBEDDING_ENDPOINT"],
@@ -70,8 +70,8 @@ try:
                     upload_documents(
                         azure_credential=azure_credential,
                         source_folder=temp_dir,
-                        indexer_name=f"{os.environ["AZURE_SEARCH_INDEX"]}-indexer",
-                        azure_search_endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
+                        indexer_name=f"{os.environ["AZURE_AI_SEARCH_INDEX"]}-indexer",
+                        azure_search_endpoint=os.environ["AZURE_AI_SEARCH_ENDPOINT"],
                         azure_storage_endpoint=os.environ["AZURE_STORAGE_ENDPOINT"],
                         azure_storage_container=os.environ["AZURE_STORAGE_CONTAINER"]
                     )
