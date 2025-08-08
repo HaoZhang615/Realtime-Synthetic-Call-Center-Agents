@@ -5,11 +5,11 @@ from azure.search.documents.models import VectorizableTextQuery
 from azure.identity import DefaultAzureCredential
 from azure.core.credentials import AzureKeyCredential
 
-key = os.getenv("AZURE_SEARCH_ADMIN_KEY")
+key = os.getenv("AZURE_AI_SEARCH_ADMIN_KEY")
 credential = DefaultAzureCredential() if key is None or key == "" else AzureKeyCredential(key)
 search_client = SearchClient(
-    endpoint=os.getenv("AZURE_SEARCH_ENDPOINT"),
-    index_name=os.getenv("AZURE_SEARCH_INDEX"),
+    endpoint=os.getenv("AZURE_AI_SEARCH_ENDPOINT"),
+    index_name=os.getenv("AZURE_AI_SEARCH_INDEX"),
     credential=credential
 )
 

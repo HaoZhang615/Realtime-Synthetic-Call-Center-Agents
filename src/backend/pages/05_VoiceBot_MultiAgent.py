@@ -59,7 +59,7 @@ def create_connected_agents():
             instructions = get_agent_instructions()
             
         #----------reuse or create web search agent --------------------------------#
-            # prepare Bing Grounding tool
+            # prepare Bing Custom Search Grounding tool
             bing_connection_name = env_vars["bing_connection_name"]
             bing_connection_id = project_client.connections.get(name=bing_connection_name).id
             bing_conn_id = bing_connection_id
