@@ -16,7 +16,7 @@ from utils import (
     display_conversation_history, setup_page_header, setup_sidebar_header, setup_voice_input_recorder,
     setup_system_message_input, setup_voice_instruction_examples,
     create_chat_container, handle_audio_recording, initialize_session_messages,
-    handle_chat_flow, ensure_fresh_conversation
+    handle_chat_flow, ensure_fresh_conversation, get_current_datetime
 )
 
 # Configure logging and monitoring
@@ -48,22 +48,25 @@ def basic_chat(user_request, conversation_history=None):
     # Use the system message from session state
     system_message = st.session_state.system_message
     
+    # Add current datetime to the system message (invisible to user)
+    system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{system_message}"
+    
     # Update system message with the current JSON template if needed
     if "json_template" in st.session_state and st.session_state.json_template:
         # Remove any existing JSON template section from the system message
-        if "```json" in system_message:
+        if "```json" in system_message_with_datetime:
             # Find start and end of the JSON template in the system message
-            json_start = system_message.find("Use the following JSON template")
+            json_start = system_message_with_datetime.find("Use the following JSON template")
             if json_start > 0:
-                system_message = system_message[:json_start].strip()
+                system_message_with_datetime = system_message_with_datetime[:json_start].strip()
         
         # Add the current JSON template
-        system_message += f"\n\nUse the following JSON template for structured data collection:\n```json\n{st.session_state.json_template}\n```"
+        system_message_with_datetime += f"\n\nUse the following JSON template for structured data collection:\n```json\n{st.session_state.json_template}\n```"
     
     messages = [
         {
             "role": "system",
-            "content": system_message,
+            "content": system_message_with_datetime,
         }
     ]
     # Add previous conversation history

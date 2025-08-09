@@ -33,11 +33,11 @@ try:
     __all__.extend([
         # VoiceBot common functions
         'setup_logging_and_monitoring', 'initialize_azure_clients', 'get_session_id',
-        'get_customer_id', 'initialize_conversation', 'save_conversation_to_cosmos',
+        'get_customer_id', 'get_current_datetime', 'initialize_conversation', 'save_conversation_to_cosmos',
         'speech_to_text', 'text_to_speech', 'save_conversation_message',
         'setup_sidebar_voice_controls', 'setup_sidebar_conversation_info',
         'display_conversation_history', 'process_audio_and_text_input',
-        'cleanup_response_for_tts', 'get_default_system_message',
+        'cleanup_response_for_tts', 
         
         # Agent common functions
         'find_existing_agent_by_name', 'find_existing_agent_by_name_async',

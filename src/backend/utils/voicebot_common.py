@@ -106,6 +106,17 @@ def get_customer_id() -> str:
     return st.session_state.customer_id
 
 
+def get_current_datetime() -> str:
+    """
+    Get the current date and time in a formatted string.
+    
+    Returns:
+        str: Current date and time formatted as "YYYY-MM-DD HH:MM:SS UTC"
+    """
+    current_time = datetime.now(timezone.utc)
+    return current_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 def initialize_conversation(conversation_manager: Optional[ConversationManager] = None):
     """
     Initialize or load conversation from Cosmos DB.
@@ -354,31 +365,6 @@ def cleanup_response_for_tts(text: str) -> str:
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     
     return cleaned
-
-
-def get_default_system_message() -> str:
-    """
-    Get a default system message for VoiceBot applications.
-    
-    Returns:
-        str: Default system message
-    """
-    return """You are a voice-based AI agent designed to assist with customer service and information requests. Your role is to interact with users in a natural, empathetic, and efficient manner. Your primary objectives are:
-
-1. **Listen and Understand**: Carefully process user requests and ask clarifying questions when needed
-2. **Provide Accurate Information**: Use available tools and knowledge to give helpful, accurate responses
-3. **Maintain Professional Tone**: Be polite, clear, and concise in all interactions
-4. **Handle Requests Efficiently**: Route complex requests to appropriate specialized agents when available
-
-You must:
-- Be polite, clear, and concise
-- Ask follow-up questions if information is missing or unclear
-- Handle interruptions or corrections gracefully
-- Ensure conversations flow naturally while staying on task
-- Provide structured responses when requested
-
-If you cannot help with a specific request, politely explain your limitations and suggest alternative approaches."""
-
 
 def ensure_fresh_conversation(page_id: str):
     """Ensure a fresh conversation session when navigating between pages.

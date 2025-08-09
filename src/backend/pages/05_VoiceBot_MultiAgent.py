@@ -9,7 +9,6 @@ import sys
 import logging
 import streamlit as st
 import re
-import atexit
 import requests
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -22,7 +21,7 @@ from utils import (
     setup_system_message_input, create_chat_container, handle_audio_recording,
     initialize_session_messages, handle_chat_flow,find_existing_agent_by_name, initialize_ai_project_client,
     get_environment_variables, get_agent_instructions, cleanup_agent_resources, log_agent_creation, display_all_messages,
-    ensure_fresh_conversation
+    ensure_fresh_conversation, get_current_datetime
 )
 
 # Azure AI Agents specific imports
@@ -191,10 +190,13 @@ def create_connected_agents():
                 #     agent_tools += connected_email_agent.definitions
                 #     logger.info("Email agent tools added to concierge agent")
 
+                # Add current datetime to the system message (invisible to user)
+                system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{st.session_state.system_message}"
+
                 concierge_agent = project_client.agents.create_agent(
                     model=model_deployment,
                     name="ConciergeAgent",
-                    instructions=st.session_state.system_message,
+                    instructions=system_message_with_datetime,
                     tools=agent_tools,
                 )
                 log_agent_creation("ConciergeAgent", concierge_agent.id, True)
@@ -209,9 +211,13 @@ def create_connected_agents():
                     # if connected_email_agent:
                     #     agent_tools += connected_email_agent.definitions
                     #     logger.info("Email agent tools added to existing concierge agent")
+                    
+                    # Add current datetime to the system message (invisible to user)
+                    system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{st.session_state.system_message}"
+                    
                     concierge_agent = project_client.agents.update_agent(
                         agent_id=concierge_agent.id,
-                        instructions=st.session_state.system_message,
+                        instructions=system_message_with_datetime,
                         tools=agent_tools,
                     )
                     logger.info(f"Updated existing concierge agent instructions")
@@ -407,6 +413,3 @@ with conversation_container:
     else:
         # Display existing conversation
         display_all_messages()
-
-# Cleanup on app shutdown (this runs when the script ends)
-atexit.register(cleanup_agent_resources)
