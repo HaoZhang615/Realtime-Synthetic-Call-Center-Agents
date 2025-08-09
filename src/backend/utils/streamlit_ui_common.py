@@ -65,8 +65,9 @@ def setup_system_message_input(default_message: str) -> str:
         st.session_state.system_message = st.text_area(
             "🧠 System Instructions:",
             value=st.session_state.system_message,
-            height=150,
-            help="Define the AI assistant's behavior and capabilities"
+            height="content",
+            help="Define the AI assistant's behavior and capabilities",
+
         )
         
         return st.session_state.system_message
@@ -232,7 +233,7 @@ def setup_conversation_reset_button(reset_callback: Optional[Callable] = None):
         if st.button("🔄 New Conversation"):
             # Default reset behavior
             keys_to_clear = ["conversation_doc", "messages", "connected_agents", 
-                           "agent_thread", "sk_orchestration", "sk_runtime"]
+                           "agent_thread"]
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -298,7 +299,9 @@ def handle_chat_flow(user_input: str, chat_function: Callable, voice_enabled: bo
     # Get and display assistant response
     with st.chat_message("assistant"):
         with show_processing_spinner():
-            response = chat_function(user_input)
+            # Pass previous conversation history excluding system messages
+            conversation_history = [msg for msg in st.session_state.messages if msg["role"] != "system"]
+            response = chat_function(user_input, conversation_history)
         
         # Display text response
         st.markdown(response)

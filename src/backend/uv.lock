@@ -52,7 +52,7 @@ requires-dist = [
     { name = "rich" },
     { name = "semantic-kernel", specifier = ">=1.32.2" },
     { name = "sounddevice", specifier = ">=0.5.0" },
-    { name = "streamlit" },
+    { name = "streamlit", specifier = "==1.48.0" },
     { name = "tzlocal", specifier = ">=5.2" },
     { name = "websockets", specifier = "==14.0" },
 ]
@@ -2328,7 +2328,7 @@ wheels = [
 
 [[package]]
 name = "streamlit"
-version = "1.44.1"
+version = "1.48.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "altair" },
@@ -2350,9 +2350,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchdog", marker = "sys_platform != 'darwin'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3e/c0/7286284567e5045f0c587c426d0c41aee5d10c0a2e360e627a83037e9f0c/streamlit-1.44.1.tar.gz", hash = "sha256:c6914ed6d5b76870b461510476806db370f36425ae0e6654d227c988288198d3", size = 9423685, upload_time = "2025-04-01T20:36:19.91Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/9f/373ba8d9f1190cce0a1b04cd9e77fd933c8238506aa1e3440eefabfc16f3/streamlit-1.48.0.tar.gz", hash = "sha256:64da4819f4b897c8d1e9eb6396f4618b2eb5029d25af61472422d4eb0688bb75", size = 9526680, upload_time = "2025-08-05T23:13:48.852Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/17/fc425e1d4d86e31b2aaf0812a2ef2163763a0670d671720c7c36e8679323/streamlit-1.44.1-py3-none-any.whl", hash = "sha256:9fe355f58b11f4eb71e74f115ce1f38c4c9eaff2733e6bcffb510ac1298a5990", size = 9812242, upload_time = "2025-04-01T20:36:16.785Z" },
+    { url = "https://files.pythonhosted.org/packages/14/92/095c67f3d17b6116c2b1882bb5ac719939154ee5bc7e7610ee325159a101/streamlit-1.48.0-py3-none-any.whl", hash = "sha256:0f2bc697a1a4d2199384d8bb3966aa0b25904c9345e6d6ad6fbb69bd284c03a2", size = 9928889, upload_time = "2025-08-05T23:13:44.285Z" },
 ]
 
 [[package]]

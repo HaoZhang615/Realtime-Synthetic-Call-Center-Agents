@@ -16,16 +16,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Import common utilities
 from utils import (
-    setup_logging_and_monitoring, initialize_azure_clients, get_session_id,
-    get_customer_id, initialize_conversation, save_conversation_message,
-    speech_to_text, text_to_speech, setup_sidebar_voice_controls,
-    setup_sidebar_conversation_info, cleanup_response_for_tts,
-    setup_page_header, setup_sidebar_header, setup_voice_input_recorder,
+    setup_logging_and_monitoring, initialize_azure_clients, initialize_conversation, save_conversation_message,
+    speech_to_text, text_to_speech, setup_sidebar_voice_controls, setup_sidebar_conversation_info,
+    setup_page_header, setup_sidebar_header, setup_voice_input_recorder, setup_voice_instruction_examples,
     setup_system_message_input, create_chat_container, handle_audio_recording,
-    initialize_session_messages, add_message_to_session, handle_chat_flow,
-    find_existing_agent_by_name, initialize_ai_project_client,
-    get_environment_variables, get_agent_instructions, cleanup_agent_resources,
-    validate_agent_configuration, log_agent_creation, display_all_messages
+    initialize_session_messages, handle_chat_flow,find_existing_agent_by_name, initialize_ai_project_client,
+    get_environment_variables, get_agent_instructions, cleanup_agent_resources, log_agent_creation, display_all_messages,
+    ensure_fresh_conversation
 )
 
 # Azure AI Agents specific imports
@@ -43,6 +40,9 @@ logger.debug("Starting Multi-Agent VoiceBot page")
 
 # Initialize Azure clients
 client, token_provider, conversation_manager = initialize_azure_clients()
+
+# Ensure a fresh conversation for this page (resets if coming from a different page)
+ensure_fresh_conversation("05")
 
 # Initialize Azure AI Project client
 project_client = initialize_ai_project_client()
@@ -251,8 +251,12 @@ def create_connected_agents():
     
     return True
 
-def multi_agent_chat(user_request):
+def multi_agent_chat(user_request, conversation_history=None):
     """Handle chat using multi-agent system."""
+    # Note: Multi-agent system maintains its own conversation context through threads
+    # so conversation_history parameter is included for compatibility with handle_chat_flow
+    # but not used in this implementation
+    
     if not create_connected_agents():
         return "Sorry, I'm having trouble connecting to my specialized agents right now."
     
@@ -342,6 +346,10 @@ setup_sidebar_header()
 
 # Voice controls
 voice_on, selected_voice, tts_instructions = setup_sidebar_voice_controls()
+# Voice instruction examples
+setup_voice_instruction_examples()
+
+setup_sidebar_conversation_info()
 
 # System message configuration
 default_system_message = """You are a sophisticated AI assistant with access to specialized agents. You can help users with various tasks including:
@@ -366,9 +374,6 @@ You should:
 """
 
 system_message = setup_system_message_input(default_system_message)
-
-# Conversation info
-setup_sidebar_conversation_info()
 
 # Voice input recorder
 custom_audio_bytes = setup_voice_input_recorder()

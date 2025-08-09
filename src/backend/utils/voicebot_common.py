@@ -9,9 +9,11 @@ import logging
 import hashlib
 import streamlit as st
 import io
-from typing import Optional
-from datetime import datetime
+import json
+from typing import Optional, List, Any, Dict
+from datetime import datetime, timezone
 import pytz
+from pydantic import BaseModel, create_model
 
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
@@ -172,7 +174,7 @@ def speech_to_text(audio: bytes, client: AzureOpenAI) -> str:
         
     except Exception as e:
         logger.error(f"Speech to text error: {e}")
-        return "Sorry, I couldn't understand the audio."
+        return "Something is wrong with the audio conversion."
 
 
 def text_to_speech(text_input: str, client: AzureOpenAI) -> Optional[bytes]:
@@ -280,40 +282,23 @@ def setup_sidebar_voice_controls():
         
         return st.session_state.voice_on, st.session_state.selected_voice, st.session_state.tts_instructions
 
-
 def setup_sidebar_conversation_info():
     """
     Set up conversation info display in the sidebar.
     """
     with st.sidebar:
-        st.subheader("💬 Conversation Info")
-        if "conversation_doc" in st.session_state and st.session_state.conversation_doc:
-            conv_doc = st.session_state.conversation_doc
-            st.write(f"**Session:** `{conv_doc['session_id'][:8]}...`")
-            st.write(f"**Messages:** {len(conv_doc['messages'])}")
+        # New conversation button
+        if st.button("🔄 New Conversation"):
+            # Clear session state for new conversation
+            keys_to_clear = ["conversation_doc", "messages", "connected_agents", 
+                            "agent_thread"]
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
             
-            # Convert UTC to CET timezone
-            try:
-                created_utc = datetime.fromisoformat(conv_doc['created_at'].replace('Z', '+00:00'))
-                cet = pytz.timezone('Europe/Zurich')
-                created_cet = created_utc.astimezone(cet)
-                st.write(f"**Created:** {created_cet.strftime('%H:%M:%S')} CET")
-            except Exception:
-                st.write(f"**Created:** {conv_doc.get('created_at', 'Unknown')}")
-            
-            # New conversation button
-            if st.button("🔄 New Conversation"):
-                # Clear session state for new conversation
-                keys_to_clear = ["conversation_doc", "messages", "connected_agents", 
-                               "agent_thread", "sk_orchestration", "sk_runtime"]
-                for key in keys_to_clear:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                
-                st.rerun()
+            st.rerun()
         else:
             st.write("No active conversation")
-
 
 def display_conversation_history(messages: list):
     """
@@ -393,3 +378,179 @@ You must:
 - Provide structured responses when requested
 
 If you cannot help with a specific request, politely explain your limitations and suggest alternative approaches."""
+
+
+def ensure_fresh_conversation(page_id: str):
+    """Ensure a fresh conversation session when navigating between pages.
+
+    If the user switches from one voice bot page to another (e.g., 04 -> 05),
+    we clear conversation-related session_state so each page starts its own
+    independent session and history.
+
+    Args:
+        page_id: A short identifier for the page (e.g., "04", "05").
+    """
+    current_page = st.session_state.get("active_conversation_page")
+    if current_page != page_id:
+        # Keys that define/hold a conversation context
+        keys_to_clear = [
+            "conversation_doc",
+            "messages",
+            "connected_agents",
+            "agent_thread",
+        ]
+        for k in keys_to_clear:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.session_state.active_conversation_page = page_id
+        logger.info(f"Started new conversation session for page {page_id}")
+    else:
+        # Same page reload; keep conversation
+        logger.debug(f"Retaining existing conversation for page {page_id}")
+
+
+# ---------------------- Dynamic Schema & Summary Utilities ---------------------- #
+
+def json_schema_to_pydantic_type(schema_def: Dict[str, Any], field_name: str = "DynamicField"):
+    """Convert a JSON schema field definition into a Pydantic type annotation.
+
+    Supports basic JSON schema types: string, integer, number, boolean, array, object.
+    Nested objects produce nested dynamic Pydantic models.
+    """
+    schema_type = schema_def.get("type")
+
+    if schema_type == "string":
+        return (Optional[str], None)
+    if schema_type == "integer":
+        return (Optional[int], None)
+    if schema_type == "number":
+        return (Optional[float], None)
+    if schema_type == "boolean":
+        return (Optional[bool], None)
+    if schema_type == "array":
+        items_schema = schema_def.get("items", {})
+        if items_schema.get("type") == "string":
+            return (Optional[List[str]], None)
+        return (Optional[List[Any]], None)
+    if schema_type == "object":
+        properties = schema_def.get("properties", {})
+        nested_fields = {}
+        for prop_name, prop_schema in properties.items():
+            prop_type, _ = json_schema_to_pydantic_type(prop_schema, prop_name)
+            nested_fields[prop_name] = prop_type
+        nested_model = create_model(f"{field_name}Model", **nested_fields)
+        return (Optional[nested_model], None)
+    # Fallback
+    return (Optional[Any], None)
+
+
+def create_dynamic_pydantic_model(json_template: str) -> Optional[BaseModel]:
+    """Create a dynamic Pydantic model from a JSON schema template string.
+
+    Returns the generated model class or None on error. Errors are surfaced to the UI.
+    """
+    try:
+        schema = json.loads(json_template)
+        properties = schema.get("properties", {})
+        fields = {}
+        for field_name, field_schema in properties.items():
+            field_type, _ = json_schema_to_pydantic_type(field_schema, field_name)
+            fields[field_name] = field_type
+        DynamicModel = create_model("DynamicClaimModel", **fields)
+        return DynamicModel
+    except json.JSONDecodeError as e:
+        st.error(f"Invalid JSON template: {e}")
+    except Exception as e:
+        st.error(f"Error creating dynamic model: {e}")
+        logger.error(f"create_dynamic_pydantic_model error: {e}")
+    return None
+
+
+def generate_conversation_summary(client: AzureOpenAI, model_name: str, conversation_manager: Optional[ConversationManager], json_template: str,
+                                   extraction_system_message: str = "You are a data extraction expert specializing in extracting structured information from conversations. Extract information accurately and use null for any missing information.") -> Optional[Dict[str, Any]]:
+    """Generate a structured JSON summary for the active conversation using dynamic structured outputs.
+
+    Args:
+        client: AzureOpenAI client
+        model_name: Deployment name to use for structured output parsing
+        conversation_manager: ConversationManager instance
+        json_template: JSON schema template string
+        extraction_system_message: System prompt for extraction
+
+    Returns:
+        Parsed dictionary of extracted structured data or None on failure.
+    """
+    try:
+        if not conversation_manager:
+            st.error("Conversation manager not available.")
+            return None
+        if "conversation_doc" not in st.session_state or not st.session_state.conversation_doc:
+            st.error("No active conversation found.")
+            return None
+        conversation_doc = st.session_state.conversation_doc
+
+        # Build plain-text transcript
+        conversation_text_lines = []
+        for message in conversation_doc.get("messages", []):
+            role = message.get("role", "")
+            content = message.get("content", "")
+            conversation_text_lines.append(f"{role.upper()}: {content}")
+        conversation_text = "\n\n".join(conversation_text_lines).strip()
+        if not conversation_text:
+            st.error("No conversation content found to summarize.")
+            return None
+
+        if not json_template:
+            st.error("No JSON template provided.")
+            return None
+
+        DynamicModel = create_dynamic_pydantic_model(json_template)
+        if DynamicModel is None:
+            st.error("Cannot create dynamic model from the provided JSON template. Please check the template format.")
+            return None
+
+        summary_prompt = f"""
+Analyze the following conversation between a customer service agent and a customer.
+
+Extract all relevant information mentioned in the conversation. For any information not mentioned or unclear, use null values.
+
+Conversation:
+{conversation_text}
+
+Extract the information into the structured format based on the fields available in the schema.
+"""
+
+        with st.spinner("Generating conversation summary with dynamic structured outputs..."):
+            completion = client.beta.chat.completions.parse(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": extraction_system_message},
+                    {"role": "user", "content": summary_prompt},
+                ],
+                response_format=DynamicModel,
+                temperature=0.1,
+            )
+
+        parsed_claim = completion.choices[0].message.parsed
+        claim_dict = parsed_claim.model_dump()
+
+        # Persist into conversation document
+        conversation_doc["JSON_Summary"] = claim_dict
+        conversation_doc["summary_generated_at"] = datetime.now(timezone.utc).isoformat()
+        conversation_doc["extraction_method"] = "dynamic_structured_outputs"
+        conversation_doc["template_used"] = json_template
+
+        success = conversation_manager.save_conversation(conversation_doc)
+        if success:
+            st.success("✅ JSON summary generated and saved successfully using dynamic structured outputs!")
+            with st.expander("📋 Generated JSON Summary", expanded=True):
+                st.json(claim_dict)
+            st.info("🎯 Used your custom JSON template for structured extraction!")
+            st.session_state.conversation_doc = conversation_doc
+        else:
+            st.error("Failed to save the summary to the database.")
+        return claim_dict
+    except Exception as e:
+        st.error(f"Error generating conversation summary: {e}")
+        logger.error(f"generate_conversation_summary error: {e}")
+        return None
