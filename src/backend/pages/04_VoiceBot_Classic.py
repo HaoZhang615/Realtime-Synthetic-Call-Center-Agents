@@ -19,6 +19,9 @@ from utils import (
     handle_chat_flow, ensure_fresh_conversation, get_current_datetime
 )
 
+# Import performance tracking
+from utils.performance_metrics import PerformanceTracker, save_performance_metrics, analyze_customer_sentiment_from_conversation
+
 # Configure logging and monitoring
 setup_logging_and_monitoring()
 
@@ -30,6 +33,11 @@ client, token_provider, conversation_manager = initialize_azure_clients()
 
 # Ensure a fresh conversation for this page (resets if coming from a different page)
 ensure_fresh_conversation("04")
+
+# Initialize performance tracker
+if "performance_tracker" not in st.session_state:
+    st.session_state.performance_tracker = PerformanceTracker()
+    st.session_state.performance_tracker.start_session()
 
 # Get model deployment names
 gpt4omini = os.environ["AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT"]
@@ -45,11 +53,19 @@ def basic_chat(user_request, conversation_history=None):
     if conversation_history is None:
         conversation_history = []
         
+    # Start tracking response latency
+    st.session_state.performance_tracker.start_response_timing()
+    st.session_state.performance_tracker.increment_message_count()
+        
     # Use the system message from session state
     system_message = st.session_state.system_message
     
     # Add current datetime to the system message (invisible to user)
     system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{system_message}"
+    
+    # Update model parameters for tracking
+    temperature = st.session_state.get("temperature", 0.7)
+    st.session_state.performance_tracker.update_model_parameters(temperature, system_message_with_datetime, gpt4omini)
     
     # Update system message with the current JSON template if needed
     if "json_template" in st.session_state and st.session_state.json_template:
@@ -74,19 +90,28 @@ def basic_chat(user_request, conversation_history=None):
     # Add current user request
     messages.append({"role": "user", "content": user_request})
     
-    response = client.chat.completions.create(
-        model=gpt4omini,
-        messages=messages,
-        temperature=0.7,
-        max_tokens=800,
-    )
-    
-    assistant_response = response.choices[0].message.content
-    
-    # Save conversation to Cosmos DB using common utility
-    save_conversation_message(user_request, assistant_response, conversation_manager)
-    
-    return assistant_response
+    try:
+        response = client.chat.completions.create(
+            model=gpt4omini,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=800,
+        )
+        
+        # End response timing
+        st.session_state.performance_tracker.end_response_timing()
+        
+        assistant_response = response.choices[0].message.content
+        
+        # Save conversation to Cosmos DB using common utility
+        save_conversation_message(user_request, assistant_response, conversation_manager)
+        
+        return assistant_response
+        
+    except Exception as e:
+        st.session_state.performance_tracker.end_response_timing()
+        logger.error(f"Error in basic_chat: {e}")
+        raise
 # Set up page header
 setup_page_header("Azure OpenAI powered Self Service Chatbot")
 
@@ -107,6 +132,28 @@ setup_sidebar_conversation_info()
 # Voice input recorder
 custom_audio_bytes = setup_voice_input_recorder()
 
+# Wrapper functions for performance tracking
+def tracked_speech_to_text(audio_bytes):
+    """Speech-to-text with performance tracking."""
+    st.session_state.performance_tracker.start_speech_to_text()
+    try:
+        result = speech_to_text(audio_bytes, client)
+        st.session_state.performance_tracker.end_speech_to_text()
+        return result
+    except Exception as e:
+        st.session_state.performance_tracker.end_speech_to_text()
+        raise
+
+def tracked_text_to_speech(text):
+    """Text-to-speech with performance tracking."""
+    st.session_state.performance_tracker.start_text_to_speech()
+    try:
+        result = text_to_speech(text, client)
+        st.session_state.performance_tracker.end_text_to_speech()
+        return result
+    except Exception as e:
+        st.session_state.performance_tracker.end_text_to_speech()
+        raise
 
 # Default JSON template for structured data collection
 default_json_template = """{
@@ -219,6 +266,19 @@ When using the JSON template:
 
 # Add JSON template input to sidebar
 with st.sidebar:
+    # Temperature control
+    st.subheader("🎛️ Model Settings")
+    if "temperature" not in st.session_state:
+        st.session_state.temperature = 0.7
+    
+    st.session_state.temperature = st.slider(
+        "Temperature",
+        min_value=0.0,
+        max_value=1.0,
+        value=st.session_state.temperature,
+        step=0.1,
+        help="Controls randomness: 0.0 = deterministic, 1.0 = very creative"
+    )
     st.subheader("📋 JSON Template")
     if "json_template" not in st.session_state:
         st.session_state.json_template = default_json_template
@@ -252,22 +312,58 @@ with st.sidebar:
     # Add a small note about how the template is used
     st.caption("This template will be dynamically converted to a Pydantic model for structured outputs.")
     
+    
     # Add separator
     st.markdown("---")
     system_message = setup_system_message_input(default_system_message)
 
     # Finish Conversation section
     st.subheader("🏁 Finish Conversation")
-    st.caption("Generate a structured JSON summary using your custom template with Azure OpenAI dynamic structured outputs.")
+    st.caption("Generate a structured JSON summary and save performance metrics.")
     
     if st.button("📋 Generate JSON Summary", type="primary"):
         from utils.voicebot_common import generate_conversation_summary as shared_generate_summary
+        
+        # Analyze customer sentiment from conversation history
+        if "messages" in st.session_state and st.session_state.messages:
+            try:
+                sentiment_score = analyze_customer_sentiment_from_conversation(
+                    client, gpt4omini, st.session_state.messages
+                )
+                st.session_state.performance_tracker.set_customer_sentiment(sentiment_score)
+                st.success(f"Customer sentiment analyzed: {sentiment_score}/5")
+            except Exception as e:
+                logger.error(f"Error analyzing sentiment: {e}")
+                st.warning("Could not analyze customer sentiment")
+        
+        # End session tracking
+        st.session_state.performance_tracker.end_session()
+        
+        # Save performance metrics to conversation document
+        if "conversation_doc" in st.session_state and st.session_state.conversation_doc:
+            logger.info(f"Saving performance metrics to conversation: {st.session_state.conversation_doc.get('id', 'unknown')}")
+            save_performance_metrics(st.session_state.conversation_doc, st.session_state.performance_tracker)
+            logger.info(f"Performance metrics saved. Document keys: {list(st.session_state.conversation_doc.keys())}")
+            
+            # Save updated conversation with metrics to CosmosDB
+            try:
+                conversation_manager.save_conversation(st.session_state.conversation_doc)
+                st.success("Performance metrics saved to CosmosDB")
+                logger.info("Successfully saved conversation with metrics to CosmosDB")
+            except Exception as e:
+                logger.error(f"Error saving conversation with metrics: {e}")
+                st.error("Could not save performance metrics")
+        else:
+            logger.warning("No conversation document found to save metrics")
+            st.warning("No conversation document found to save metrics")
+        
+        # Generate the JSON summary
         shared_generate_summary(client, gpt4omini, conversation_manager, st.session_state.json_template)
 
 
 # Handle audio recording
 if custom_audio_bytes:
-    handle_audio_recording(custom_audio_bytes, lambda audio: speech_to_text(audio, client))
+    handle_audio_recording(custom_audio_bytes, tracked_speech_to_text)
 
 # Initialize session messages
 initialize_session_messages()
@@ -286,11 +382,8 @@ else:
 
 with conversation_container:
     if prompt:
-        # Use the common chat flow handler
-        def tts_func(text):
-            return text_to_speech(text, client)
-        
-        handle_chat_flow(prompt, basic_chat, voice_on, tts_func)
+        # Use the common chat flow handler with tracked TTS
+        handle_chat_flow(prompt, basic_chat, voice_on, tracked_text_to_speech)
     else:
         # Display existing conversation
         display_conversation_history(st.session_state.messages)

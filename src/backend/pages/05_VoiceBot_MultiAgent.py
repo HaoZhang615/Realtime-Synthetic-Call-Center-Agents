@@ -122,61 +122,6 @@ def create_connected_agents():
                 name="ai_search_agent",
                 description="Gets the internal knowledge base search results for a query"
             )
-            
-        #----------reuse or create email agent --------------------------------#
-        # email_agent = None
-        # connected_email_agent = None
-        # 
-        # # Only create email agent if Logic App configuration is available
-        # if env_vars["subscription_id"] and env_vars["resource_group"] and env_vars["logic_app_name"]:
-        #     try:
-        #         # Create AzureLogicAppTool instance
-        #         logic_app_tool = AzureLogicAppTool(
-        #             env_vars["subscription_id"], 
-        #             env_vars["resource_group"], 
-        #             DefaultAzureCredential()
-        #         )
-        #         
-        #         # Register the Logic App
-        #         logic_app_tool.register_logic_app(env_vars["logic_app_name"], env_vars["logic_app_trigger"])
-        #         logger.info("Logic App registered successfully!")
-        #         
-        #         # Create the send email function
-        #         send_email_func = create_send_email_function(logic_app_tool, env_vars["logic_app_name"])
-        #         
-        #         # Prepare the function tools for the agent
-        #         functions_to_use = {send_email_func}
-        #         functions = FunctionTool(functions=functions_to_use)
-        #         
-        #         # Check for existing email agent or create new one
-        #         existing_email_agent = find_existing_agent_by_name(project_client, "SendEmailAgent")
-        #         
-        #         if not existing_email_agent:
-        #             # Create email agent using project client
-        #             email_agent = project_client.agents.create_agent(
-        #                 model=model_deployment,
-        #                 name="SendEmailAgent",
-        #                 instructions=instructions["email"],
-        #                 tools=functions.definitions,
-        #             )
-        #             log_agent_creation("SendEmailAgent", email_agent.id, True)
-        #         else:
-        #             email_agent = existing_email_agent
-        #             log_agent_creation("SendEmailAgent", email_agent.id, False)
-        #         
-        #         # Initialize Connected Agent tool for email
-        #         connected_email_agent = ConnectedAgentTool(
-        #             id=email_agent.id,
-        #             name="email_agent",
-        #             description="Sends emails to specified recipients with custom subject and body content"
-        #         )
-        #         
-        #     except Exception as e:
-        #         logger.error(f"Error creating email agent: {e}")
-        #         email_agent = None
-        #         connected_email_agent = None
-        # else:
-        #     logger.warning("Email agent configuration not available - Logic App environment variables missing")
 
         #----------reuse or create concierge agent --------------------------------#
             # Check for existing main agent or create new one
@@ -185,10 +130,6 @@ def create_connected_agents():
             if not existing_concierge_agent:
                 # Build tools list based on availability
                 agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
-                # # Add email agent tools if available
-                # if connected_email_agent:
-                #     agent_tools += connected_email_agent.definitions
-                #     logger.info("Email agent tools added to concierge agent")
 
                 # Add current datetime to the system message (invisible to user)
                 system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{st.session_state.system_message}"
@@ -207,10 +148,6 @@ def create_connected_agents():
                 try:
                     # Build tools list based on availability
                     agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
-                    # # Add email agent tools if available
-                    # if connected_email_agent:
-                    #     agent_tools += connected_email_agent.definitions
-                    #     logger.info("Email agent tools added to existing concierge agent")
                     
                     # Add current datetime to the system message (invisible to user)
                     system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{st.session_state.system_message}"
@@ -236,18 +173,11 @@ def create_connected_agents():
                 "connected_web_search_agent": connected_web_search_agent,
                 "connected_ai_search_agent": connected_ai_search_agent,
             }
-            # # Add email agent to session state if available
-            # if email_agent and connected_email_agent:
-            #     st.session_state.connected_agents["email_agent"] = email_agent
-            #     st.session_state.connected_agents["connected_email_agent"] = connected_email_agent
-            #     logger.info("Email agent added to session state")
             
             st.session_state.agent_thread = thread
             
             logger.info("All agents successfully initialized and stored in session state")
             agent_ids = f"Web: {web_search_agent.id}, AI Search: {ai_search_agent.id}, Concierge: {concierge_agent.id}"
-            # if email_agent:
-            #     agent_ids += f", Email: {email_agent.id}"
             logger.info(f"Agent IDs - {agent_ids}")
             
         except Exception as e:
@@ -362,13 +292,6 @@ default_system_message = """You are a sophisticated AI assistant with access to 
 
 1. **Web Search**: Use the web_search_agent to search the internet for current information and news
 2. **Internal Knowledge Base**: Use the ai_search_agent to search internal company documents and knowledge
-3. **Send Emails**: Use the email_agent to send emails to specified recipients with custom subject and body content
-
-For email tasks specifically:
-- Always ask for recipient email address if not provided
-- Craft professional and appropriate email content
-- Include current date/time when relevant
-- Confirm email details before sending
 
 You should:
 - Be professional, helpful, and concise
