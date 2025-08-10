@@ -16,9 +16,7 @@ This document summarizes the refactoring work completed to eliminate code duplic
 - `speech_to_text()` / `text_to_speech()` - Audio processing functions
 - `save_conversation_message()` - Helper for saving messages to Cosmos DB
 - `setup_sidebar_voice_controls()` - Common voice control UI components
-- `setup_sidebar_conversation_info()` - Conversation information display
 - `cleanup_response_for_tts()` - Text cleaning for speech synthesis
-- `get_default_system_message()` - Standard system message template
 
 ### 2. `utils/agent_common.py`
 **Purpose**: Common utilities for multi-agent implementations
@@ -30,7 +28,6 @@ This document summarizes the refactoring work completed to eliminate code duplic
 - `get_agent_instructions()` - Standard agent instruction templates
 - `validate_agent_configuration()` - Configuration validation
 - `log_agent_creation()` - Consistent agent creation logging
-- `cleanup_agent_resources()` - Agent resource cleanup
 
 ### 3. `utils/streamlit_ui_common.py`
 **Purpose**: Common Streamlit UI components and patterns

@@ -66,7 +66,8 @@ class ConversationManager:
     def create_conversation_document(
         self, 
         customer_id: str, 
-        session_id: str
+        session_id: str,
+        voicebot_type: Optional[str] = None
     ) -> Dict:
         """
         Create a new conversation document structure.
@@ -74,6 +75,7 @@ class ConversationManager:
         Args:
             customer_id: Customer/session identifier (partition key)
             session_id: Streamlit session ID
+            voicebot_type: Optional voicebot type identifier (e.g., "classic", "multiagent")
             
         Returns:
             New conversation document
@@ -81,7 +83,7 @@ class ConversationManager:
         now = datetime.now(timezone.utc).isoformat()
         conversation_id = self.generate_conversation_id(customer_id, session_id)
         
-        return {
+        document = {
             "id": conversation_id,
             "customer_id": customer_id,  # Partition key
             "session_id": session_id,
@@ -89,6 +91,12 @@ class ConversationManager:
             "updated_at": now,
             "messages": []
         }
+        
+        # Add voicebot type if specified
+        if voicebot_type:
+            document["voicebot"] = voicebot_type
+            
+        return document
     
     def add_message_to_conversation(
         self,

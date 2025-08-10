@@ -42,7 +42,7 @@ try:
         # Agent common functions
         'find_existing_agent_by_name', 'find_existing_agent_by_name_async',
         'initialize_ai_project_client', 'get_environment_variables',
-        'get_agent_instructions', 'cleanup_agent_resources',
+        'get_agent_instructions', 
         'validate_agent_configuration', 'log_agent_creation',
         
         # Streamlit UI common functions

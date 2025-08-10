@@ -184,22 +184,6 @@ You should:
     }
 
 
-def cleanup_agent_resources(session_state_key: str = "connected_agents"):
-    """
-    Cleanup agent resources (placeholder for future cleanup logic).
-    
-    Args:
-        session_state_key: Key in session state containing agent references
-    """
-    try:
-        # Note: Cleanup is currently commented out to preserve agents across sessions
-        # This function serves as a placeholder for future cleanup implementation
-        logger.info("Agent resources cleanup completed (preserved across sessions)")
-        
-    except Exception as e:
-        logger.error(f"Error during agent cleanup: {e}")
-
-
 def validate_agent_configuration() -> bool:
     """
     Validate that required environment variables for agent configuration are present.

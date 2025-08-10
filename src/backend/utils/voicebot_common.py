@@ -117,12 +117,13 @@ def get_current_datetime() -> str:
     return current_time.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def initialize_conversation(conversation_manager: Optional[ConversationManager] = None):
+def initialize_conversation(conversation_manager: Optional[ConversationManager] = None, voicebot_type: Optional[str] = None):
     """
     Initialize or load conversation from Cosmos DB.
     
     Args:
         conversation_manager: Optional ConversationManager instance
+        voicebot_type: Optional voicebot type identifier (e.g., "classic", "multiagent")
     """
     if "conversation_doc" not in st.session_state and conversation_manager:
         try:
@@ -131,7 +132,8 @@ def initialize_conversation(conversation_manager: Optional[ConversationManager] 
             
             st.session_state.conversation_doc = conversation_manager.create_conversation_document(
                 customer_id=customer_id,
-                session_id=session_id
+                session_id=session_id,
+                voicebot_type=voicebot_type
             )
             
             logger.info(f"Initialized new conversation: {st.session_state.conversation_doc['id']}")

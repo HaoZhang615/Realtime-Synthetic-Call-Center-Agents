@@ -39,8 +39,26 @@ if "performance_tracker" not in st.session_state:
     st.session_state.performance_tracker = PerformanceTracker()
     st.session_state.performance_tracker.start_session()
 
-# Get model deployment names
-gpt4omini = os.environ["AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT"]
+# Get all available model deployment names
+available_models = {}
+try:
+    available_models["gpt-4o"] = os.environ.get("AZURE_OPENAI_GPT4o_DEPLOYMENT")
+    available_models["gpt-4o-mini"] = os.environ.get("AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT")
+    available_models["gpt-4.1"] = os.environ.get("AZURE_OPENAI_GPT41_DEPLOYMENT")
+    available_models["gpt-4.1-mini"] = os.environ.get("AZURE_OPENAI_GPT41_MINI_DEPLOYMENT")
+    available_models["gpt-4.1-nano"] = os.environ.get("AZURE_OPENAI_GPT41_NANO_DEPLOYMENT")
+    
+    # Filter out None values (models not available)
+    available_models = {k: v for k, v in available_models.items() if v is not None}
+    
+    logger.info(f"Available models: {list(available_models.keys())}")
+except Exception as e:
+    logger.warning(f"Error loading models: {e}")
+    # Fallback to just gpt-4o-mini if there's an issue
+    available_models = {"gpt-4o-mini": os.environ.get("AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT", "gpt-4o-mini")}
+
+# Default model deployment name (keeping backward compatibility)
+gpt4omini = os.environ.get("AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT", "gpt-4o-mini")
 
 def load_css(file_path):
     with open(file_path) as f:
@@ -63,9 +81,12 @@ def basic_chat(user_request, conversation_history=None):
     # Add current datetime to the system message (invisible to user)
     system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{system_message}"
     
+    # Get the selected model deployment name
+    selected_model_deployment = st.session_state.get("selected_model_deployment", gpt4omini)
+    
     # Update model parameters for tracking
     temperature = st.session_state.get("temperature", 0.7)
-    st.session_state.performance_tracker.update_model_parameters(temperature, system_message_with_datetime, gpt4omini)
+    st.session_state.performance_tracker.update_model_parameters(temperature, system_message_with_datetime, selected_model_deployment)
     
     # Update system message with the current JSON template if needed
     if "json_template" in st.session_state and st.session_state.json_template:
@@ -92,7 +113,8 @@ def basic_chat(user_request, conversation_history=None):
     
     try:
         response = client.chat.completions.create(
-            model=gpt4omini,
+            model=selected_model_deployment,
+            store=True,  # Store the response for performance tracking
             messages=messages,
             temperature=temperature,
             max_tokens=800,
@@ -115,8 +137,8 @@ def basic_chat(user_request, conversation_history=None):
 # Set up page header
 setup_page_header("Azure OpenAI powered Self Service Chatbot")
 
-# Initialize conversation on page load
-initialize_conversation(conversation_manager)
+# Initialize conversation on page load with voicebot type
+initialize_conversation(conversation_manager, voicebot_type="classic")
 
 # Set up sidebar configuration
 setup_sidebar_header()
@@ -250,10 +272,13 @@ YOUR PRIMARY OBJECTIVES:
 
 CONVERSATIONAL GUIDELINES:
 
+- IF CUSTOMER IS SPEAKING GERMAN OR SWISS GERMAN, SWITCH TO GERMAN LANGUAGE
 - Be polite, clear, and concise
+- Be aware of the current date and time when user provides datetime related information
 - Ask follow-up questions if information is missing or unclear
 - Handle interruptions or corrections gracefully
 - Use a natural conversation flow while staying on task
+- When confirming information with the customer, summarize in natural language instead of repeating the JSON structure
 - For emergency situations, be efficient but calm and reassuring
 - Explain why you need certain information to increase customer comfort
 - Do not make assumptions or provide legal/policy advice
@@ -266,6 +291,41 @@ When using the JSON template:
 
 # Add JSON template input to sidebar
 with st.sidebar:
+    # Model selection
+    st.subheader("🤖 Model Selection")
+    if "selected_model" not in st.session_state:
+        st.session_state.selected_model = "gpt-4o-mini"  # Default to gpt-4o-mini
+    
+    # Create dropdown for model selection
+    if available_models:
+        st.session_state.selected_model = st.selectbox(
+            "Choose AI Model:",
+            options=list(available_models.keys()),
+            index=list(available_models.keys()).index(st.session_state.selected_model) 
+                  if st.session_state.selected_model in available_models else 0,
+            help="Select the AI model to use for conversation"
+        )
+        
+        # Store the deployment name for the selected model
+        st.session_state.selected_model_deployment = available_models[st.session_state.selected_model]
+        
+        # Show some info about the selected model
+        model_descriptions = {
+            "gpt-4o": "Latest GPT-4o model - Most capable, slower response",
+            "gpt-4o-mini": "Lightweight GPT-4o - Fast and efficient",
+            "gpt-4.1": "GPT-4.1 model - Advanced reasoning capabilities",
+            "gpt-4.1-mini": "GPT-4.1 mini - Balanced performance and speed",
+            "gpt-4.1-nano": "GPT-4.1 nano - Fastest response, basic capabilities"
+        }
+        
+        if st.session_state.selected_model in model_descriptions:
+            st.caption(model_descriptions[st.session_state.selected_model])
+            
+        st.info(f"Using deployment: `{st.session_state.selected_model_deployment}`")
+    else:
+        st.error("No models available. Check environment configuration.")
+        st.session_state.selected_model_deployment = gpt4omini
+    
     # Temperature control
     st.subheader("🎛️ Model Settings")
     if "temperature" not in st.session_state:
@@ -279,6 +339,12 @@ with st.sidebar:
         step=0.1,
         help="Controls randomness: 0.0 = deterministic, 1.0 = very creative"
     )
+    
+    
+    # Add separator
+    st.markdown("---")
+    system_message = setup_system_message_input(default_system_message)
+
     st.subheader("📋 JSON Template")
     if "json_template" not in st.session_state:
         st.session_state.json_template = default_json_template
@@ -311,24 +377,24 @@ with st.sidebar:
     
     # Add a small note about how the template is used
     st.caption("This template will be dynamically converted to a Pydantic model for structured outputs.")
-    
-    
-    # Add separator
-    st.markdown("---")
-    system_message = setup_system_message_input(default_system_message)
-
     # Finish Conversation section
     st.subheader("🏁 Finish Conversation")
     st.caption("Generate a structured JSON summary and save performance metrics.")
     
     if st.button("📋 Generate JSON Summary", type="primary"):
+        # Set a flag to indicate we're generating summary (prevents message processing)
+        st.session_state.generating_summary = True
+        
         from utils.voicebot_common import generate_conversation_summary as shared_generate_summary
+        
+        # Get the selected model deployment name
+        selected_model_deployment = st.session_state.get("selected_model_deployment", gpt4omini)
         
         # Analyze customer sentiment from conversation history
         if "messages" in st.session_state and st.session_state.messages:
             try:
                 sentiment_score = analyze_customer_sentiment_from_conversation(
-                    client, gpt4omini, st.session_state.messages
+                    client, selected_model_deployment, st.session_state.messages
                 )
                 st.session_state.performance_tracker.set_customer_sentiment(sentiment_score)
                 st.success(f"Customer sentiment analyzed: {sentiment_score}/5")
@@ -358,7 +424,7 @@ with st.sidebar:
             st.warning("No conversation document found to save metrics")
         
         # Generate the JSON summary
-        shared_generate_summary(client, gpt4omini, conversation_manager, st.session_state.json_template)
+        shared_generate_summary(client, selected_model_deployment, conversation_manager, st.session_state.json_template)
 
 
 # Handle audio recording
@@ -372,7 +438,12 @@ initialize_session_messages()
 conversation_container = create_chat_container(600)
 
 # Handle new message input
-if text_prompt := st.chat_input("type your request here..."):
+# Skip message processing if we're generating a summary
+if st.session_state.get("generating_summary", False):
+    # Clear the flag and don't process any messages
+    st.session_state.generating_summary = False
+    prompt = None
+elif text_prompt := st.chat_input("type your request here..."):
     prompt = text_prompt
 elif "voice_prompt" in st.session_state:
     prompt = st.session_state.voice_prompt

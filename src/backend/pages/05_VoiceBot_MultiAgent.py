@@ -20,7 +20,7 @@ from utils import (
     setup_page_header, setup_sidebar_header, setup_voice_input_recorder, setup_voice_instruction_examples,
     setup_system_message_input, create_chat_container, handle_audio_recording,
     initialize_session_messages, handle_chat_flow,find_existing_agent_by_name, initialize_ai_project_client,
-    get_environment_variables, get_agent_instructions, cleanup_agent_resources, log_agent_creation, display_all_messages,
+    get_environment_variables, get_agent_instructions, log_agent_creation, display_all_messages,
     ensure_fresh_conversation, get_current_datetime
 )
 
@@ -275,7 +275,7 @@ def multi_agent_chat(user_request, conversation_history=None):
 setup_page_header("🤖 Multi-Agent Voice Bot", "Powered by Azure AI Agents with Connected Agent tools")
 
 # Initialize conversation
-initialize_conversation(conversation_manager)
+initialize_conversation(conversation_manager, voicebot_type="multiagent")
 
 # Sidebar Configuration
 setup_sidebar_header()

@@ -25,4 +25,5 @@ dependencies = [
     "azure-mgmt-logic",
     "jsonref",
     "semantic-kernel>=1.32.2",
+    "azure-ai-evaluation>=1.10.0",
 ]

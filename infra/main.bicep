@@ -119,6 +119,16 @@ param aoaiGpt4oMiniModelName string = 'gpt-4o-mini'
 param aoaiGpt4oMiniModelVersion string = '2024-07-18'
 param embedModel string = 'text-embedding-3-large'
 
+// New GPT model parameters
+param aoaiGpt4oModelName string = 'gpt-4o-2024-11-20'
+param aoaiGpt4oModelVersion string = '2024-11-20'
+param aoaiGpt41ModelName string = 'gpt-4.1-2025-04-14'
+param aoaiGpt41ModelVersion string = '2025-04-14'
+param aoaiGpt41MiniModelName string = 'gpt-4.1-mini-2025-04-14'
+param aoaiGpt41MiniModelVersion string = '2025-04-14'
+param aoaiGpt41NanoModelName string = 'gpt-4.1-nano-2025-04-14'
+param aoaiGpt41NanoModelVersion string = '2025-04-14'
+
 // Audio models for VoiceBot Classic
 param aoaiTranscribeModelName string = 'gpt-4o-mini-transcribe'
 param aoaiTranscribeModelVersion string = '2025-03-20'
@@ -165,6 +175,59 @@ var gpt4ominiDeployment =    [{
     }
   }]
 
+// New GPT model deployments
+var gpt4oDeployment = [{
+    name: aoaiGpt4oModelName
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4o'
+      version: aoaiGpt4oModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity: 50
+    }
+  }]
+
+var gpt41Deployment = [{
+    name: aoaiGpt41ModelName
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4.1'
+      version: aoaiGpt41ModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity: 50
+    }
+  }]
+
+var gpt41MiniDeployment = [{
+    name: aoaiGpt41MiniModelName
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4.1-mini'
+      version: aoaiGpt41MiniModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity: 50
+    }
+  }]
+
+var gpt41NanoDeployment = [{
+    name: aoaiGpt41NanoModelName
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4.1-nano'
+      version: aoaiGpt41NanoModelVersion
+    }
+    sku: { 
+      name: 'GlobalStandard'
+      capacity: 50
+    }
+  }]
+
 // Audio models deployment for VoiceBot Classic
 var audioModelsDeployment = [
   {
@@ -193,7 +256,7 @@ var audioModelsDeployment = [
   }
 ]
 
-var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment, audioModelsDeployment)
+var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, gpt4oDeployment, gpt41Deployment, gpt41MiniDeployment, gpt41NanoDeployment, embeddingDeployment, audioModelsDeployment)
 
 // Add Key Vault to store secrets like Bing Search API Key
 module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
@@ -511,6 +574,10 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_OPENAI_ENDPOINT: openAiEndpoint
       AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: aoaiGpt4oRealtimeModelName
+      AZURE_OPENAI_GPT4o_DEPLOYMENT: aoaiGpt4oModelName
+      AZURE_OPENAI_GPT41_DEPLOYMENT: aoaiGpt41ModelName
+      AZURE_OPENAI_GPT41_MINI_DEPLOYMENT: aoaiGpt41MiniModelName
+      AZURE_OPENAI_GPT41_NANO_DEPLOYMENT: aoaiGpt41NanoModelName
       AZURE_AI_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_AI_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
@@ -569,6 +636,10 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
       AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
+      AZURE_OPENAI_GPT4o_DEPLOYMENT: aoaiGpt4oModelName
+      AZURE_OPENAI_GPT41_DEPLOYMENT: aoaiGpt41ModelName
+      AZURE_OPENAI_GPT41_MINI_DEPLOYMENT: aoaiGpt41MiniModelName
+      AZURE_OPENAI_GPT41_NANO_DEPLOYMENT: aoaiGpt41NanoModelName
       AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT: aoaiTranscribeModelName
       AZURE_OPENAI_TTS_DEPLOYMENT: aoaiTtsModelName
       AZURE_AI_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
@@ -724,6 +795,10 @@ output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
 output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelName
 output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
+output AZURE_OPENAI_GPT4o_DEPLOYMENT string = aoaiGpt4oModelName
+output AZURE_OPENAI_GPT41_DEPLOYMENT string = aoaiGpt41ModelName
+output AZURE_OPENAI_GPT41_MINI_DEPLOYMENT string = aoaiGpt41MiniModelName
+output AZURE_OPENAI_GPT41_NANO_DEPLOYMENT string = aoaiGpt41NanoModelName
 output AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT string = aoaiTranscribeModelName
 output AZURE_OPENAI_TTS_DEPLOYMENT string = aoaiTtsModelName
 @description('AI Foundry Agent Model Deployment Name')

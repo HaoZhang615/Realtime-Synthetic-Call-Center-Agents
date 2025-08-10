@@ -30,25 +30,25 @@
     version: 2025-04-14
   versionUpgradeOption: OnceCurrentVersionExpired
 
-# - name: gpt-4o-2024-11-20
-#   sku:
-#     name: GlobalStandard
-#     capacity: 50
-#   model:
-#     format: OpenAI
-#     name: gpt-4o
-#     version: 2024-11-20
-#   versionUpgradeOption: OnceCurrentVersionExpired
+- name: gpt-4o-2024-11-20
+  sku:
+    name: GlobalStandard
+    capacity: 50
+  model:
+    format: OpenAI
+    name: gpt-4o
+    version: 2024-11-20
+  versionUpgradeOption: OnceCurrentVersionExpired
   
-# - name: gpt-4o-mini-2024-07-18
-#   sku:
-#     name: GlobalStandard
-#     capacity: 50
-#   model:
-#     format: OpenAI
-#     name: gpt-4o-mini
-#     version: 2024-07-18
-#   versionUpgradeOption: OnceCurrentVersionExpired
+- name: gpt-4o-mini-2024-07-18
+  sku:
+    name: GlobalStandard
+    capacity: 50
+  model:
+    format: OpenAI
+    name: gpt-4o-mini
+    version: 2024-07-18
+  versionUpgradeOption: OnceCurrentVersionExpired
 
 # - name: o3-mini-2025-01-31
 #   sku:

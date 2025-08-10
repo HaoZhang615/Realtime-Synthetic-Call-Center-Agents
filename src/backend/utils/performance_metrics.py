@@ -47,6 +47,8 @@ class PerformanceTracker:
         self.response_start_time = None
         self.stt_start_time = None
         self.tts_start_time = None
+        self.stt_count = 0
+        self.tts_count = 0
     
     def start_session(self):
         """Mark the start of a conversation session."""
@@ -79,6 +81,7 @@ class PerformanceTracker:
         if self.stt_start_time:
             duration = (time.time() - self.stt_start_time) * 1000
             self.metrics.speech_to_text_latency_ms += duration
+            self.stt_count += 1
             self.stt_start_time = None
     
     def start_text_to_speech(self):
@@ -90,6 +93,7 @@ class PerformanceTracker:
         if self.tts_start_time:
             duration = (time.time() - self.tts_start_time) * 1000
             self.metrics.text_to_speech_latency_ms += duration
+            self.tts_count += 1
             self.tts_start_time = None
     
     def increment_message_count(self):
@@ -112,16 +116,20 @@ class PerformanceTracker:
     def get_metrics_summary(self) -> Dict[str, Any]:
         """Get a summary of key performance metrics."""
         avg_response_time = self.metrics.response_latency_ms / max(1, self.metrics.message_count)
+        avg_stt_latency = self.metrics.speech_to_text_latency_ms / max(1, self.stt_count)
+        avg_tts_latency = self.metrics.text_to_speech_latency_ms / max(1, self.tts_count)
         conversation_duration_min = self.metrics.conversation_duration_ms / 60000 if self.metrics.conversation_duration_ms > 0 else 0
         
         return {
             "avg_response_latency_ms": round(avg_response_time, 2),
-            "total_stt_latency_ms": round(self.metrics.speech_to_text_latency_ms, 2),
-            "total_tts_latency_ms": round(self.metrics.text_to_speech_latency_ms, 2),
+            "avg_stt_latency_ms": round(avg_stt_latency, 2),
+            "avg_tts_latency_ms": round(avg_tts_latency, 2),
             "temperature": self.metrics.temperature,
             "model": self.metrics.model,
             "system_message": self.metrics.system_message,
             "total_messages": self.metrics.message_count,
+            "total_stt_operations": self.stt_count,
+            "total_tts_operations": self.tts_count,
             "conversation_duration_min": round(conversation_duration_min, 2),
             "customer_sentiment": self.metrics.customer_sentiment,
             "session_completed": bool(self.metrics.session_end_time)

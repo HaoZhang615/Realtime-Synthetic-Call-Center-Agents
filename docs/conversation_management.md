@@ -50,7 +50,6 @@ The `AI_Conversations` container stores conversation documents with the followin
 ### 🎛️ User Controls
 - Start new conversation button
 - Recent conversations viewer
-- Conversation info display in sidebar
 
 ## Implementation Files
 
