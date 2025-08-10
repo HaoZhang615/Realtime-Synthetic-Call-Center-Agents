@@ -9,6 +9,7 @@ from azure.identity import DefaultAzureCredential
 import util
 
 from realtime2 import RealtimeClient
+from realtime_conversation_logger import RealtimeConversationLogger
     
 from agents.root import root_assistant
 from agents.internal_kb import internal_kb_agent
@@ -43,16 +44,28 @@ def load_customers() -> List[Dict]:
 async def setup_openai_realtime():
     """Instantiate and configure the OpenAI Realtime Client"""
     customer_id = cl.user_session.get("customer_id")
+    
+    # Initialize conversation logger
+    conversation_logger = RealtimeConversationLogger(customer_id)
+    cl.user_session.set("conversation_logger", conversation_logger)
+    await conversation_logger.start_logging()
              
     openai_realtime = RealtimeClient(system_prompt = "")
     cl.user_session.set("track_id", str(uuid4()))
     async def handle_conversation_updated(event):
         item = event.get("item")
         delta = event.get("delta")
+        conversation_logger = cl.user_session.get("conversation_logger")
         """Currently used to stream audio back to the client."""
         if event:
             if "input_audio_transcription" in item["type"]:
-                msg = cl.Message(content=delta["transcript"], author="user")
+                # For user transcription, accumulate and finalize immediately since it's complete
+                transcription = delta["transcript"]
+                if conversation_logger:
+                    # User transcription is complete when we receive it
+                    await conversation_logger.log_user_message(transcription.strip(), "audio")
+                
+                msg = cl.Message(content=transcription, author="user")
                 msg.type = "user_message"
                 await msg.send()
         if delta:
@@ -61,20 +74,32 @@ async def setup_openai_realtime():
                 await cl.context.emitter.send_audio_chunk(cl.OutputAudioChunk(mimeType="pcm16", data=audio, track=cl.user_session.get("track_id")))
             if 'transcript' in delta:
                 transcript = delta['transcript']
-                pass
+                # Only accumulate assistant transcription if this is from an assistant item
+                if conversation_logger and item and item.get("role") == "assistant":
+                    await conversation_logger.accumulate_assistant_transcription(transcript)
             if 'arguments' in delta:
                 arguments = delta['arguments']
                 pass
             
     async def handle_item_completed(item):
         """Used to populate the chat context with transcription once an item is completed."""
+        conversation_logger = cl.user_session.get("conversation_logger")
         if item["item"]["type"] == "message":
             content = item["item"]["content"][0]
             if content["type"] == "audio":
+                # Log completed assistant message (user messages are handled in handle_conversation_updated)
+                if conversation_logger and item["item"]["role"] == "assistant":
+                    await conversation_logger.finalize_assistant_transcription()
                 await cl.Message(content=content["transcript"]).send()
     
     async def handle_conversation_interrupt(event):
         """Used to cancel the client previous audio playback."""
+        conversation_logger = cl.user_session.get("conversation_logger")
+        
+        # Log the interruption
+        if conversation_logger:
+            await conversation_logger.log_interruption()
+        
         cl.user_session.set("track_id", str(uuid4()))
         await cl.context.emitter.send_audio_interrupt()
         
@@ -127,7 +152,13 @@ async def start():
 @cl.on_message
 async def on_message(message: cl.Message):
     openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
+    conversation_logger: RealtimeConversationLogger = cl.user_session.get("conversation_logger")
+    
     if openai_realtime and openai_realtime.is_connected():
+        # Log user text message
+        if conversation_logger:
+            await conversation_logger.log_user_message(message.content, "text")
+        
         await openai_realtime.send_user_message_content([{ "type": 'input_text', "text": message.content}])
     else:
         await cl.Message(content="Please activate voice mode before sending messages!").send()
@@ -159,5 +190,11 @@ async def on_audio_chunk(chunk: cl.InputAudioChunk):
 @cl.on_stop
 async def on_end():
     openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
+    conversation_logger: RealtimeConversationLogger = cl.user_session.get("conversation_logger")
+    
+    # Stop conversation logging
+    if conversation_logger:
+        await conversation_logger.stop_logging()
+    
     if openai_realtime and openai_realtime.is_connected():
         await openai_realtime.disconnect()
