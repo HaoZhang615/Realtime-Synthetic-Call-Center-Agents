@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 import json
+import requests
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
@@ -31,6 +32,23 @@ logger.debug("Starting VoiceBot Classic page")
 # Initialize Azure clients
 client, token_provider, conversation_manager = initialize_azure_clients()
 
+# Get Logic App URL for email sending
+SEND_EMAIL_LOGIC_APP_URL = os.getenv("SEND_EMAIL_LOGIC_APP_URL")
+
+# Email sending function
+def send_email(params):
+    """Send an email using Azure Logic App."""
+    try:
+        if not SEND_EMAIL_LOGIC_APP_URL:
+            return "Email service is not configured. Please contact administrator."
+        
+        res = requests.post(SEND_EMAIL_LOGIC_APP_URL, json=params)
+        res.raise_for_status()
+        return "Email sent successfully."
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return f"Failed to send email: {e}"
+
 # Ensure a fresh conversation for this page (resets if coming from a different page)
 ensure_fresh_conversation("04")
 
@@ -51,7 +69,6 @@ try:
     # Filter out None values (models not available)
     available_models = {k: v for k, v in available_models.items() if v is not None}
     
-    logger.info(f"Available models: {list(available_models.keys())}")
 except Exception as e:
     logger.warning(f"Error loading models: {e}")
     # Fallback to just gpt-4o-mini if there's an issue
@@ -66,7 +83,7 @@ def load_css(file_path):
 
 # Removed local JSON schema + summary functions now centralized in voicebot_common
 
-# Basic chat function without web search or customer data
+# Basic chat function with email sending capability
 def basic_chat(user_request, conversation_history=None):
     if conversation_history is None:
         conversation_history = []
@@ -111,11 +128,42 @@ def basic_chat(user_request, conversation_history=None):
     # Add current user request
     messages.append({"role": "user", "content": user_request})
     
+    # Define available tools
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "send_email",
+                "description": "Send an email to the specified recipient with subject and body content.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "to": {
+                            "type": "string",
+                            "description": "The recipient's email address."
+                        },
+                        "subject": {
+                            "type": "string",
+                            "description": "The subject of the email."
+                        },
+                        "body": {
+                            "type": "string",
+                            "description": "The body content of the email."
+                        }
+                    },
+                    "required": ["to", "subject", "body"]
+                }
+            }
+        }
+    ]
+    
     try:
         response = client.chat.completions.create(
             model=selected_model_deployment,
             store=True,  # Store the response for performance tracking
             messages=messages,
+            tools=tools,
+            tool_choice="auto",
             temperature=temperature,
             max_tokens=800,
         )
@@ -123,7 +171,42 @@ def basic_chat(user_request, conversation_history=None):
         # End response timing
         st.session_state.performance_tracker.end_response_timing()
         
-        assistant_response = response.choices[0].message.content
+        # Handle the response
+        assistant_message = response.choices[0].message
+        
+        # Check if the assistant wants to call a function
+        if assistant_message.tool_calls:
+            # Add the assistant message to conversation history
+            messages.append(assistant_message)
+            
+            # Process tool calls
+            for tool_call in assistant_message.tool_calls:
+                if tool_call.function.name == "send_email":
+                    # Parse function arguments
+                    function_args = json.loads(tool_call.function.arguments)
+                    
+                    # Call the send_email function
+                    email_result = send_email(function_args)
+                    
+                    # Add tool result to messages
+                    tool_message = {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": email_result
+                    }
+                    messages.append(tool_message)
+            
+            # Get final response after tool execution
+            final_response = client.chat.completions.create(
+                model=selected_model_deployment,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=4000,
+            )
+            
+            assistant_response = final_response.choices[0].message.content
+        else:
+            assistant_response = assistant_message.content
         
         # Save conversation to Cosmos DB using common utility
         save_conversation_message(user_request, assistant_response, conversation_manager)
@@ -203,11 +286,13 @@ default_json_template = """{
         "make": { "type": "string" },
         "model": { "type": "string" },
         "year": { "type": "integer", "minimum": 1886 },
+        "plateNumber": { "type": "string" },
         "registrationNumber": { "type": "string" },
         "vin": { "type": "string" }
       },
       "required": ["make", "model", "year"],
       "anyOf": [
+        { "required": ["plateNumber"] },
         { "required": ["registrationNumber"] },
         { "required": ["vin"] }
       ]
@@ -270,6 +355,12 @@ YOUR PRIMARY OBJECTIVES:
    - Give the customer an opportunity to add or correct details
    - Ensure all required fields from the JSON template have values
 
+4. EMAIL FUNCTIONALITY:
+   - You can send emails to customers when requested
+   - Always confirm email details (recipient, subject, content) before sending
+   - Use professional language in emails
+   - Only send emails when explicitly requested or when it would be helpful for claim processing
+
 CONVERSATIONAL GUIDELINES:
 
 - IF CUSTOMER IS SPEAKING GERMAN OR SWISS GERMAN, SWITCH TO GERMAN LANGUAGE
@@ -283,6 +374,12 @@ CONVERSATIONAL GUIDELINES:
 - Explain why you need certain information to increase customer comfort
 - Do not make assumptions or provide legal/policy advice
 - If asked something outside your scope, politely redirect to a human agent
+
+EMAIL USAGE:
+- When customer requests to send an email or receive information via email
+- For sending claim confirmation details
+- For sending follow-up instructions or next steps
+- Always confirm email address and content before sending
 
 When using the JSON template:
 - Pay attention to the "required" fields - these must be collected
