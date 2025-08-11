@@ -3,8 +3,8 @@ from azure.ai.evaluation import TaskAdherenceEvaluator
 from pprint import pprint
 
 model_config = {
-    "azure_endpoint": "https://oai-3bk2vwyqruuqk.openai.azure.com/",  # https://<account_name>.services.ai.azure.com
-    "api_key": "cf32326ff4cb4d33919ae67290dcbf22",
+    "azure_endpoint": "https://<servicename>.openai.azure.com/",  # https://<account_name>.services.ai.azure.com
+    "api_key": "<api_key>",
     "azure_deployment": "gpt-4o-mini",
 }
 
