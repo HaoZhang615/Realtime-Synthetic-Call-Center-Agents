@@ -173,28 +173,12 @@ def basic_chat(user_request, conversation_history=None):
         
         # Handle the response
         assistant_message = response.choices[0].message
+        tool_calls_log = []  # For logging tool calls to CosmosDB
         
         # Check if the assistant wants to call a function
         if assistant_message.tool_calls:
             # Add the assistant message to conversation history
             messages.append(assistant_message)
-            
-            # Log the assistant's tool call message to CosmosDB in API format
-            assistant_tool_call_msg = {
-                "role": "assistant",
-                "content": assistant_message.content,
-                "tool_calls": [
-                    {
-                        "id": tool_call.id,
-                        "type": tool_call.type,
-                        "function": {
-                            "name": tool_call.function.name,
-                            "arguments": tool_call.function.arguments
-                        }
-                    } for tool_call in assistant_message.tool_calls
-                ]
-            }
-            save_conversation_message("Assistant tool call", assistant_tool_call_msg, conversation_manager)
             
             # Process tool calls
             for tool_call in assistant_message.tool_calls:
@@ -205,17 +189,24 @@ def basic_chat(user_request, conversation_history=None):
                     # Call the send_email function
                     email_result = send_email(function_args)
                     
+                    # Log tool call for evaluation purposes
+                    tool_call_log = {
+                        "tool_call_id": tool_call.id,
+                        "function_name": tool_call.function.name,
+                        "function_arguments": function_args,
+                        "function_result": email_result,
+                        "timestamp": get_current_datetime(),
+                        "success": "successfully" in email_result.lower()
+                    }
+                    tool_calls_log.append(tool_call_log)
+                    
                     # Add tool result to messages
                     tool_message = {
                         "role": "tool",
-                        "name": tool_call.function.name,
                         "tool_call_id": tool_call.id,
                         "content": email_result
                     }
                     messages.append(tool_message)
-                    
-                    # Log the tool response message to CosmosDB in API format
-                    save_conversation_message("Tool response", tool_message, conversation_manager)
             
             # Get final response after tool execution
             final_response = client.chat.completions.create(
@@ -229,8 +220,13 @@ def basic_chat(user_request, conversation_history=None):
         else:
             assistant_response = assistant_message.content
         
-        # Save conversation to Cosmos DB using common utility
-        save_conversation_message(user_request, assistant_response, conversation_manager)
+        # Save conversation to Cosmos DB using common utility with tool calls
+        save_conversation_message(
+            user_request, 
+            assistant_response, 
+            conversation_manager,
+            tool_calls=tool_calls_log if tool_calls_log else None
+        )
         
         return assistant_response
         
