@@ -224,7 +224,8 @@ def text_to_speech(text_input: str, client: AzureOpenAI) -> Optional[bytes]:
 
 
 def save_conversation_message(user_request: str, assistant_response: str, 
-                            conversation_manager: Optional[ConversationManager] = None):
+                            conversation_manager: Optional[ConversationManager] = None,
+                            tool_calls: Optional[List[Dict]] = None):
     """
     Save user and assistant messages to conversation in Cosmos DB.
     
@@ -232,6 +233,7 @@ def save_conversation_message(user_request: str, assistant_response: str,
         user_request: User's message
         assistant_response: Assistant's response
         conversation_manager: Optional ConversationManager instance
+        tool_calls: Optional list of tool call information for evaluation
     """
     if conversation_manager and "conversation_doc" in st.session_state:
         try:
@@ -242,11 +244,12 @@ def save_conversation_message(user_request: str, assistant_response: str,
                 content=user_request
             )
             
-            # Add assistant response
+            # Add assistant response (with tool calls if present)
             conversation_manager.add_message_to_conversation(
                 st.session_state.conversation_doc,
                 role="assistant",
-                content=assistant_response
+                content=assistant_response,
+                tool_calls=tool_calls
             )
             
             # Save to Cosmos DB

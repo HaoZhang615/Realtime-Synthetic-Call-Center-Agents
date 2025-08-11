@@ -102,7 +102,8 @@ class ConversationManager:
         self,
         conversation_doc: Dict,
         role: str,
-        content: str
+        content: str,
+        tool_calls: Optional[List[Dict]] = None
     ) -> Dict:
         """
         Add a new message to the conversation document.
@@ -111,6 +112,7 @@ class ConversationManager:
             conversation_doc: Existing conversation document
             role: Message role (user/assistant)
             content: Message content
+            tool_calls: Optional tool call information for evaluation
             
         Returns:
             Updated conversation document
@@ -122,6 +124,10 @@ class ConversationManager:
             "content": content,
             "timestamp": now
         }
+        
+        # Add tool calls if present (for evaluation purposes)
+        if tool_calls:
+            message["tool_calls"] = tool_calls
         
         # Update conversation document
         conversation_doc["messages"].append(message)
