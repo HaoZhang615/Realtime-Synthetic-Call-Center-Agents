@@ -7,7 +7,7 @@
 🎯 **Multi-Agent Architecture**: Three specialized AI agents working together:
 - **Internal Knowledge Base Agent**: Queries uploaded documents (PDF, Word, TXT, HTML) for company information
 - **Database Agent**: Performs CRUD operations on customer, product, and order data stored in Azure Cosmos DB
-- **Web Search Agent**: Retrieves real-time information using Bing Search API, grounded by synthetic product data
+- **Web Search Agent**: *(Currently disabled)* ~~Retrieves real-time information using Bing Search API, grounded by synthetic product data~~
 
 🗣️ **Voice-First Experience**: Real-time speech-to-text and text-to-speech powered by Azure OpenAI
 📊 **Dynamic Data Synthesis**: Automatically generates realistic customer and product data for demonstration
@@ -24,7 +24,7 @@
 - [Python 3.8+](https://www.python.org/downloads/)
 - [UV Package Manager](https://docs.astral.sh/uv/getting-started/installation/)
 - Optional: [Docker](https://www.docker.com/get-started/) for containerized deployment
-- Optional: [Bing Search V7 API](https://azure.microsoft.com/en-us/products/cognitive-services/bing-web-search-api) for web search functionality
+- ~~Optional: [Bing Search V7 API](https://azure.microsoft.com/en-us/products/cognitive-services/bing-web-search-api) for web search functionality~~ *(Currently disabled)*
 
 ### Quick Deployment
 

@@ -179,7 +179,7 @@ def speech_to_text(audio: bytes, client: AzureOpenAI) -> str:
         transcription_result = client.audio.transcriptions.create(
             file=buffer,
             model=transcribe_model,
-            response_format="json"
+            response_format="json",
         )
         
         buffer.close()
@@ -409,6 +409,11 @@ def json_schema_to_pydantic_type(schema_def: Dict[str, Any], field_name: str = "
     Nested objects produce nested dynamic Pydantic models.
     """
     schema_type = schema_def.get("type")
+    # Accept common synonyms that might appear in loose templates
+    if schema_type == "int":
+        schema_type = "integer"
+    if schema_type == "float":
+        schema_type = "number"
 
     if schema_type == "string":
         return (Optional[str], None)
@@ -471,6 +476,9 @@ def generate_conversation_summary(client: AzureOpenAI, model_name: str, conversa
     Returns:
         Parsed dictionary of extracted structured data or None on failure.
     """
+    import streamlit as st  # Import here to avoid any potential issues
+    logger = logging.getLogger(__name__)
+    
     try:
         if not conversation_manager:
             st.error("Conversation manager not available.")
@@ -542,6 +550,10 @@ Extract the information into the structured format based on the fields available
             st.error("Failed to save the summary to the database.")
         return claim_dict
     except Exception as e:
-        st.error(f"Error generating conversation summary: {e}")
+        try:
+            st.error(f"Error generating conversation summary: {e}")
+        except NameError:
+            # Fallback if st is not available
+            print(f"Error generating conversation summary: {e}")
         logger.error(f"generate_conversation_summary error: {e}")
         return None

@@ -105,17 +105,17 @@ resource HumanConversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlD
   }
 }
 resource ProductContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  name: 'Product'
+  name: 'Vehicles'
   location: location
   parent: cosmosDbDatabase
   properties: {
     resource: {
-      id: 'Product'
+      id: 'Vehicles'
       createMode: 'Default'
       partitionKey: {
         kind: 'Hash'
         paths: [
-          '/product_id'
+          '/license_plate'
         ]
       }
     }
@@ -124,17 +124,17 @@ resource ProductContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/co
   }
 }
 resource PurchasesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  name: 'Purchases'
+  name: 'AssistanceCases'
   location: location
   parent: cosmosDbDatabase
   properties: {
     resource: {
-      id: 'Purchases'
+      id: 'AssistanceCases'
       createMode: 'Default'
       partitionKey: {
         kind: 'Hash'
         paths: [
-          '/customer_id'
+          '/case_id'
         ]
       }
     }
@@ -144,12 +144,12 @@ resource PurchasesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
 }
 
 resource ProductUrlContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  name: 'ProductUrl'
+  name: 'ServiceTypes'
   location: location
   parent: cosmosDbDatabase
   properties: {
     resource: {
-      id: 'ProductUrl'
+      id: 'ServiceTypes'
       createMode: 'Default'
       partitionKey: {
         kind: 'Hash'
@@ -217,7 +217,7 @@ output cosmosDbDatabase string = cosmosDbDatabase.name
 output cosmosDbAIConversationsContainer string = AIConversationsContainer.name
 output cosmosDbCustomerContainer string = CustomerContainer.name
 output cosmosDbHumanConversationsContainer string = HumanConversationsContainer.name
-output cosmosDbProductContainer string = ProductContainer.name
-output cosmosDbPurchasesContainer string = PurchasesContainer.name
-output cosmosDbProductUrlContainer string = ProductUrlContainer.name
+output cosmosDbVehiclesContainer string = ProductContainer.name
+output cosmosDbAssistanceCasesContainer string = PurchasesContainer.name
+output cosmosDbServiceTypesContainer string = ProductUrlContainer.name
 output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint

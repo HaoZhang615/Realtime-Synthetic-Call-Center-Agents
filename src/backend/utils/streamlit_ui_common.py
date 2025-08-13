@@ -44,7 +44,8 @@ def setup_voice_input_recorder() -> Optional[bytes]:
             neutral_color="#6aa36f",
             icon_size="2x",
             sample_rate=41_000,
-        )
+            pause_threshold=3.0
+            )
         return custom_audio_bytes
 
 

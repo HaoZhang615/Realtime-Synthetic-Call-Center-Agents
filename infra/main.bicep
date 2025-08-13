@@ -46,7 +46,7 @@ param tags object = { 'azd-env-name': environmentName }
 param containerAppsEnvironmentName string = ''
 
 // Add new parameters for Bing Search API to replace dynamic loadJsonContent calls
-@secure()
+// @secure()
 // @description('Bing Search API Key')
 // param bingSearchApiKey string
 
@@ -54,19 +54,19 @@ param containerAppsEnvironmentName string = ''
 // param bingSearchApiEndpoint string = 'https://api.bing.microsoft.com/v7.0/search'
 
 // Parameters for Bing Custom Search service
-@description('Name of the Bing Custom Search service. If not specified, a name will be generated.')
-param bingCustomSearchServiceName string = ''
+// @description('Name of the Bing Custom Search service. If not specified, a name will be generated.')
+// param bingCustomSearchServiceName string = ''
 
 // Parameters for Bing Grounding service (for AI Foundry connection)
-@description('Name of the Bing Grounding service. If not specified, a name will be generated.')
-param bingGroundingServiceName string = ''
+// @description('Name of the Bing Grounding service. If not specified, a name will be generated.')
+// param bingGroundingServiceName string = ''
 
-@description('SKU for the Bing Grounding service')
-@allowed(['G1', 'G2'])
-param bingGroundingSkuName string = 'G1'
+// @description('SKU for the Bing Grounding service')
+// @allowed(['G1', 'G2'])
+// param bingGroundingSkuName string = 'G1'
 
-@description('Whether to enable statistics for the Bing Grounding service')
-param bingGroundingStatisticsEnabled bool = false
+// @description('Whether to enable statistics for the Bing Grounding service')
+// param bingGroundingStatisticsEnabled bool = false
 
 // Load abbreviations from JSON file
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -400,60 +400,60 @@ module aiFoundrySearchConnection 'modules/aifoundry/connection-aisearch.bicep' =
 }
 
 // Bing Grounding service (separate from connection)
-var _bingGroundingServiceName = !empty(bingGroundingServiceName) ? bingGroundingServiceName : 'bing-grounding-${resourceToken}'
+// var _bingGroundingServiceName = !empty(bingGroundingServiceName) ? bingGroundingServiceName : 'bing-grounding-${resourceToken}'
 
-module bingGroundingService 'modules/bing/grounding-bing-search.bicep' = {
-  name: 'bingGroundingService'
-  scope: resGroup
-  params: {
-    bingGroundingServiceName: _bingGroundingServiceName
-    tags: tags
-    skuName: bingGroundingSkuName
-    statisticsEnabled: bingGroundingStatisticsEnabled
-  }
-}
+// module bingGroundingService 'modules/bing/grounding-bing-search.bicep' = {
+//   name: 'bingGroundingService'
+//   scope: resGroup
+//   params: {
+//     bingGroundingServiceName: _bingGroundingServiceName
+//     tags: tags
+//     skuName: bingGroundingSkuName
+//     statisticsEnabled: bingGroundingStatisticsEnabled
+//   }
+// }
 
 // AI Foundry connection to Bing Grounding service
-module aiFoundryBingGroundingConnection 'modules/aifoundry/connection-bing-grounding.bicep' = {
-  name: 'aiFoundryBingGroundingConnection'
-  scope: resGroup
-  params: {
-    aiFoundryName: _accounts_aiservice_ms_name
-    bingGroundingServiceId: bingGroundingService.outputs.bingGroundingServiceId
-    bingGroundingServiceName: bingGroundingService.outputs.bingGroundingServiceName
-    apiKey: bingGroundingService.outputs.apiKey
-  }
-  dependsOn: [
-    aiFoundryAccount
-  ]
-}
-var _bingCustomSearchServiceName = !empty(bingCustomSearchServiceName) ? bingCustomSearchServiceName : 'grounding-bing-custom-search-${resourceToken}'
+// module aiFoundryBingGroundingConnection 'modules/aifoundry/connection-bing-grounding.bicep' = {
+//   name: 'aiFoundryBingGroundingConnection'
+//   scope: resGroup
+//   params: {
+//     aiFoundryName: _accounts_aiservice_ms_name
+//     bingGroundingServiceId: bingGroundingService.outputs.bingGroundingServiceId
+//     bingGroundingServiceName: bingGroundingService.outputs.bingGroundingServiceName
+//     apiKey: bingGroundingService.outputs.apiKey
+//   }
+//   dependsOn: [
+//     aiFoundryAccount
+//   ]
+// }
+// var _bingCustomSearchServiceName = !empty(bingCustomSearchServiceName) ? bingCustomSearchServiceName : 'grounding-bing-custom-search-${resourceToken}'
 
-module bingCustomSearch 'modules/bing/grounding-bing-custom-search.bicep' = {
-  name: 'bingCustomSearch'
-  scope: resGroup
-  params: {
-    bingCustomSearchServiceName: _bingCustomSearchServiceName
-    location: 'global'
-    tags: tags
-  }
-}
+// module bingCustomSearch 'modules/bing/grounding-bing-custom-search.bicep' = {
+//   name: 'bingCustomSearch'
+//   scope: resGroup
+//   params: {
+//     bingCustomSearchServiceName: _bingCustomSearchServiceName
+//     location: 'global'
+//     tags: tags
+//   }
+// }
 
 // AI Foundry connection to Bing Custom Search Grounding service
-module aiFoundryBingCustomGroundingConnection 'modules/aifoundry/connection-bing-custom-grounding.bicep' = {
-  name: 'aiFoundryBingCustomGroundingConnection'
-  scope: resGroup
-  params: {
-    aiFoundryName: _accounts_aiservice_ms_name
-    bingCustomSearchServiceId: bingCustomSearch.outputs.bingCustomSearchServiceId
-    bingCustomSearchServiceName: bingCustomSearch.outputs.bingCustomSearchServiceName
-    apiKey: bingCustomSearch.outputs.apiKey
-    customConfigId: bingCustomSearch.outputs.customConfigId
-  }
-  dependsOn: [
-    aiFoundryAccount
-  ]
-}
+// module aiFoundryBingCustomGroundingConnection 'modules/aifoundry/connection-bing-custom-grounding.bicep' = {
+//   name: 'aiFoundryBingCustomGroundingConnection'
+//   scope: resGroup
+//   params: {
+//     aiFoundryName: _accounts_aiservice_ms_name
+//     bingCustomSearchServiceId: bingCustomSearch.outputs.bingCustomSearchServiceId
+//     bingCustomSearchServiceName: bingCustomSearch.outputs.bingCustomSearchServiceName
+//     apiKey: bingCustomSearch.outputs.apiKey
+//     customConfigId: bingCustomSearch.outputs.customConfigId
+//   }
+//   dependsOn: [
+//     aiFoundryAccount
+//   ]
+// }
 
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
 module monitoring 'modules/monitoring/monitor.bicep' = {
@@ -586,19 +586,19 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
       COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
       COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
-      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
-      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
-      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
+      COSMOSDB_Vehicles_CONTAINER: cosmosdb.outputs.cosmosDbVehiclesContainer
+      COSMOSDB_AssistanceCases_CONTAINER: cosmosdb.outputs.cosmosDbAssistanceCasesContainer
+      COSMOSDB_ServiceTypes_CONTAINER: cosmosdb.outputs.cosmosDbServiceTypesContainer
       // BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
-      BING_CUSTOM_SEARCH_SERVICE_NAME: bingCustomSearch.outputs.bingCustomSearchServiceName
-      BING_CUSTOM_SEARCH_ENDPOINT: bingCustomSearch.outputs.endpoint
-      BING_CUSTOM_SEARCH_CONFIG_ID: bingCustomSearch.outputs.customConfigId
-      BING_CUSTOM_GROUNDING_CONNECTION_NAME: aiFoundryBingCustomGroundingConnection.outputs.bingCustomGroundingConnectionName
-      BING_CUSTOM_GROUNDING_ENDPOINT: aiFoundryBingCustomGroundingConnection.outputs.endpoint
-      BING_GROUNDING_SERVICE_NAME: bingGroundingService.outputs.bingGroundingServiceName
-      BING_GROUNDING_SERVICE_ID: bingGroundingService.outputs.bingGroundingServiceId
-      BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
-      BING_GROUNDING_ENDPOINT: aiFoundryBingGroundingConnection.outputs.endpoint
+      // BING_CUSTOM_SEARCH_SERVICE_NAME: bingCustomSearch.outputs.bingCustomSearchServiceName
+      // BING_CUSTOM_SEARCH_ENDPOINT: bingCustomSearch.outputs.endpoint
+      // BING_CUSTOM_SEARCH_CONFIG_ID: bingCustomSearch.outputs.customConfigId
+      // BING_CUSTOM_GROUNDING_CONNECTION_NAME: aiFoundryBingCustomGroundingConnection.outputs.bingCustomGroundingConnectionName
+      // BING_CUSTOM_GROUNDING_ENDPOINT: aiFoundryBingCustomGroundingConnection.outputs.endpoint
+      // BING_GROUNDING_SERVICE_NAME: bingGroundingService.outputs.bingGroundingServiceName
+      // BING_GROUNDING_SERVICE_ID: bingGroundingService.outputs.bingGroundingServiceId
+      // BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
+      // BING_GROUNDING_ENDPOINT: aiFoundryBingGroundingConnection.outputs.endpoint
       AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiFoundryAccountProject.outputs.projectEndpoint
       AZURE_AI_SEARCH_CONNECTION_NAME: aiFoundrySearchConnection.outputs.azureAISearchConnectionName
       AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME: _aiFoundryAgentModelDeploymentName
@@ -652,20 +652,20 @@ module backendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer
       COSMOSDB_Customer_CONTAINER: cosmosdb.outputs.cosmosDbCustomerContainer
       COSMOSDB_HumanConversations_CONTAINER: cosmosdb.outputs.cosmosDbHumanConversationsContainer
-      COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
-      COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
-      COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
+      COSMOSDB_Vehicles_CONTAINER: cosmosdb.outputs.cosmosDbVehiclesContainer
+      COSMOSDB_AssistanceCases_CONTAINER: cosmosdb.outputs.cosmosDbAssistanceCasesContainer
+      COSMOSDB_ServiceTypes_CONTAINER: cosmosdb.outputs.cosmosDbServiceTypesContainer
       AZURE_AI_FOUNDRY_ENDPOINT: aiFoundryAccount.outputs.endpoint
       AZURE_AI_FOUNDRY_SERVICES_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
       // Using managed identity for AI Services, no key needed
-      BING_CUSTOM_SEARCH_SERVICE_NAME: bingCustomSearch.outputs.bingCustomSearchServiceName
-      BING_CUSTOM_SEARCH_ENDPOINT: bingCustomSearch.outputs.endpoint
-      BING_CUSTOM_SEARCH_CONFIG_ID: bingCustomSearch.outputs.customConfigId
-      BING_CUSTOM_GROUNDING_CONNECTION_NAME: aiFoundryBingCustomGroundingConnection.outputs.bingCustomGroundingConnectionName
-      BING_CUSTOM_GROUNDING_ENDPOINT: aiFoundryBingCustomGroundingConnection.outputs.endpoint
-      BING_GROUNDING_SERVICE_NAME: bingGroundingService.outputs.bingGroundingServiceName
-      BING_GROUNDING_SERVICE_ID: bingGroundingService.outputs.bingGroundingServiceId
-      BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
+      // BING_CUSTOM_SEARCH_SERVICE_NAME: bingCustomSearch.outputs.bingCustomSearchServiceName
+      // BING_CUSTOM_SEARCH_ENDPOINT: bingCustomSearch.outputs.endpoint
+      // BING_CUSTOM_SEARCH_CONFIG_ID: bingCustomSearch.outputs.customConfigId
+      // BING_CUSTOM_GROUNDING_CONNECTION_NAME: aiFoundryBingCustomGroundingConnection.outputs.bingCustomGroundingConnectionName
+      // BING_CUSTOM_GROUNDING_ENDPOINT: aiFoundryBingCustomGroundingConnection.outputs.endpoint
+      // BING_GROUNDING_SERVICE_NAME: bingGroundingService.outputs.bingGroundingServiceName
+      // BING_GROUNDING_SERVICE_ID: bingGroundingService.outputs.bingGroundingServiceId
+      // BING_GROUNDING_CONNECTION_NAME: aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
       AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiFoundryAccountProject.outputs.projectEndpoint
       AZURE_AI_SEARCH_CONNECTION_NAME: aiFoundrySearchConnection.outputs.azureAISearchConnectionName
       AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME: _aiFoundryAgentModelDeploymentName
@@ -827,18 +827,18 @@ output COSMOSDB_DATABASE string = cosmosdb.outputs.cosmosDbDatabase
 output COSMOSDB_AIConversations_CONTAINER string = cosmosdb.outputs.cosmosDbAIConversationsContainer
 output COSMOSDB_Customer_CONTAINER string = cosmosdb.outputs.cosmosDbCustomerContainer
 output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbHumanConversationsContainer
-output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
-output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
-output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
+output COSMOSDB_Vehicles_CONTAINER string = cosmosdb.outputs.cosmosDbVehiclesContainer
+output COSMOSDB_AssistanceCases_CONTAINER string = cosmosdb.outputs.cosmosDbAssistanceCasesContainer
+output COSMOSDB_ServiceTypes_CONTAINER string = cosmosdb.outputs.cosmosDbServiceTypesContainer
 
 // output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
 // Bing Search API Key is stored securely in Key Vault and should not be exposed in outputs
 
 // Bing Custom Search outputs
-output BING_CUSTOM_SEARCH_SERVICE_ID string = bingCustomSearch.outputs.bingCustomSearchConfigurationId
-output BING_CUSTOM_SEARCH_SERVICE_NAME string = bingCustomSearch.outputs.bingCustomSearchServiceName
-output BING_CUSTOM_SEARCH_ENDPOINT string = bingCustomSearch.outputs.endpoint
-output BING_CUSTOM_SEARCH_CONFIG_ID string = bingCustomSearch.outputs.customConfigId
+// output BING_CUSTOM_SEARCH_SERVICE_ID string = bingCustomSearch.outputs.bingCustomSearchConfigurationId
+// output BING_CUSTOM_SEARCH_SERVICE_NAME string = bingCustomSearch.outputs.bingCustomSearchServiceName
+// output BING_CUSTOM_SEARCH_ENDPOINT string = bingCustomSearch.outputs.endpoint
+// output BING_CUSTOM_SEARCH_CONFIG_ID string = bingCustomSearch.outputs.customConfigId
 
 output AZURE_AI_FOUNDRY_ENDPOINT string = aiFoundryAccount.outputs.endpoint
 output AZURE_AI_FOUNDRY_PROJECT_ENDPOINT string = aiFoundryAccountProject.outputs.projectEndpoint
@@ -847,11 +847,11 @@ output AZURE_AI_FOUNDRY_SEARCH_CONNECTION_NAME string = aiFoundrySearchConnectio
 output AZURE_AI_SEARCH_CONNECTION_NAME string = aiFoundrySearchConnection.outputs.azureAISearchConnectionName
 
 // Bing Grounding (AI Foundry connection) outputs
-output BING_GROUNDING_SERVICE_ID string = bingGroundingService.outputs.bingGroundingServiceId
-output BING_GROUNDING_SERVICE_NAME string = bingGroundingService.outputs.bingGroundingServiceName
-output BING_GROUNDING_CONNECTION_NAME string = aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
-output BING_GROUNDING_ENDPOINT string = aiFoundryBingGroundingConnection.outputs.endpoint
+// output BING_GROUNDING_SERVICE_ID string = bingGroundingService.outputs.bingGroundingServiceId
+// output BING_GROUNDING_SERVICE_NAME string = bingGroundingService.outputs.bingGroundingServiceName
+// output BING_GROUNDING_CONNECTION_NAME string = aiFoundryBingGroundingConnection.outputs.bingGroundingConnectionName
+// output BING_GROUNDING_ENDPOINT string = aiFoundryBingGroundingConnection.outputs.endpoint
 
 // Bing Custom Grounding (AI Foundry connection) outputs
-output BING_CUSTOM_GROUNDING_CONNECTION_NAME string = aiFoundryBingCustomGroundingConnection.outputs.bingCustomGroundingConnectionName
-output BING_CUSTOM_GROUNDING_ENDPOINT string = aiFoundryBingCustomGroundingConnection.outputs.endpoint
+// output BING_CUSTOM_GROUNDING_CONNECTION_NAME string = aiFoundryBingCustomGroundingConnection.outputs.bingCustomGroundingConnectionName
+// output BING_CUSTOM_GROUNDING_ENDPOINT string = aiFoundryBingCustomGroundingConnection.outputs.endpoint

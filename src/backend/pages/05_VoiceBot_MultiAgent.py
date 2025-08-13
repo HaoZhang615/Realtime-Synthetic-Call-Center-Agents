@@ -26,7 +26,8 @@ from utils import (
 
 # Azure AI Agents specific imports
 from azure.identity import DefaultAzureCredential
-from azure.ai.agents.models import ConnectedAgentTool, MessageRole, BingGroundingTool, AzureAISearchQueryType, AzureAISearchTool, ListSortOrder, ToolSet, FunctionTool
+from azure.ai.agents.models import ConnectedAgentTool, MessageRole, AzureAISearchQueryType, AzureAISearchTool, ListSortOrder, ToolSet, FunctionTool
+# from azure.ai.agents.models import BingGroundingTool
 
 # Import AzureLogicAppTool and the function factory from utils
 from utils.user_logic_apps import AzureLogicAppTool, create_send_email_function
@@ -59,33 +60,33 @@ def create_connected_agents():
             
         #----------reuse or create web search agent --------------------------------#
             # prepare Bing Custom Search Grounding tool
-            bing_connection_name = env_vars["bing_connection_name"]
-            bing_connection_id = project_client.connections.get(name=bing_connection_name).id
-            bing_conn_id = bing_connection_id
-            bing = BingGroundingTool(connection_id=bing_conn_id)
+            # bing_connection_name = env_vars["bing_connection_name"]
+            # bing_connection_id = project_client.connections.get(name=bing_connection_name).id
+            # bing_conn_id = bing_connection_id
+            # bing = BingGroundingTool(connection_id=bing_conn_id)
 
             # Check for existing web search agent or create new one
-            existing_web_search_agent = find_existing_agent_by_name(project_client, "WebSearchAgent")
+            # existing_web_search_agent = find_existing_agent_by_name(project_client, "WebSearchAgent")
 
-            if not existing_web_search_agent:
-                # Create web search agent using project client
-                web_search_agent = project_client.agents.create_agent(
-                    model=model_deployment,
-                    name="WebSearchAgent",
-                    instructions=instructions["web_search"],
-                    tools=bing.definitions,
-                )
-                log_agent_creation("WebSearchAgent", web_search_agent.id, True)
-            else:
-                web_search_agent = existing_web_search_agent
-                log_agent_creation("WebSearchAgent", web_search_agent.id, False)
+            # if not existing_web_search_agent:
+            #     # Create web search agent using project client
+            #     web_search_agent = project_client.agents.create_agent(
+            #         model=model_deployment,
+            #         name="WebSearchAgent",
+            #         instructions=instructions["web_search"],
+            #         tools=bing.definitions,
+            #     )
+            #     log_agent_creation("WebSearchAgent", web_search_agent.id, True)
+            # else:
+            #     web_search_agent = existing_web_search_agent
+            #     log_agent_creation("WebSearchAgent", web_search_agent.id, False)
             
             # Initialize Connected Agent tool
-            connected_web_search_agent = ConnectedAgentTool(
-                id=web_search_agent.id,
-                name="web_search_agent",
-                description="Gets web search results for a query"
-            )
+            # connected_web_search_agent = ConnectedAgentTool(
+            #     id=web_search_agent.id,
+            #     name="web_search_agent",
+            #     description="Gets web search results for a query"
+            # )
             
         #----------reuse or create AI search agent --------------------------------#
             # prepare AI Search tool
@@ -129,7 +130,8 @@ def create_connected_agents():
 
             if not existing_concierge_agent:
                 # Build tools list based on availability
-                agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
+                # agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
+                agent_tools = connected_ai_search_agent.definitions
 
                 # Add current datetime to the system message (invisible to user)
                 system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{st.session_state.system_message}"
@@ -147,7 +149,8 @@ def create_connected_agents():
                 # Update instructions for existing agent in case they changed
                 try:
                     # Build tools list based on availability
-                    agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
+                    # agent_tools = connected_web_search_agent.definitions + connected_ai_search_agent.definitions
+                    agent_tools = connected_ai_search_agent.definitions
                     
                     # Add current datetime to the system message (invisible to user)
                     system_message_with_datetime = f"Current date and time: {get_current_datetime()}\n\n{st.session_state.system_message}"
@@ -167,17 +170,18 @@ def create_connected_agents():
             
             # Store agents in session state
             st.session_state.connected_agents = {
-                "web_search_agent": web_search_agent,
+                # "web_search_agent": web_search_agent,
                 "ai_search_agent": ai_search_agent,
                 "concierge_agent": concierge_agent,
-                "connected_web_search_agent": connected_web_search_agent,
+                # "connected_web_search_agent": connected_web_search_agent,
                 "connected_ai_search_agent": connected_ai_search_agent,
             }
             
             st.session_state.agent_thread = thread
             
             logger.info("All agents successfully initialized and stored in session state")
-            agent_ids = f"Web: {web_search_agent.id}, AI Search: {ai_search_agent.id}, Concierge: {concierge_agent.id}"
+            # agent_ids = f"Web: {web_search_agent.id}, AI Search: {ai_search_agent.id}, Concierge: {concierge_agent.id}"
+            agent_ids = f"AI Search: {ai_search_agent.id}, Concierge: {concierge_agent.id}"
             logger.info(f"Agent IDs - {agent_ids}")
             
         except Exception as e:

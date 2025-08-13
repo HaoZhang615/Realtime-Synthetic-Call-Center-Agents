@@ -109,7 +109,7 @@ def get_environment_variables() -> Dict[str, Any]:
         "project_endpoint": os.environ.get("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT"),
         
         # Connection names
-        "bing_connection_name": os.environ.get("BING_CUSTOM_GROUNDING_CONNECTION_NAME"),
+        # "bing_connection_name": os.environ.get("BING_CUSTOM_GROUNDING_CONNECTION_NAME"),
         "ai_search_connection_name": os.environ.get("AZURE_AI_SEARCH_CONNECTION_NAME"),
         "ai_search_index": os.environ.get("AZURE_AI_SEARCH_INDEX"),
         
