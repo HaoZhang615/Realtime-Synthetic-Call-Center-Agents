@@ -73,25 +73,28 @@ class VoiceBotClassicChat:
             elif tool_call.function.name == "get_geo_location":
                 function_result = get_geo_location()
 
-            if function_result:
-                # Log tool call for evaluation purposes
-                tool_call_log = {
-                    "tool_call_id": tool_call.id,
-                    "function_name": tool_call.function.name,
-                    "function_arguments": function_args,
-                    "function_result": function_result,
-                    "timestamp": self.get_current_datetime(),
-                    "success": "error" not in function_result.lower()
-                }
-                tool_calls_log.append(tool_call_log)
-                
-                # Add tool result to messages
-                tool_message = {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": function_result
-                }
-                messages.append(tool_message)
+            # Ensure we always have a string result (matching working version behavior)
+            if function_result is None:
+                function_result = "Tool execution completed but no result was returned."
+            
+            # Log tool call for evaluation purposes (always log)
+            tool_call_log = {
+                "tool_call_id": tool_call.id,
+                "function_name": tool_call.function.name,
+                "function_arguments": function_args,
+                "function_result": function_result,
+                "timestamp": self.get_current_datetime(),
+                "success": "error" not in str(function_result).lower()
+            }
+            tool_calls_log.append(tool_call_log)
+            
+            # Always add tool result to messages (matching working version)
+            tool_message = {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(function_result)
+            }
+            messages.append(tool_message)
         
         return tool_calls_log
     

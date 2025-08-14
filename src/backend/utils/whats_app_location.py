@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 from twilio.rest import Client
 import requests
 
+load_dotenv()
+
 PROMPT_TEXT = "Bitte auf die Briefklammer unten rechts im Eingabefeld drücken und den Standort senden."
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")

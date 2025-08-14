@@ -89,7 +89,7 @@ def normalize_swiss_license_plate(plate_number: str) -> Tuple[Optional[str], Opt
     
     # If no full canton name match, try standard 1-2 letter code + number
     # Remove spaces and convert to uppercase
-    clean_plate = clean_input.replace(" ", "")
+    clean_plate = clean_input.replace(" ", "").replace(".", "").replace(",", "").strip().upper()    
     
     # Swiss canton codes (1-2 letters) followed by 1-6 digits
     match = re.match(r'^([A-Z]{1,2})(\d{1,6})$', clean_plate)

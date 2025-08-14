@@ -123,11 +123,113 @@ initialize_conversation(conversation_manager, voicebot_type="classic")
 # Set up sidebar configuration
 setup_sidebar_header()
 
-# Voice controls
-voice_on, selected_voice, tts_instructions = setup_sidebar_voice_controls()
+# Display available customers and their vehicles
+def load_sample_customers():
+    """Load sample customer data for display in sidebar."""
+    customers_data = []
+    assets_path = os.path.join(os.path.dirname(__file__), "..", "assets")
+    
+    try:
+        # Load customer files
+        customer_path = os.path.join(assets_path, "Cosmos_Customer")
+        vehicle_path = os.path.join(assets_path, "Cosmos_Vehicles")
+        
+        if os.path.exists(customer_path) and os.path.exists(vehicle_path):
+            # Get customer files
+            customer_files = [f for f in os.listdir(customer_path) if f.endswith('.json')]
+            vehicle_files = [f for f in os.listdir(vehicle_path) if f.endswith('.json')]
+            
+            for customer_file in customer_files:
+                try:
+                    with open(os.path.join(customer_path, customer_file), 'r', encoding='utf-8') as f:
+                        customer_data = json.load(f)
+                    
+                    # Find matching vehicle file by customer_id
+                    customer_id = customer_data.get("customer_id")
+                    vehicle_data = None
+                    
+                    for vehicle_file in vehicle_files:
+                        try:
+                            with open(os.path.join(vehicle_path, vehicle_file), 'r', encoding='utf-8') as f:
+                                temp_vehicle_data = json.load(f)
+                            if temp_vehicle_data.get("customer_id") == customer_id:
+                                vehicle_data = temp_vehicle_data
+                                break
+                        except Exception:
+                            continue
+                    
+                    customers_data.append({
+                        "name": f"{customer_data.get('first_name', '')} {customer_data.get('last_name', '')}",
+                        "plate": vehicle_data.get("license_plate", "N/A") if vehicle_data else "N/A",
+                        "vehicles": vehicle_data.get("vehicles", []) if vehicle_data else []
+                    })
+                    
+                except Exception as e:
+                    logger.warning(f"Error loading customer file {customer_file}: {e}")
+                    continue
+                    
+    except Exception as e:
+        logger.warning(f"Error loading customer data: {e}")
+    
+    return customers_data
 
-# Voice instruction examples
-setup_voice_instruction_examples()
+# Display customer information in sidebar
+with st.sidebar:
+    st.subheader("👥 Available Test Customers")
+    
+    sample_customers = load_sample_customers()
+    
+    if sample_customers:
+        for customer in sample_customers:
+            with st.expander(f"📋 {customer['name']}", expanded=False):
+                st.write(f"**License Plate:** {customer['plate']}")
+                
+                if customer['vehicles']:
+                    st.write("**Vehicles:**")
+                    for i, vehicle in enumerate(customer['vehicles'], 1):
+                        make = vehicle.get('make', 'Unknown')
+                        model = vehicle.get('model', 'Unknown')
+                        year = vehicle.get('year', 'Unknown')
+                        color = vehicle.get('color', 'Unknown')
+                        st.write(f"  {i}. {make} {model} ({year}, {color})")
+                else:
+                    st.write("No vehicle data available")
+    else:
+        st.info("No test customer data available")
+    
+    st.markdown("---")
+
+# Voice controls - custom implementation with default TTS instructions
+with st.sidebar:
+    # Voice output toggle
+    if "voice_on" not in st.session_state:
+        st.session_state.voice_on = True
+    st.session_state.voice_on = st.toggle(
+        label="🔊 Enable Voice Output", 
+        value=st.session_state.voice_on
+    )
+    
+    # Voice selection
+    available_voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", 
+                      "nova", "onyx", "sage", "shimmer"]
+    if "selected_voice" not in st.session_state:
+        st.session_state.selected_voice = "shimmer"
+    st.session_state.selected_voice = st.selectbox(
+        "🎤 Select Voice:",
+        available_voices,
+        index=available_voices.index(st.session_state.selected_voice)
+    )
+    
+    # Set default TTS instructions without UI control
+    if "tts_instructions" not in st.session_state:
+        st.session_state.tts_instructions = "Speak with a professional, helpful tone."
+
+voice_on = st.session_state.voice_on
+selected_voice = st.session_state.selected_voice
+tts_instructions = st.session_state.tts_instructions
+
+# # Voice instruction examples
+# setup_voice_instruction_examples()
 
 setup_sidebar_conversation_info()
 
@@ -147,64 +249,45 @@ def tracked_speech_to_text(audio_bytes):
         raise
 
 def tracked_text_to_speech(text):
-    """Text-to-speech with performance tracking."""
+    """Text-to-speech with performance tracking and better error handling."""
     st.session_state.performance_tracker.start_text_to_speech()
     try:
+        logger.debug(f"TTS requested for text: '{text[:50]}...' (length: {len(text)})")
         result = text_to_speech(text, client)
         st.session_state.performance_tracker.end_text_to_speech()
+        if result:
+            logger.debug("TTS generation successful")
+        else:
+            logger.warning("TTS generation returned empty result")
         return result
     except Exception as e:
         st.session_state.performance_tracker.end_text_to_speech()
+        logger.error(f"TTS generation failed: {e}")
         raise
 
 # Add JSON template input to sidebar
 with st.sidebar:
-    # Model selection
-    st.subheader("🤖 Model Selection")
+    # Set model to default value (gpt-4.1-mini) without UI control
     if "selected_model" not in st.session_state:
-        st.session_state.selected_model = DEFAULT_MODEL
+        st.session_state.selected_model = "gpt-4.1-mini"
     
-    # Create dropdown for model selection
-    if available_models:
-        st.session_state.selected_model = st.selectbox(
-            "Choose AI Model:",
-            options=list(available_models.keys()),
-            index=list(available_models.keys()).index(st.session_state.selected_model) 
-                  if st.session_state.selected_model in available_models else 0,
-            help="Select the AI model to use for conversation"
-        )
-        
-        # Store the deployment name for the selected model
-        st.session_state.selected_model_deployment = available_models[st.session_state.selected_model]
-        
-        # Show model description
-        if st.session_state.selected_model in MODEL_DESCRIPTIONS:
-            st.caption(MODEL_DESCRIPTIONS[st.session_state.selected_model])
-            
-        st.info(f"Using deployment: `{st.session_state.selected_model_deployment}`")
+    # Set the model deployment name
+    if available_models and "gpt-4.1-mini" in available_models:
+        st.session_state.selected_model_deployment = available_models["gpt-4.1-mini"]
     else:
-        st.error("No models available. Check environment configuration.")
+        # Fallback to gpt4omini if gpt-4.1-mini is not available
         st.session_state.selected_model_deployment = gpt4omini
     
-    # Temperature control
-    st.subheader("🎛️ Model Settings")
+    # Set temperature to default value (0.0) without UI control
     if "temperature" not in st.session_state:
-        st.session_state.temperature = DEFAULT_TEMPERATURE
-    
-    st.session_state.temperature = st.slider(
-        "Temperature",
-        min_value=0.0,
-        max_value=1.0,
-        value=st.session_state.temperature,
-        step=0.1,
-        help="Controls randomness: 0.0 = deterministic, 1.0 = very creative"
-    )
-    
+        st.session_state.temperature = 0.0
     
     # Add separator
     st.markdown("---")
     
-    system_message = setup_system_message_input(DEFAULT_SYSTEM_MESSAGE)
+    # Set system message to default value without UI control
+    if "system_message" not in st.session_state:
+        st.session_state.system_message = DEFAULT_SYSTEM_MESSAGE
 
     st.subheader("📋 JSON Template")
     if "json_template" not in st.session_state:
@@ -226,18 +309,18 @@ with st.sidebar:
         # Attempt dynamic model creation using shared utility
         from utils.voicebot_common import create_dynamic_pydantic_model, generate_conversation_summary as shared_generate_summary
         test_model = create_dynamic_pydantic_model(st.session_state.json_template)
-        if test_model:
-            st.info("🎯 Template ready for dynamic structured outputs")
-        else:
-            st.error("❌ Template cannot be used for structured outputs")
+        # if test_model:
+        #     st.info("🎯 Template ready for dynamic structured outputs")
+        # else:
+        #     st.error("❌ Template cannot be used for structured outputs")
             
     except json.JSONDecodeError:
         st.error("❌ Invalid JSON format")
     except Exception as e:
         st.error(f"❌ Template error: {str(e)}")
     
-    # Add a small note about how the template is used
-    st.caption("This template will be dynamically converted to a Pydantic model for structured outputs.")
+    # # Add a small note about how the template is used
+    # st.caption("This template will be dynamically converted to a Pydantic model for structured outputs.")
     # Finish Conversation section
     st.subheader("🏁 Finish Conversation")
     st.caption("Generate a structured JSON summary and save performance metrics.")
@@ -335,8 +418,48 @@ else:
 
 with conversation_container:
     if prompt:
-        # Use the common chat flow handler with tracked TTS
-        handle_chat_flow(prompt, basic_chat, voice_on, tracked_text_to_speech)
+        # Add user message
+        add_message_to_session("user", prompt)
+        
+        # Display conversation history including the new user message
+        display_conversation_history(st.session_state.messages)
+        
+        # Get and display assistant response with enhanced voice handling
+        with st.chat_message("assistant"):
+            with st.spinner("🤔 Processing your request..."):
+                # Pass previous conversation history excluding system messages
+                conversation_history = [msg for msg in st.session_state.messages if msg["role"] != "system"]
+                response = basic_chat(prompt, conversation_history)
+            
+            # Display text response
+            st.markdown(response)
+            
+            # Enhanced voice output handling
+            if voice_on:
+                try:
+                    logger.debug(f"Voice enabled, processing TTS for response length: {len(response)}")
+                    # Clean text for TTS
+                    from utils.voicebot_common import cleanup_response_for_tts
+                    audio_text = cleanup_response_for_tts(response)
+                    logger.debug(f"Cleaned text for TTS: '{audio_text[:50]}...'")
+                    
+                    if audio_text.strip():  # Only proceed if there's text to speak
+                        audio_content = tracked_text_to_speech(audio_text)
+                        if audio_content:
+                            logger.debug("Playing TTS audio")
+                            st.audio(audio_content, format="audio/wav", autoplay=True)
+                        else:
+                            logger.warning("TTS returned no audio content")
+                            st.warning("⚠️ Could not generate audio for this response")
+                    else:
+                        logger.warning("No text available for TTS after cleanup")
+                        
+                except Exception as e:
+                    logger.error(f"Voice output error: {e}")
+                    st.error(f"🔊 Audio generation failed: {str(e)}")
+        
+        # Add assistant response to session
+        add_message_to_session("assistant", response)
     else:
         # Display existing conversation
         display_conversation_history(st.session_state.messages)
