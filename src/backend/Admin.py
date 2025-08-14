@@ -37,9 +37,9 @@ load_css("pages/common.css")
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
-    st.image(os.path.join("images", "logo.png"))
+    st.image(os.path.join("images", "Mobiliar_Logo.png"))
 
-st.write("# Realtime Synthetic Call Center Agents")
+st.write("# Car Insurance Claims Handling Agents")
 st.write("## Admin Interface")
 
 st.write(
@@ -50,6 +50,6 @@ st.write(
     * **Delete Documents**: Remove documents from the knowledge base when they are no longer needed
     * **Synthesize Data**: Generate synthetic data to simulate a **Contact Center** scenario with a database comprised of product, customer, purchases history and human-agent conversations.
     * **VoiceBot Classic**: Test the Azure OpenAI powered voice chatbot with speech-to-text and text-to-speech capabilities
-    * **VoiceBot MultiAgent**: Experience advanced conversational AI using Azure AI Agents with specialized connected agents for web search, internal knowledge base queries, and sophisticated multi-agent orchestration
+    * **Handover**: Manage the transition of conversations from AI agents to human operators when escalation is needed
     """
 )

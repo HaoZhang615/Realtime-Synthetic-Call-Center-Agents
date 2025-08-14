@@ -180,6 +180,7 @@ def speech_to_text(audio: bytes, client: AzureOpenAI) -> str:
             file=buffer,
             model=transcribe_model,
             response_format="json",
+            language="de"
         )
         
         buffer.close()
@@ -269,7 +270,7 @@ def setup_sidebar_voice_controls():
     with st.sidebar:
         # Voice output toggle
         if "voice_on" not in st.session_state:
-            st.session_state.voice_on = False
+            st.session_state.voice_on = True
         st.session_state.voice_on = st.toggle(
             label="🔊 Enable Voice Output", 
             value=st.session_state.voice_on
@@ -307,7 +308,8 @@ def setup_sidebar_conversation_info():
         if st.button("🔄 New Conversation"):
             # Clear session state for new conversation
             keys_to_clear = ["conversation_doc", "messages", "connected_agents", 
-                            "agent_thread"]
+                            "agent_thread", "welcome_added", "welcome_audio", 
+                            "welcome_audio_played"]
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]

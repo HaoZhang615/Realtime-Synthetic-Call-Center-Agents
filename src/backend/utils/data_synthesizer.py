@@ -30,13 +30,17 @@ URGENCY_LEVELS = ['sofort', 'binnen_stunde', 'heute', 'nicht_dringend']
 AGENT_LIST = ['adam','beatrice','christian','diana','emil', 'franziska']
 
 # Swiss German first names
-FIRST_NAME_LIST = ['Andreas','Beatrice','Christian','Diana','Emil','Franziska','Georg','Hannah','Isabelle','Jakob','Klaus','Lieselotte','Marcel',
-    'Nicole','Oliver','Petra','Quentin','Rebecca','Stefan','Tanja','Ulrich','Verena','Wilhelm','Xaver','Yvonne','Zacharias']
+# Swiss German first names - selected for clear pronunciation and easy spelling over the phone
+FIRST_NAME_LIST = [
+    "Anna", "Ben", "Clara", "David", "Emma", "Felix", "Gina", "Hans", "Julia", "Lukas",
+    "Mia", "Nico", "Paul", "Rita", "Sara", "Tim", "Urs", "Vera", "Walter", "Yara"
+]
 
-# Swiss surnames
-LAST_NAME_LIST = ["Müller", "Meier", "Schmid", "Keller", "Weber", "Huber", "Schneider", "Meyer", "Steiner", "Fischer", "Gerber", 
-                  "Brunner", "Baumann", "Frei", "Zimmermann", "Moser", "Lüthi", "Graf", "Wyss", "Roth", "Kaufmann", 
-                  "Zürcher", "Hofmann", "Widmer", "Bürki", "Lehmann"]
+# Swiss surnames - chosen for simplicity, clarity, and ease of spelling
+LAST_NAME_LIST = [
+    "Müller", "Meier", "Keller", "Weber", "Huber", "Fischer", "Baumann", "Graf", "Weiss", "Roth",
+    "Kaufmann", "Hofmann", "Widmer", "Lehmann", "Schmid", "Steiner", "Gerber", "Brunner", "Freimann"
+]
 
 # Swiss cantons for license plates
 SWISS_CANTONS = ['ZH', 'BE', 'LU', 'UR', 'SZ', 'OW', 'NW', 'GL', 'ZG', 'FR', 'SO', 'BS', 'BL', 'SH', 'AR', 'AI', 'SG', 'GR', 'AG', 'TG', 'TI', 'VD', 'VS', 'NE', 'GE', 'JU']

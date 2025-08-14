@@ -26,4 +26,5 @@ dependencies = [
     "jsonref",
     "semantic-kernel>=1.32.2",
     "azure-ai-evaluation>=1.10.0",
+    "twilio>=9.7.0",
 ]
