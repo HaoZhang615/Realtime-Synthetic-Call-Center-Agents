@@ -101,6 +101,8 @@ DEFAULT_JSON_TEMPLATE = """{
         "causeDescription": {"type": "string"},
         "location": { "type": "string",
                       "description": "Check if the user is at home, if not, use the address provided via Whatsapp or user input."},
+        "coordinates": { "type": "string",
+                      "description": "Provide the longitude and latitude if available from the Geo-location lookup"},
         "NrOfAdultsInCarForTowing": { "type": "integer" },
         "NrOfChildrenInCarForTowing": { "type": "integer" },
         "isItUrgent": { "type": "boolean" },
