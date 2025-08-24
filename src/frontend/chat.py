@@ -12,10 +12,8 @@ from realtime2 import RealtimeClient
 from realtime_conversation_logger import RealtimeConversationLogger
     
 from agents.root import root_assistant
-from agents.internal_kb import internal_kb_agent
-from agents.database_agent import database_agent
+from agents.realtime_agent import realtime_agent
 from agents.assistant_agent import assistant_agent
-# from agents.web_search_agent import web_search_agent
 
 def load_customers() -> List[Dict]:
     util.load_dotenv_from_azd()
@@ -24,19 +22,29 @@ def load_customers() -> List[Dict]:
     cosmos_client = CosmosClient(cosmos_endpoint, credential)
     database_name = os.getenv("COSMOSDB_DATABASE")
     customer_container_name = "Customer"
+    vehicles_container_name = "Vehicles"
     
     try:
         database = cosmos_client.get_database_client(database_name)
-        container = database.get_container_client(customer_container_name)
+        customer_container = database.get_container_client(customer_container_name)
+        vehicles_container = database.get_container_client(vehicles_container_name)
         
         # Query all customers
-        query = "SELECT c.customer_id, c.first_name, c.last_name FROM c"
-        items = list(container.query_items(query, enable_cross_partition_query=True))
+        customer_query = "SELECT c.customer_id, c.first_name, c.last_name FROM c"
+        customers = list(customer_container.query_items(customer_query, enable_cross_partition_query=True))
+        
+        # Query all vehicles to get license plates
+        vehicle_query = "SELECT c.customer_id, c.license_plate FROM c"
+        vehicles = list(vehicles_container.query_items(vehicle_query, enable_cross_partition_query=True))
+        
+        # Create a mapping of customer_id to license_plate
+        license_plate_map = {vehicle['customer_id']: vehicle['license_plate'] for vehicle in vehicles}
         
         return [{
-            'id': item['customer_id'],  # Using customer_id as id for consistency
-            'name': f"{item['first_name']} {item['last_name']}"
-        } for item in items]
+            'id': customer['customer_id'],  # Using customer_id as id for consistency
+            'name': f"{customer['first_name']} {customer['last_name']}",
+            'license_plate': license_plate_map.get(customer['customer_id'], 'N/A')
+        } for customer in customers]
     except exceptions.CosmosResourceNotFoundError as e:
         logger.error(f"CosmosHttpResponseError: {e}")
         return []
@@ -114,9 +122,7 @@ async def setup_openai_realtime():
     cl.user_session.set("openai_realtime", openai_realtime)
     
     # Agents must be registered before the root agent
-    # openai_realtime.assistant.register_agent(web_search_agent)
-    openai_realtime.assistant.register_agent(internal_kb_agent)
-    openai_realtime.assistant.register_agent(database_agent(customer_id))
+    openai_realtime.assistant.register_agent(realtime_agent(customer_id))
     openai_realtime.assistant.register_agent(assistant_agent)
     openai_realtime.assistant.register_root_agent(root_assistant(customer_id))
 
@@ -132,7 +138,7 @@ async def start():
             cl.Action(
                 name="login",
                 value=str(customer['id']),
-                label=customer['name'],
+                label=f"{customer['name']} ({customer['license_plate']})",
                 payload={"customer_id": customer['id']}
             )
             for customer in customers
