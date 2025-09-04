@@ -128,6 +128,45 @@ module searchPrivateEndpoint './modules/network/private-endpoint.bicep' = {
   }
 }
 
+module keyVaultPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+  name: 'keyvault-pe'
+  scope: resGroup
+  params: {
+    name: 'keyvault-pe-${resourceToken}'
+    location: location
+    subnetId: vnet.outputs.backendSubnetId
+    groupId: 'vault'
+    privateLinkResourceId: keyVault.outputs.resourceId
+    tags: tags
+  }
+}
+
+module openAiPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+  name: 'openai-pe'
+  scope: resGroup
+  params: {
+    name: 'openai-pe-${resourceToken}'
+    location: location
+    subnetId: vnet.outputs.backendSubnetId
+    groupId: 'account'
+    privateLinkResourceId: openAi.outputs.resourceId
+    tags: tags
+  }
+}
+
+module aiServicesPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+  name: 'aiservices-pe'
+  scope: resGroup
+  params: {
+    name: 'aiservices-pe-${resourceToken}'
+    location: location
+    subnetId: vnet.outputs.backendSubnetId
+    groupId: 'account'
+    privateLinkResourceId: account.outputs.resourceId
+    tags: tags
+  }
+}
+
 // Private DNS Zones for proper DNS resolution
 module cosmosPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
   name: 'cosmos-dns-zone'
@@ -157,6 +196,39 @@ module searchPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
   params: {
     privateEndpointId: searchPrivateEndpoint.outputs.id
     privateDnsZoneName: 'privatelink.search.windows.net'
+    vnetId: vnet.outputs.vnetId
+    tags: tags
+  }
+}
+
+module keyVaultPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+  name: 'keyvault-dns-zone'
+  scope: resGroup
+  params: {
+    privateEndpointId: keyVaultPrivateEndpoint.outputs.id
+    privateDnsZoneName: 'privatelink.vaultcore.azure.net'
+    vnetId: vnet.outputs.vnetId
+    tags: tags
+  }
+}
+
+module openAiPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+  name: 'openai-dns-zone'
+  scope: resGroup
+  params: {
+    privateEndpointId: openAiPrivateEndpoint.outputs.id
+    privateDnsZoneName: 'privatelink.openai.azure.com'
+    vnetId: vnet.outputs.vnetId
+    tags: tags
+  }
+}
+
+module aiServicesPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+  name: 'aiservices-dns-zone'
+  scope: resGroup
+  params: {
+    privateEndpointId: aiServicesPrivateEndpoint.outputs.id
+    privateDnsZoneName: 'privatelink.cognitiveservices.azure.com'
     vnetId: vnet.outputs.vnetId
     tags: tags
   }
@@ -232,6 +304,11 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
     name: 'kv-${resourceToken}'
     location: location
     enableRbacAuthorization: true
+    publicNetworkAccess: 'Disabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+    }
     roleAssignments: [
       {
         roleDefinitionIdOrName: 'Key Vault Secrets User'
@@ -266,9 +343,12 @@ module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
     customSubDomainName: 'oai-${resourceToken}'
     sku: 'S0'
     deployments: openAiDeployments
-    disableLocalAuth: false
-    publicNetworkAccess: 'Enabled'
-    networkAcls: {}
+    disableLocalAuth: true
+    publicNetworkAccess: 'Disabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+    }
     roleAssignments: [
       {
         roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
@@ -296,13 +376,29 @@ module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
     // Non-required parameters
     customSubDomainName: _accounts_aiservice_ms_name
     location: location
-    disableLocalAuth: false
-    publicNetworkAccess: 'Enabled'
+    disableLocalAuth: true
+    publicNetworkAccess: 'Disabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+    }
     secretsExportConfiguration: {
       accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
       accessKey2Name: '${_accounts_aiservice_ms_name}-accessKey2'
       keyVaultResourceId: keyVault.outputs.resourceId
     }
+    roleAssignments: [
+      {
+        roleDefinitionIdOrName: 'Cognitive Services User'
+        principalId: appIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
+      {
+        roleDefinitionIdOrName: 'Cognitive Services User'
+        principalId: principalId
+        principalType: principalType
+      }
+    ]
   }
 }
 
