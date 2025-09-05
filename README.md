@@ -11,13 +11,21 @@ The multi-agent system supports internal knowledge base query, web search (groun
 
 ## Security & Networking
 
-This solution implements **enterprise-grade security** with private networking between backend services while maintaining public internet access for the container applications:
+This solution supports **enterprise-grade security** with configurable Zero Trust architecture. During deployment with `azd up`, users can choose to enable Zero Trust networking for enhanced security:
 
-### Private Network Architecture (detailed documentation in [Networking.md](Networking.md))
+### Zero Trust Architecture (Optional - Selected During Deployment)
+When Zero Trust is enabled:
 - **Virtual Network (VNet) Integration**: Container Apps Environment deployed with VNet integration using workload profiles
-- **Private Endpoints**: All backend services (Azure Storage, Cosmos DB, Azure AI Search) communicate privately through dedicated private endpoints
+- **Private Endpoints**: Backend services (Azure Storage, Cosmos DB, Azure AI Search, Key Vault) communicate privately through dedicated private endpoints
 - **Private DNS Zones**: Custom DNS resolution ensures services resolve to private IP addresses within the VNet
 - **Network Security**: Backend services deny public access and only allow communication through private endpoints
+- **AI Services Exception**: The AI Foundry/AI Services account maintains public access and key-based authentication for AI Search compatibility
+
+### Standard Deployment (Default)
+When Zero Trust is not enabled:
+- Services use public endpoints with managed identity authentication
+- Simplified networking while maintaining security through RBAC and managed identities
+- Easier troubleshooting and development workflows
 
 ### Authentication & Authorization
 - **User-Assigned Managed Identity**: Single managed identity used across all Azure services for secure, keyless authentication
@@ -26,10 +34,12 @@ This solution implements **enterprise-grade security** with private networking b
 - **Azure Trusted Services**: Storage account configured to allow trusted Azure services (like AI Search) access
 
 ### Benefits
-- **Enhanced Security**: Backend data and services isolated from public internet
-- **Compliance Ready**: Private networking supports enterprise compliance requirements  
+- **Flexible Security**: Choose between standard deployment or Zero Trust architecture based on requirements
+- **Enhanced Security** (Zero Trust): Backend data and services isolated from public internet when enabled
+- **Compliance Ready**: Zero Trust option supports enterprise compliance requirements  
 - **Zero-Trust Architecture**: Services authenticate using managed identities instead of connection strings
-- **Scalable**: VNet integration allows for future expansion with additional subnets and security controls
+- **AI Search Compatibility**: AI Services account maintains necessary access for AI Search operations
+- **Scalable**: VNet integration (when enabled) allows for future expansion with additional subnets and security controls
 
 ## How to get it work
 
@@ -113,11 +123,21 @@ cd .\Realtime-Synthetic-Call-Center-Agents\
 azd up
 ```
 
+During the `azd up` process, you will be prompted to decide whether to enable **Zero Trust architecture**. When enabled, all public endpoints (except the AI Foundry/AI Services account) will be disabled for enhanced security.
+
 The deployment process automatically provisions:
 - **Azure Container Apps Environment** with VNet integration and workload profiles
-- **Private networking** with VNet, private endpoints, and DNS zones for backend services
+- **Private networking** with VNet, private endpoints, and DNS zones for backend services (when Zero Trust is enabled)
 - **Managed identity** with appropriate RBAC permissions across all services
 - **Secure storage** configuration with trusted services access for AI Search indexing
+
+#### Zero Trust Architecture Features
+
+When Zero Trust is enabled during deployment:
+- **Private Endpoints**: Azure Storage, Cosmos DB, Azure AI Search, and Key Vault communicate through private endpoints only
+- **Network Isolation**: Backend services deny public access and only allow communication through the VNet
+- **AI Services Exception**: The AI Foundry/AI Services account maintains public access and key-based authentication to ensure compatibility with AI Search operations
+- **Container Apps**: Deployed with VNet integration for secure communication with backend services
 
 Example: initiate deployment
 ![azd_up_start](docs/images/azdup.png)
@@ -166,22 +186,30 @@ Please follow the instructions in [the instructions in `src/frontend`](./src/fro
 
 ## Architecture
 
-The solution is built on Azure Container Apps with a secure, private networking architecture:
+The solution is built on Azure Container Apps with configurable security architecture:
 
 ### Core Components
 - **Frontend**: Chainlit-based voice interface running in Azure Container Apps
 - **Backend**: Streamlit admin interface for document management and data synthesis
 - **Azure AI Search**: Vector search with built-in skillsets for document processing and embeddings
 - **Azure Cosmos DB**: NoSQL database for storing customer, product, and transaction data
-- **Azure Storage**: Blob storage for document ingestion with private endpoint access
+- **Azure Storage**: Blob storage for document ingestion with configurable network access
 - **Azure OpenAI**: GPT-4o models for chat completion and text-embedding-3-large for vector embeddings
 - **Azure Logic Apps**: Email automation workflows using Office 365 connectors
 
 ### Networking Architecture
+The solution supports two deployment modes:
+
+**Standard Deployment (Default):**
+- Services use public endpoints with managed identity authentication
+- Simplified networking for development and testing scenarios
+
+**Zero Trust Deployment (Optional):**
 - **Virtual Network**: Dedicated VNet with segregated subnets for apps and backend services
 - **Container Apps Environment**: VNet-integrated with workload profiles for enhanced security
-- **Private Endpoints**: Secure, private connections to Azure Storage, Cosmos DB, and AI Search
+- **Private Endpoints**: Secure, private connections to Azure Storage, Cosmos DB, AI Search, and Key Vault
 - **Private DNS Zones**: Custom DNS resolution for private endpoint connectivity
+- **AI Services Exception**: AI Foundry/AI Services account maintains public access for AI Search compatibility
 - **Managed Identity**: User-assigned managed identity for secure, keyless service authentication
 
 ### Multi-Agent System
