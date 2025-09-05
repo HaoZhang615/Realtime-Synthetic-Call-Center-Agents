@@ -12,7 +12,7 @@ param environmentName string
   'swedencentral'
 ])
 param location string
-param searchServiceLocation string = 'eastus'
+param searchServiceLocation string = ''
 param appExists bool
 
 @description('Whether the deployment is running on GitHub Actions')
@@ -20,6 +20,9 @@ param runningOnGh string = ''
 
 @description('Whether the deployment is running on Azure DevOps Pipeline')
 param runningOnAdo string = ''
+
+@description('Deploy with Zero Trust architecture (private networking, VNet integration, private endpoints)')
+param enableZeroTrust bool
 
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
@@ -64,8 +67,8 @@ resource resGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   tags: tags
 }
 
-// Create VNet and subnets
-module vnet './modules/network/vnet.bicep' = {
+// Create VNet and subnets (only for Zero Trust deployment)
+module vnet './modules/network/vnet.bicep' = if (enableZeroTrust) {
   name: 'vnet'
   scope: resGroup
   params: {
@@ -75,161 +78,174 @@ module vnet './modules/network/vnet.bicep' = {
   }
 }
 
-// Create a single container apps environment for both apps, integrated with VNet
-module containerAppsEnvironment './modules/app/containerappenv.bicep' = {
+// Create container apps environment for standard deployment (no VNet integration)
+module containerAppsEnvironment './modules/app/containerappenv.bicep' = if (!enableZeroTrust) {
   name: 'containerAppsEnvironment'
   params: {
     envName: _containerAppsEnvironmentName
     location: location
     tags: tags
     logAnalyticsWorkspaceName: '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
-    appSubnetId: vnet.outputs.appSubnetId
+    appSubnetId: ''
   }
   scope: resGroup
 }
 
-// Private Endpoints for backend services
-module storagePrivateEndpoint './modules/network/private-endpoint.bicep' = {
+// Create container apps environment for zero trust deployment (with VNet integration)
+module containerAppsEnvironmentZeroTrust './modules/app/containerappenv.bicep' = if (enableZeroTrust) {
+  name: 'containerAppsEnvironmentZeroTrust'
+  params: {
+    envName: _containerAppsEnvironmentName
+    location: location
+    tags: tags
+    logAnalyticsWorkspaceName: '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
+    appSubnetId: vnet!.outputs.appSubnetId
+  }
+  scope: resGroup
+}
+
+// Private Endpoints for backend services (only for Zero Trust deployment)
+module storagePrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'storage-pe'
   scope: resGroup
   params: {
     name: 'storage-pe-${resourceToken}'
     location: location
-    subnetId: vnet.outputs.backendSubnetId
+    subnetId: vnet!.outputs.backendSubnetId
     groupId: 'blob'
     privateLinkResourceId: storage.outputs.resourceId
     tags: tags
   }
 }
 
-module cosmosPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+module cosmosPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'cosmos-pe'
   scope: resGroup
   params: {
     name: 'cosmos-pe-${resourceToken}'
     location: location
-    subnetId: vnet.outputs.backendSubnetId
+    subnetId: vnet!.outputs.backendSubnetId
     groupId: 'Sql'
     privateLinkResourceId: cosmosdb.outputs.cosmosDbAccountId
     tags: tags
   }
 }
 
-module searchPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+module searchPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'search-pe'
   scope: resGroup
   params: {
     name: 'search-pe-${resourceToken}'
     location: location
-    subnetId: vnet.outputs.backendSubnetId
+    subnetId: vnet!.outputs.backendSubnetId
     groupId: 'searchService'
     privateLinkResourceId: searchService.outputs.resourceId
     tags: tags
   }
 }
 
-module keyVaultPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+module keyVaultPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'keyvault-pe'
   scope: resGroup
   params: {
     name: 'keyvault-pe-${resourceToken}'
     location: location
-    subnetId: vnet.outputs.backendSubnetId
+    subnetId: vnet!.outputs.backendSubnetId
     groupId: 'vault'
     privateLinkResourceId: keyVault.outputs.resourceId
     tags: tags
   }
 }
 
-module openAiPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+module openAiPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'openai-pe'
   scope: resGroup
   params: {
     name: 'openai-pe-${resourceToken}'
     location: location
-    subnetId: vnet.outputs.backendSubnetId
+    subnetId: vnet!.outputs.backendSubnetId
     groupId: 'account'
     privateLinkResourceId: openAi.outputs.resourceId
     tags: tags
   }
 }
 
-module aiServicesPrivateEndpoint './modules/network/private-endpoint.bicep' = {
+module aiServicesPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'aiservices-pe'
   scope: resGroup
   params: {
     name: 'aiservices-pe-${resourceToken}'
     location: location
-    subnetId: vnet.outputs.backendSubnetId
+    subnetId: vnet!.outputs.backendSubnetId
     groupId: 'account'
     privateLinkResourceId: account.outputs.resourceId
     tags: tags
   }
 }
 
-// Private DNS Zones for proper DNS resolution
-module cosmosPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+// Private DNS Zones for proper DNS resolution (only for Zero Trust deployment)
+module cosmosPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'cosmos-dns-zone'
   scope: resGroup
   params: {
-    privateEndpointId: cosmosPrivateEndpoint.outputs.id
+    privateEndpointId: cosmosPrivateEndpoint!.outputs.id
     privateDnsZoneName: 'privatelink.documents.azure.com'
-    vnetId: vnet.outputs.vnetId
+    vnetId: vnet!.outputs.vnetId
     tags: tags
   }
 }
 
-module storagePrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+module storagePrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'storage-dns-zone'
   scope: resGroup
   params: {
-    privateEndpointId: storagePrivateEndpoint.outputs.id
+    privateEndpointId: storagePrivateEndpoint!.outputs.id
     privateDnsZoneName: 'privatelink.blob.${environment().suffixes.storage}'
-    vnetId: vnet.outputs.vnetId
+    vnetId: vnet!.outputs.vnetId
     tags: tags
   }
 }
 
-module searchPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+module searchPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'search-dns-zone'
   scope: resGroup
   params: {
-    privateEndpointId: searchPrivateEndpoint.outputs.id
+    privateEndpointId: searchPrivateEndpoint!.outputs.id
     privateDnsZoneName: 'privatelink.search.windows.net'
-    vnetId: vnet.outputs.vnetId
+    vnetId: vnet!.outputs.vnetId
     tags: tags
   }
 }
 
-module keyVaultPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+module keyVaultPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'keyvault-dns-zone'
   scope: resGroup
   params: {
-    privateEndpointId: keyVaultPrivateEndpoint.outputs.id
+    privateEndpointId: keyVaultPrivateEndpoint!.outputs.id
     privateDnsZoneName: 'privatelink.vaultcore.azure.net'
-    vnetId: vnet.outputs.vnetId
+    vnetId: vnet!.outputs.vnetId
     tags: tags
   }
 }
 
-module openAiPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+module openAiPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'openai-dns-zone'
   scope: resGroup
   params: {
-    privateEndpointId: openAiPrivateEndpoint.outputs.id
+    privateEndpointId: openAiPrivateEndpoint!.outputs.id
     privateDnsZoneName: 'privatelink.openai.azure.com'
-    vnetId: vnet.outputs.vnetId
+    vnetId: vnet!.outputs.vnetId
     tags: tags
   }
 }
 
-module aiServicesPrivateDnsZone './modules/network/private-dns-zone.bicep' = {
+module aiServicesPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'aiservices-dns-zone'
   scope: resGroup
   params: {
-    privateEndpointId: aiServicesPrivateEndpoint.outputs.id
+    privateEndpointId: aiServicesPrivateEndpoint!.outputs.id
     privateDnsZoneName: 'privatelink.cognitiveservices.azure.com'
-    vnetId: vnet.outputs.vnetId
+    vnetId: vnet!.outputs.vnetId
     tags: tags
   }
 }
@@ -304,10 +320,12 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
     name: 'kv-${resourceToken}'
     location: location
     enableRbacAuthorization: true
-    publicNetworkAccess: 'Disabled'
-    networkAcls: {
+    publicNetworkAccess: enableZeroTrust ? 'Disabled' : 'Enabled'
+    networkAcls: enableZeroTrust ? {
       defaultAction: 'Deny'
       bypass: 'AzureServices'
+    } : {
+      defaultAction: 'Allow'
     }
     roleAssignments: [
       {
@@ -343,11 +361,13 @@ module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
     customSubDomainName: 'oai-${resourceToken}'
     sku: 'S0'
     deployments: openAiDeployments
-    disableLocalAuth: true
-    publicNetworkAccess: 'Disabled'
-    networkAcls: {
+    disableLocalAuth: enableZeroTrust
+    publicNetworkAccess: enableZeroTrust ? 'Disabled' : 'Enabled'
+    networkAcls: enableZeroTrust ? {
       defaultAction: 'Deny'
       bypass: 'AzureServices'
+    } : {
+      defaultAction: 'Allow'
     }
     roleAssignments: [
       {
@@ -376,11 +396,10 @@ module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
     // Non-required parameters
     customSubDomainName: _accounts_aiservice_ms_name
     location: location
-    disableLocalAuth: true
-    publicNetworkAccess: 'Disabled'
+    disableLocalAuth: false
+    publicNetworkAccess: 'Enabled'
     networkAcls: {
-      defaultAction: 'Deny'
-      bypass: 'AzureServices'
+      defaultAction: 'Allow'
     }
     secretsExportConfiguration: {
       accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
@@ -433,6 +452,7 @@ module cosmosdb 'modules/cosmos/cosmos.bicep' = {
     principalId: principalId
     principalType: principalType
     tags: tags
+    enableZeroTrust: enableZeroTrust
   }
   scope: resGroup
 }
@@ -508,7 +528,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
     location: location
     tags: tags
     identityId: appIdentity.outputs.identityId
-    containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
+    containerAppsEnvironmentId: enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.id : containerAppsEnvironment!.outputs.id
     containerRegistryName: registry.outputs.name
     exists: appExists
     targetPort: 80
@@ -551,7 +571,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
     location: location
     tags: tags
     identityId: appIdentity.outputs.identityId
-    containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
+    containerAppsEnvironmentId: enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.id : containerAppsEnvironment!.outputs.id
     containerRegistryName: registry.outputs.name
     exists: appExists
     targetPort: 80
@@ -597,7 +617,7 @@ module searchService 'br/public:avm/res/search/search-service:0.7.1' = {
     sku: 'standard'
     replicaCount: 1
     semanticSearch: 'standard'
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: enableZeroTrust ? 'Disabled' : 'Enabled'
     managedIdentities: { userAssignedResourceIds: [appIdentity.outputs.identityId] }
     roleAssignments: [
       {
@@ -644,13 +664,15 @@ module storage 'br/public:avm/res/storage/storage-account:0.9.1' = {
     tags: tags
     kind: 'StorageV2'
     skuName: 'Standard_LRS'
-    publicNetworkAccess: 'Disabled'
-    networkAcls: {
+    publicNetworkAccess: enableZeroTrust ? 'Disabled' : 'Enabled'
+    networkAcls: enableZeroTrust ? {
       defaultAction: 'Deny'
       bypass: 'AzureServices'
+    } : {
+      defaultAction: 'Allow'
     }
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: false
+    allowSharedKeyAccess: enableZeroTrust ? false : true
     blobServices: {
       deleteRetentionPolicyDays: 2
       deleteRetentionPolicyEnabled: true

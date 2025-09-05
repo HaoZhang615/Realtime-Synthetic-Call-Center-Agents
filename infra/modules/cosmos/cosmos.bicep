@@ -2,6 +2,7 @@ param cosmosDbAccountName string
 param databaseName string = 'GenAI'
 param location string = resourceGroup().location
 param tags object = {}
+param enableZeroTrust bool
 
 param identityName string
 resource appIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = { name: identityName }
@@ -32,8 +33,8 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
         name: 'EnableServerless'
       }
     ]
-    publicNetworkAccess: 'Disabled'
-    isVirtualNetworkFilterEnabled: true
+    publicNetworkAccess: enableZeroTrust ? 'Disabled' : 'Enabled'
+    isVirtualNetworkFilterEnabled: enableZeroTrust
     virtualNetworkRules: [] // Only allow access via private endpoints
     ipRules: []
   }
