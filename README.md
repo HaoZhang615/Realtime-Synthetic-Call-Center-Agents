@@ -180,7 +180,7 @@ This enables you to build complete end-to-end workflows that connect the AI assi
 
 ## Local execution
 
-Once the environment has been deployed with `azd up` you can also run the aplication locally.
+Once the environment has been deployed with `azd up` you can also run the application locally.
 
 Please follow the instructions in [the instructions in `src/frontend`](./src/frontend/README.md)
 
