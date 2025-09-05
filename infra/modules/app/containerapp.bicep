@@ -8,12 +8,9 @@ param env object = {}
 
 param identityId string
 param containerRegistryName string
-param logAnalyticsWorkspaceName string
 param containerAppsEnvironmentId string // New parameter to accept environment ID
 param exists bool
 param targetPort int = 80
-
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = { name: logAnalyticsWorkspaceName }
 
 module fetchLatestImage './fetch-container-image.bicep' = {
   name: '${appName}-fetch-image'
@@ -24,7 +21,7 @@ module fetchLatestImage './fetch-container-image.bicep' = {
 
 // Removed containerAppsEnvironment resource as we'll use existing one
 
-resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
+resource app 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
   location: location
   tags: union(tags, {'azd-service-name': serviceName})
@@ -34,6 +31,7 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
   }
   properties: {
     managedEnvironmentId: containerAppsEnvironmentId // Use the provided environment ID
+    workloadProfileName: 'Consumption'
     configuration: {
       ingress: {
         external: true
