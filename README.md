@@ -14,7 +14,8 @@ The multi-agent system supports internal knowledge base query, web search (groun
 This solution supports **enterprise-grade security** with configurable Zero Trust architecture. During deployment with `azd up`, users can choose to enable Zero Trust networking for enhanced security:
 
 ### Zero Trust Architecture (Optional - Selected During Deployment)
-When Zero Trust is enabled:
+The `azd up` deployment process allows users to decide whether to enable Zero Trust architecture. When enabled:
+- **All public endpoints are disabled** except for the AI Foundry/AI Services account (required for AI Search indexing skillset functionality)
 - **Virtual Network (VNet) Integration**: Container Apps Environment deployed with VNet integration using workload profiles
 - **Private Endpoints**: Backend services (Azure Storage, Cosmos DB, Azure AI Search, Key Vault) communicate privately through dedicated private endpoints
 - **Private DNS Zones**: Custom DNS resolution ensures services resolve to private IP addresses within the VNet
