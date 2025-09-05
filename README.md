@@ -241,7 +241,6 @@ This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for
     - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)$
 
 ## to-do
-- [x] **Implement enterprise-grade security with private networking and managed identity authentication**
 - [ ] add a demo video
 - [ ] add logic to log the conversation into CosmosDB under container `human_agent_conversations`
 - [ ] add PowerBI dashboard integration for Post-Call Analysis
