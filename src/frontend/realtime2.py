@@ -97,12 +97,12 @@ class RealtimeAPI(RealtimeEventHandler):
     def __init__(self):
         super().__init__()
         self.default_url = 'wss://api.openai.com/v1/realtime'
-        self.url = os.environ["AZURE_OPENAI_ENDPOINT"].replace("https://", "wss://")
+        self.url = os.environ["AZURE_AI_FOUNDRY_ENDPOINT"].replace("https://", "wss://")
         self.api_key = os.environ.get("AZURE_OPENAI_API_KEY",None)
         self.credentials = DefaultAzureCredential()
         self.acquire_token = get_bearer_token_provider(self.credentials, "https://cognitiveservices.azure.com/.default")
         self.api_version = "2024-10-01-preview"
-        self.azure_deployment = os.environ["AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT"]
+        self.azure_deployment = os.environ["AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT"]
         self.ws = None
 
     def is_connected(self):
@@ -111,16 +111,16 @@ class RealtimeAPI(RealtimeEventHandler):
     def log(self, *args):
         logger.debug(f"[Websocket/{datetime.utcnow().isoformat()}]", *args)
 
-    async def connect(self, model='gpt-4o-mini-realtime-preview'):
+    async def connect(self):
         if self.is_connected():
             raise Exception("Already connected")
         
         if (self.api_key):
-            self.ws = await websockets.connect(f"{self.url}/openai/realtime?api-version={self.api_version}&deployment={model}", additional_headers={
+            self.ws = await websockets.connect(f"{self.url}/openai/realtime?api-version={self.api_version}&deployment={self.azure_deployment}", additional_headers={
                 'api-key': self.api_key
             })
         else:
-            self.ws = await websockets.connect(f"{self.url}/openai/realtime?api-version={self.api_version}&deployment={model}", additional_headers={
+            self.ws = await websockets.connect(f"{self.url}/openai/realtime?api-version={self.api_version}&deployment={self.azure_deployment}", additional_headers={
                 'Authorization': f'Bearer {self.acquire_token()}'
             })
             
