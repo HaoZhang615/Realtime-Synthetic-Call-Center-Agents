@@ -157,19 +157,6 @@ module keyVaultPrivateEndpoint './modules/network/private-endpoint.bicep' = if (
   }
 }
 
-module openAiPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
-  name: 'openai-pe'
-  scope: resGroup
-  params: {
-    name: 'openai-pe-${resourceToken}'
-    location: location
-    subnetId: vnet!.outputs.backendSubnetId
-    groupId: 'account'
-    privateLinkResourceId: openAi.outputs.resourceId
-    tags: tags
-  }
-}
-
 module aiServicesPrivateEndpoint './modules/network/private-endpoint.bicep' = if (enableZeroTrust) {
   name: 'aiservices-pe'
   scope: resGroup
@@ -228,16 +215,7 @@ module keyVaultPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (e
   }
 }
 
-module openAiPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
-  name: 'openai-dns-zone'
-  scope: resGroup
-  params: {
-    privateEndpointId: openAiPrivateEndpoint!.outputs.id
-    privateDnsZoneName: 'privatelink.openai.azure.com'
-    vnetId: vnet!.outputs.vnetId
-    tags: tags
-  }
-}
+
 
 module aiServicesPrivateDnsZone './modules/network/private-dns-zone.bicep' = if (enableZeroTrust) {
   name: 'aiservices-dns-zone'
@@ -263,54 +241,14 @@ module appIdentity './modules/app/identity.bicep' = {
 }
 
 // ------------------------
-// [ Array of OpenAI Model deployments ]
-param aoaiGpt4oRealtimeModelName string = 'gpt-4o-mini-realtime-preview'
-param aoaiGpt4ModelVersion string = '2024-12-17'
-param aoaiGpt4oMiniModelName string = 'gpt-4o-mini'
-param aoaiGpt4oMiniModelVersion string = '2024-07-18'
+// [ Array of AI Services Model deployments ]
+param aoaiGptRealtimeModelName string = 'gpt-realtime'
+param aoaiGptRealtimeModelVersion string = '2025-08-28'
+param aoaiGptChatModelName string = 'gpt-4.1-nano'
+param aoaiGptChatModelVersion string = '2025-04-14'
 param embedModel string = 'text-embedding-3-large'
 
-var embeddingDeployment = [
-  {
-    name: embedModel
-    model: {
-      format: 'OpenAI'
-      name: embedModel
-      version: '1'
-    }
-    sku: { 
-      name: 'Standard' 
-      capacity: 50 }
-  }
-]
 
-var realtimeDeployment =    [{
-    name: aoaiGpt4oRealtimeModelName
-    model: {
-      format: 'OpenAI'
-      name: aoaiGpt4oRealtimeModelName
-      version: aoaiGpt4ModelVersion
-    }
-    sku: { 
-      name: 'GlobalStandard'
-      capacity:  1
-    }
-  }]
-
-var gpt4ominiDeployment =    [{
-    name: aoaiGpt4oMiniModelName
-    model: {
-      format: 'OpenAI'
-      name: aoaiGpt4oMiniModelName
-      version: aoaiGpt4oMiniModelVersion
-    }
-    sku: { 
-      name: 'GlobalStandard'
-      capacity:  50
-    }
-  }]
-
-var openAiDeployments = concat(realtimeDeployment, gpt4ominiDeployment, embeddingDeployment)
 
 // Add Key Vault to store secrets like Bing Search API Key
 module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
@@ -350,40 +288,6 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
   }
 }
 
-module openAi 'br/public:avm/res/cognitive-services/account:0.8.0' = {
-  name: 'openai'
-  scope: resGroup
-  params: {
-    name: 'oai-${resourceToken}'
-    location: location
-    tags: union(tags, { 'azd-service-name': 'aoai-${tags['azd-env-name']}' })
-    kind: 'OpenAI'
-    customSubDomainName: 'oai-${resourceToken}'
-    sku: 'S0'
-    deployments: openAiDeployments
-    disableLocalAuth: enableZeroTrust
-    publicNetworkAccess: enableZeroTrust ? 'Disabled' : 'Enabled'
-    networkAcls: enableZeroTrust ? {
-      defaultAction: 'Deny'
-      bypass: 'AzureServices'
-    } : {
-      defaultAction: 'Allow'
-    }
-    roleAssignments: [
-      {
-        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
-        principalId: appIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
-        principalId: principalId
-        principalType: principalType
-      }
-    ]
-  }
-}
-
 param accounts_aiservice_ms_name string = ''
 var _accounts_aiservice_ms_name = !empty(accounts_aiservice_ms_name) ? accounts_aiservice_ms_name : '${abbrs.cognitiveServicesAccounts}${resourceToken}'
 module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
@@ -401,6 +305,45 @@ module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
     networkAcls: {
       defaultAction: 'Allow'
     }
+    // Deploy all three models in the AI Services account
+    deployments: [
+      {
+        name: aoaiGptRealtimeModelName
+        model: {
+          format: 'OpenAI'
+          name: aoaiGptRealtimeModelName
+          version: aoaiGptRealtimeModelVersion
+        }
+        sku: { 
+          name: 'GlobalStandard'
+          capacity: 1
+        }
+      }
+      {
+        name: aoaiGptChatModelName
+        model: {
+          format: 'OpenAI'
+          name: aoaiGptChatModelName
+          version: aoaiGptChatModelVersion
+        }
+        sku: { 
+          name: 'GlobalStandard'
+          capacity: 50
+        }
+      }
+      {
+        name: embedModel
+        model: {
+          format: 'OpenAI'
+          name: embedModel
+          version: '1'
+        }
+        sku: { 
+          name: 'Standard' 
+          capacity: 50
+        }
+      }
+    ]
     secretsExportConfiguration: {
       accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
       accessKey2Name: '${_accounts_aiservice_ms_name}-accessKey2'
@@ -414,6 +357,16 @@ module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
       }
       {
         roleDefinitionIdOrName: 'Cognitive Services User'
+        principalId: principalId
+        principalType: principalType
+      }
+      {
+        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
+        principalId: appIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
+      {
+        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
         principalId: principalId
         principalType: principalType
       }
@@ -515,9 +468,7 @@ module sendMailUrl 'modules/logicapp/retrieve_http_trigger.bicep' = {
   dependsOn: [sendEmailLogic]
 }
 
-var openAiEndpoint = !empty(openAiRealtimeName)
-  ? 'https://${openAiRealtimeName}.openai.azure.com'
-  : openAi.outputs.endpoint
+var FoundryEndpoint = account.outputs.endpoint
 
 module frontendApp 'modules/app/containerapp.bicep' = {
   name: 'frontend'
@@ -536,8 +487,8 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
-      AZURE_OPENAI_ENDPOINT: openAiEndpoint
-      AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT: aoaiGpt4oRealtimeModelName
+      AZURE_AI_FOUNDRY_ENDPOINT: FoundryEndpoint
+      AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT: aoaiGptRealtimeModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
@@ -562,6 +513,7 @@ module frontendApp 'modules/app/containerapp.bicep' = {
   }
 }
 
+
 module backendApp 'modules/app/containerapp.bicep' = {
   name: 'backend'
   scope: resGroup
@@ -579,11 +531,10 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
-      AZURE_OPENAI_ENDPOINT: openAiEndpoint
-      AZURE_OPENAI_EMBEDDING_ENDPOINT: openAiEndpoint
+      AZURE_AI_FOUNDRY_ENDPOINT: FoundryEndpoint
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
-      AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT: aoaiGpt4oMiniModelName
+      AZURE_OPENAI_GPT_CHAT_DEPLOYMENT: aoaiGptChatModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       AZURE_STORAGE_ENDPOINT: storage.outputs.primaryBlobEndpoint
@@ -597,8 +548,9 @@ module backendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
-      AZURE_AI_SERVICES_ENDPOINT: account.outputs.endpoint
       AZURE_AI_SERVICES_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
+      // Add OpenAI-specific environment variables for backward compatibility
+      AZURE_OPENAI_API_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
     },
     empty(openAiRealtimeName) ? {} : {
       AZURE_OPENAI_API_KEY: openAiRealtimeKey
@@ -717,12 +669,11 @@ output AZURE_RESOURCE_GROUP string = resGroup.name
 output RESOURCE_GROUP_ID string = resGroup.id
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 
-output AZURE_OPENAI_ENDPOINT string = openAiEndpoint
-output AZURE_OPENAI_EMBEDDING_ENDPOINT string = openAi.outputs.endpoint
+output AZURE_AI_FOUNDRY_ENDPOINT string = FoundryEndpoint
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
-output AZURE_OPENAI_GPT4o_REALTIME_DEPLOYMENT string = aoaiGpt4oRealtimeModelName
-output AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT string = aoaiGpt4oMiniModelName
+output AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT string = aoaiGptRealtimeModelName
+output AZURE_OPENAI_GPT_CHAT_DEPLOYMENT string = aoaiGptChatModelName
 
 output AZURE_SEARCH_ENDPOINT string = 'https://${searchService.outputs.name}.search.windows.net'
 output AZURE_SEARCH_INDEX string = searchIndexName
@@ -749,5 +700,4 @@ output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUr
 output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
 // Bing Search API Key is stored in Key Vault - applications should retrieve it from there
 
-output AZURE_AI_SERVICES_ENDPOINT string = account.outputs.endpoint
 output AZURE_AI_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'

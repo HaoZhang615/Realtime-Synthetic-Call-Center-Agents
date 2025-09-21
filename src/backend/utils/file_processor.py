@@ -187,7 +187,7 @@ def setup_index(
         )
     # step 2.5: Create the skillset if it doesn't exist
     ai_services_key = os.environ.get('AZURE_AI_SERVICES_KEY', '')
-    ai_services_endpoint = os.environ.get('AZURE_AI_SERVICES_ENDPOINT', '')
+    ai_services_endpoint = os.environ.get('AZURE_AI_FOUNDRY_ENDPOINT', '')
     
     # Check if the AI Services Key is a Key Vault reference and resolve it
     if ai_services_key and ai_services_key.startswith('@Microsoft.KeyVault'):

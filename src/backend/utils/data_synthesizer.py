@@ -40,7 +40,7 @@ class DataSynthesizer:
         self.aoai_client = AzureOpenAI(
             azure_ad_token_provider=token_provider,
             api_version="2024-10-21",
-            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"]
+            azure_endpoint=os.environ["AZURE_AI_FOUNDRY_ENDPOINT"]
         )
         
         self.cosmos_client = CosmosClient(
@@ -98,7 +98,7 @@ class DataSynthesizer:
         return container
     def create_document(self, prompt, temperature=0.9, max_tokens=2000):
         response = self.aoai_client.chat.completions.create(
-            model=os.environ["AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT"],
+            model=os.environ["AZURE_OPENAI_GPT_CHAT_DEPLOYMENT"],
             messages=[
                 {"role": "system", "content": "You are a helpful assistant who helps people"},
                 {"role": "user", "content": prompt}

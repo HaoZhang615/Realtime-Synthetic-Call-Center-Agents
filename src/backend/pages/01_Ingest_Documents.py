@@ -53,6 +53,11 @@ try:
                     azure_credential = DefaultAzureCredential()
 
                     # Ensure index and required components exist
+                    # Get the OpenAI embedding endpoint and convert to openai.azure.com domain if needed, doc: https://learn.microsoft.com/en-us/azure/search/cognitive-search-skill-azure-openai-embedding#prerequisites
+                    embedding_endpoint = os.environ["AZURE_AI_FOUNDRY_ENDPOINT"]
+                    if "cognitiveservices.azure.com" in embedding_endpoint:
+                        embedding_endpoint = embedding_endpoint.replace("cognitiveservices.azure.com", "openai.azure.com")
+                    
                     setup_index(
                         azure_credential=azure_credential,
                         uami_id=os.environ["AZURE_USER_ASSIGNED_IDENTITY_ID"],
@@ -60,7 +65,7 @@ try:
                         azure_search_endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
                         azure_storage_connection_string=os.environ["AZURE_STORAGE_CONNECTION_STRING"],
                         azure_storage_container=os.environ["AZURE_STORAGE_CONTAINER"],
-                        azure_openai_embedding_endpoint=os.environ["AZURE_OPENAI_EMBEDDING_ENDPOINT"],
+                        azure_openai_embedding_endpoint=embedding_endpoint,
                         azure_openai_embedding_deployment=os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"],
                         azure_openai_embedding_model=os.environ["AZURE_OPENAI_EMBEDDING_MODEL"],
                         azure_openai_embeddings_dimensions=3072
