@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,51 +16,49 @@ type FileItem = {
   uploadDate: string
   status: 'processed' | 'processing' | 'error'
   indexedIn: string[]
+  url?: string
 }
 
-const mockFiles: FileItem[] = [
-  {
-    id: '1',
-    name: 'customer_service_guide.pdf',
-    type: 'PDF',
-    size: 2.4 * 1024 * 1024,
-    uploadDate: '2024-01-15T10:30:00Z',
-    status: 'processed',
-    indexedIn: ['customer-support', 'general-knowledge']
-  },
-  {
-    id: '2', 
-    name: 'product_specifications.docx',
-    type: 'DOCX',
-    size: 1.8 * 1024 * 1024,
-    uploadDate: '2024-01-14T15:45:00Z',
-    status: 'processed',
-    indexedIn: ['product-info']
-  },
-  {
-    id: '3',
-    name: 'training_manual.pdf',
-    type: 'PDF', 
-    size: 5.2 * 1024 * 1024,
-    uploadDate: '2024-01-14T09:20:00Z',
-    status: 'processing',
-    indexedIn: []
-  },
-  {
-    id: '4',
-    name: 'company_policies.txt',
-    type: 'TXT',
-    size: 0.3 * 1024 * 1024,
-    uploadDate: '2024-01-13T14:10:00Z',
-    status: 'error',
-    indexedIn: []
-  }
-]
-
 export function FileManagement() {
-  const [files, setFiles] = useState<FileItem[]>(mockFiles)
+  const [files, setFiles] = useState<FileItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE || ''
+
+  const fetchFiles = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/files`)
+      if (!res.ok) throw new Error(`Failed to fetch files: ${res.status}`)
+      const data = await res.json()
+      const mapped: FileItem[] = (data.files || []).map((f: any) => {
+        const ext = f.name.split('.').pop()?.toUpperCase() || 'FILE'
+        return {
+          id: f.name,
+          name: f.name,
+          type: ext,
+            // backend returns size (int) and last_modified (ISO)
+          size: f.size,
+          uploadDate: f.last_modified,
+          status: 'processed', // backend does not expose processing state yet
+          indexedIn: [],
+          url: f.url
+        }
+      })
+      setFiles(mapped)
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load files')
+    } finally {
+      setLoading(false)
+    }
+  }, [API_BASE])
+
+  useEffect(() => {
+    fetchFiles()
+  }, [fetchFiles])
 
   const filteredFiles = files.filter(file =>
     file.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,15 +83,40 @@ export function FileManagement() {
     })
   }
 
-  const handleDelete = (fileId: string) => {
-    setFiles(prev => prev.filter(f => f.id !== fileId))
-    toast.success('File deleted successfully')
+  const handleDelete = async (fileId: string) => {
+    setDeleting(true)
+    const target = files.find(f => f.id === fileId)
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/files/${encodeURIComponent(target?.name || fileId)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`)
+      setFiles(prev => prev.filter(f => f.id !== fileId))
+      toast.success('File deleted')
+    } catch (e: any) {
+      toast.error(e.message || 'Delete failed')
+    } finally {
+      setDeleting(false)
+    }
   }
 
-  const handleBulkDelete = () => {
-    setFiles(prev => prev.filter(f => !selectedFiles.includes(f.id)))
-    setSelectedFiles([])
-    toast.success(`${selectedFiles.length} files deleted`)
+  const handleBulkDelete = async () => {
+    if (selectedFiles.length === 0) return
+    setDeleting(true)
+    try {
+      const filenames = files.filter(f => selectedFiles.includes(f.id)).map(f => f.name)
+      const res = await fetch(`${API_BASE}/api/admin/files/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filenames })
+      })
+      if (!res.ok) throw new Error(`Bulk delete failed (${res.status})`)
+      setFiles(prev => prev.filter(f => !selectedFiles.includes(f.id)))
+      toast.success(`${selectedFiles.length} file(s) deleted`)
+      setSelectedFiles([])
+    } catch (e: any) {
+      toast.error(e.message || 'Bulk delete failed')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const toggleFileSelection = (fileId: string) => {
@@ -135,6 +158,9 @@ export function FileManagement() {
             </div>
             
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={fetchFiles} disabled={loading}>
+                {loading ? 'Loading...' : 'Refresh'}
+              </Button>
               {selectedFiles.length > 0 && (
                 <>
                   <span className="text-sm text-muted-foreground">
@@ -145,7 +171,7 @@ export function FileManagement() {
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm">
+                      <Button variant="destructive" size="sm" disabled={deleting}>
                         <Trash className="w-4 h-4 mr-2" />
                         Delete Selected
                       </Button>
@@ -160,7 +186,7 @@ export function FileManagement() {
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleBulkDelete}>
+                        <AlertDialogAction onClick={handleBulkDelete} disabled={deleting}>
                           Delete
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -245,12 +271,14 @@ export function FileManagement() {
                       <Button size="sm" variant="ghost">
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="ghost">
-                        <Download className="w-4 h-4" />
+                      <Button size="sm" variant="ghost" asChild>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer">
+                          <Download className="w-4 h-4" />
+                        </a>
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost">
+                          <Button size="sm" variant="ghost" disabled={deleting}>
                             <Trash className="w-4 h-4 text-destructive" />
                           </Button>
                         </AlertDialogTrigger>
@@ -264,7 +292,7 @@ export function FileManagement() {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(file.id)}>
+                            <AlertDialogAction onClick={() => handleDelete(file.id)} disabled={deleting}>
                               Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>

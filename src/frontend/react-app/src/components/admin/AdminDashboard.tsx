@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { FileText, Database, ChatText, TrendUp, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 type IndexStatus = 'active' | 'syncing' | 'error'
 
@@ -19,20 +19,69 @@ type SearchIndex = {
   storageUsed: string
 }
 
-// Default index for the simplified system
+type DashboardStats = {
+  documents_count: number
+  total_storage_size: number
+  index_name: string
+  index_status: string
+  last_updated: string
+  vector_dimensions: number
+}
+
+// Default index for fallback
 const defaultIndex: SearchIndex = {
   id: 'internal-kb',
   name: 'internal-knowledge-base',
   description: 'Default knowledge base for all uploaded documents',
-  documentCount: 73,
-  status: 'active',
-  lastUpdated: '2024-01-15T10:30:00Z',
-  vectorDimensions: 1536,
-  storageUsed: '4.2 GB'
+  documentCount: 0,
+  status: 'error',
+  lastUpdated: '2024-01-01T00:00:00Z',
+  vectorDimensions: 3072,
+  storageUsed: '0 MB'
 }
 
 export function AdminDashboard() {
   const [indexData, setIndexData] = useState(defaultIndex)
+  const [loading, setLoading] = useState(false)
+
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE || ''
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 MB'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const fetchDashboardStats = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/dashboard`)
+      if (!res.ok) throw new Error(`Failed to fetch dashboard stats: ${res.status}`)
+      const data: DashboardStats = await res.json()
+      
+      setIndexData({
+        id: 'internal-kb',
+        name: data.index_name,
+        description: 'Knowledge base for all uploaded documents',
+        documentCount: data.documents_count,
+        status: data.index_status as IndexStatus,
+        lastUpdated: data.last_updated,
+        vectorDimensions: data.vector_dimensions,
+        storageUsed: formatFileSize(data.total_storage_size)
+      })
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load dashboard stats')
+      setIndexData(defaultIndex)
+    } finally {
+      setLoading(false)
+    }
+  }, [API_BASE])
+
+  useEffect(() => {
+    fetchDashboardStats()
+  }, [fetchDashboardStats])
   
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -44,19 +93,17 @@ export function AdminDashboard() {
     })
   }
 
-  const handleRefreshIndex = () => {
+  const handleRefreshIndex = async () => {
     setIndexData(prev => ({ ...prev, status: 'syncing' }))
-    toast.success('Index refresh started')
+    toast.success('Refreshing dashboard data...')
     
-    // Simulate refresh completion
-    setTimeout(() => {
-      setIndexData(prev => ({ 
-        ...prev, 
-        status: 'active',
-        lastUpdated: new Date().toISOString()
-      }))
-      toast.success('Index refresh completed')
-    }, 3000)
+    try {
+      await fetchDashboardStats()
+      toast.success('Dashboard refreshed successfully')
+    } catch (error) {
+      toast.error('Failed to refresh dashboard')
+      setIndexData(prev => ({ ...prev, status: 'error' }))
+    }
   }
 
   const stats = [
@@ -153,10 +200,10 @@ export function AdminDashboard() {
                 size="sm"
                 variant="outline"
                 onClick={handleRefreshIndex}
-                disabled={indexData.status === 'syncing'}
+                disabled={indexData.status === 'syncing' || loading}
               >
-                <ArrowsClockwise className={`w-4 h-4 mr-2 ${indexData.status === 'syncing' ? 'animate-spin' : ''}`} />
-                Refresh Index
+                <ArrowsClockwise className={`w-4 h-4 mr-2 ${(indexData.status === 'syncing' || loading) ? 'animate-spin' : ''}`} />
+                {loading ? 'Loading...' : 'Refresh'}
               </Button>
             </div>
           </div>

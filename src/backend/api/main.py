@@ -1,6 +1,9 @@
-"""FastAPI skeleton for Admin API.
+"""FastAPI skeleton for Admin APIfrom azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents import SearchClient
+from pydantic import BaseModel
 
-Endpoints:
+# Import existing utilities from the repo
+from utils.file_processor import upload_documents, setup_indexndpoints:
 - POST /api/realtime/token       : returns a short-lived access token for browser realtime clients (AOAI/Realtime)
 - POST /api/admin/upload         : accept multipart files and schedule processing using existing utils.upload_documents
 - GET  /api/health               : basic health check
@@ -106,9 +109,84 @@ class BulkDeleteRequest(BaseModel):
     filenames: List[str]
 
 
+class DashboardStats(BaseModel):
+    documents_count: int
+    total_storage_size: int
+    index_name: str
+    index_status: str
+    last_updated: str
+    vector_dimensions: int
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/admin/dashboard")
+async def get_dashboard_stats():
+    """Get dashboard statistics including file count and search index info."""
+    try:
+        azure_storage_endpoint = os.getenv("AZURE_STORAGE_ENDPOINT")
+        azure_storage_container = os.getenv("AZURE_STORAGE_CONTAINER", "documents")
+        azure_search_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
+        azure_search_index = os.getenv("AZURE_SEARCH_INDEX", "documents")
+        
+        # Get file statistics from blob storage
+        blob_client = BlobServiceClient(account_url=azure_storage_endpoint, credential=credential)
+        container_client = blob_client.get_container_client(azure_storage_container)
+        
+        files_count = 0
+        total_size = 0
+        last_modified = None
+        
+        if container_client.exists():
+            for blob in container_client.list_blobs():
+                files_count += 1
+                total_size += blob.size
+                if last_modified is None or blob.last_modified > last_modified:
+                    last_modified = blob.last_modified
+        
+        # Get search index statistics
+        try:
+            search_client = SearchClient(
+                endpoint=azure_search_endpoint,
+                index_name=azure_search_index,
+                credential=credential
+            )
+            
+            # Try to get index stats by doing a count query
+            index_status = "active"
+            try:
+                result = search_client.search("*", include_total_count=True, top=0)
+                # Access total count (this triggers the search)
+                _ = result.get_count()
+            except Exception:
+                index_status = "error"
+                
+        except Exception:
+            index_status = "error"
+        
+        return DashboardStats(
+            documents_count=files_count,
+            total_storage_size=total_size,
+            index_name=azure_search_index,
+            index_status=index_status,
+            last_updated=last_modified.isoformat() if last_modified else "2024-01-01T00:00:00Z",
+            vector_dimensions=3072  # Based on your embedding model configuration
+        )
+        
+    except Exception as ex:
+        logger.exception("Failed to get dashboard stats: %s", ex)
+        # Return default values on error
+        return DashboardStats(
+            documents_count=0,
+            total_storage_size=0,
+            index_name="documents",
+            index_status="error",
+            last_updated="2024-01-01T00:00:00Z",
+            vector_dimensions=3072
+        )
 
 
 @app.post("/api/realtime/token")

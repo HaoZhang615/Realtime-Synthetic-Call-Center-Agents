@@ -17,6 +17,7 @@ type UploadFile = {
 export function DocumentUpload() {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
   const [isDragActive, setIsDragActive] = useState(false)
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false)
 
   const onDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -49,6 +50,22 @@ export function DocumentUpload() {
     handleFiles(files)
   }
 
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE || '' // e.g. http://127.0.0.1:8000 when running vite dev
+
+  // Sequential upload processing to avoid backend concurrency issues
+  const processUploadQueue = async (filesToUpload: UploadFile[]) => {
+    if (isProcessingQueue) return // Prevent multiple queue processors
+    setIsProcessingQueue(true)
+    
+    for (const file of filesToUpload) {
+      await startUpload(file)
+      // Small delay between uploads to ensure backend processing completes
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+    
+    setIsProcessingQueue(false)
+  }
+
   const handleFiles = (files: File[]) => {
     const validFiles = files.filter(file => {
       const validTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
@@ -76,51 +93,77 @@ export function DocumentUpload() {
 
     setUploadFiles(prev => [...prev, ...newFiles])
     
-    // Simulate upload process
-    newFiles.forEach(uploadFile => {
-      simulateUpload(uploadFile.id)
-    })
+    // Batch process uploads sequentially to avoid backend concurrency issues
+    processUploadQueue(newFiles)
   }
 
-  const simulateUpload = async (fileId: string) => {
-    setUploadFiles(prev => prev.map(f => 
-      f.id === fileId ? { ...f, status: 'uploading' as const } : f
-    ))
+  const startUpload = async (uploadFile: UploadFile): Promise<void> => {
+    const fileId = uploadFile.id
+    const fileObj = uploadFile.file
 
-    // Simulate upload progress
-    for (let progress = 0; progress <= 100; progress += 10) {
-      await new Promise(resolve => setTimeout(resolve, 200))
-      setUploadFiles(prev => prev.map(f => 
-        f.id === fileId ? { ...f, progress } : f
-      ))
-    }
+    // Update to uploading
+    setUploadFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'uploading', progress: 0, error: undefined } : f))
 
-    // Simulate random success/failure
-    const success = Math.random() > 0.2
-    setUploadFiles(prev => prev.map(f => 
-      f.id === fileId ? { 
-        ...f, 
-        status: success ? 'success' : 'error',
-        error: success ? undefined : 'Upload failed. Please try again.'
-      } : f
-    ))
+    return new Promise((resolve, reject) => {
+      const formData = new FormData()
+      // Backend expects field name 'files' (list). We send single file per request to simplify progress tracking.
+      formData.append('files', fileObj, fileObj.name)
 
-    if (success) {
-      toast.success(`File uploaded successfully`)
-    } else {
-      toast.error(`Upload failed`)
-    }
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', API_BASE + '/api/admin/upload')
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100)
+          setUploadFiles(prev => prev.map(f => f.id === fileId ? { ...f, progress: pct } : f))
+        }
+      }
+
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 4) {
+          const success = xhr.status >= 200 && xhr.status < 300
+          if (success) {
+            setUploadFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'success', progress: 100 } : f))
+            toast.success(`${fileObj.name} uploaded`)
+            resolve()
+          } else {
+            let errMsg = `Upload failed (status ${xhr.status || 'network'})`
+            try {
+              const resp = JSON.parse(xhr.responseText || '{}')
+              if (resp.detail) errMsg = resp.detail
+            } catch {}
+            setUploadFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: errMsg } : f))
+            toast.error(errMsg)
+            reject(new Error(errMsg))
+          }
+        }
+      }
+
+      xhr.onerror = () => {
+        const errMsg = 'Network error'
+        setUploadFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: errMsg } : f))
+        toast.error(errMsg)
+        reject(new Error(errMsg))
+      }
+
+      xhr.send(formData)
+    })
   }
 
   const removeFile = (fileId: string) => {
     setUploadFiles(prev => prev.filter(f => f.id !== fileId))
   }
 
-  const retryUpload = (fileId: string) => {
-    setUploadFiles(prev => prev.map(f => 
-      f.id === fileId ? { ...f, status: 'pending', progress: 0, error: undefined } : f
-    ))
-    simulateUpload(fileId)
+  const retryUpload = async (fileId: string) => {
+    const fileObj = uploadFiles.find(f => f.id === fileId)
+    if (!fileObj) return
+    setUploadFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'pending', progress: 0, error: undefined } : f))
+    // Process single file retry
+    try {
+      await startUpload({ ...fileObj, status: 'pending', progress: 0, error: undefined })
+    } catch (error) {
+      // Error already handled in startUpload
+    }
   }
 
   return (

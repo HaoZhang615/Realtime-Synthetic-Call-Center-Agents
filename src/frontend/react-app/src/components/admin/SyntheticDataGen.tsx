@@ -28,10 +28,10 @@ export function SyntheticDataGen() {
   const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([])
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [expandedLogs, setExpandedLogs] = useState<{ [key: string]: boolean }>({})  // Form state
-  const [companyName, setCompanyName] = useState('Acme Corp')
-  const [numCustomers, setNumCustomers] = useState('100')
-  const [numProducts, setNumProducts] = useState('10')
-  const [numConversations, setNumConversations] = useState('1000')
+  const [companyName, setCompanyName] = useState('Microsoft')
+  const [numCustomers, setNumCustomers] = useState('2')
+  const [numProducts, setNumProducts] = useState('2')
+  const [numConversations, setNumConversations] = useState('0')
 
   const dataTypeOptions = [
     { value: 'customer-calls', label: 'Customer Service Calls' },
@@ -170,7 +170,7 @@ export function SyntheticDataGen() {
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Acme Corp"
+                placeholder="Microsoft"
               />
             </div>
             <div>
@@ -179,10 +179,10 @@ export function SyntheticDataGen() {
                 id="num-customers"
                 type="number"
                 min="1"
-                max="100000"
+                max="100"
                 value={numCustomers}
                 onChange={(e) => setNumCustomers(e.target.value)}
-                placeholder="100"
+                placeholder="2"
               />
             </div>
             <div>
@@ -191,10 +191,10 @@ export function SyntheticDataGen() {
                 id="num-products"
                 type="number"
                 min="1"
-                max="10000"
+                max="100"
                 value={numProducts}
                 onChange={(e) => setNumProducts(e.target.value)}
-                placeholder="10"
+                placeholder="2"
               />
             </div>
             <div>
@@ -202,11 +202,11 @@ export function SyntheticDataGen() {
               <Input
                 id="num-conversations"
                 type="number"
-                min="1"
-                max="1000000"
+                min="0"
+                max="100"
                 value={numConversations}
                 onChange={(e) => setNumConversations(e.target.value)}
-                placeholder="1000"
+                placeholder="1"
               />
             </div>
           </div>
@@ -324,22 +324,6 @@ export function SyntheticDataGen() {
           </CardContent>
         </Card>
       )}
-
-      {/* Tips */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Generation Tips</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• Be specific in your prompt template for better quality results</li>
-            <li>• Start with smaller record counts to test your prompts</li>
-            <li>• Use domain-specific terminology for more realistic data</li>
-            <li>• Consider including edge cases and error scenarios</li>
-            <li>• JSON format provides the most flexibility for structured data</li>
-          </ul>
-        </CardContent>
-      </Card>
     </div>
   )
 }
