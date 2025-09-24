@@ -26,12 +26,10 @@ export function SyntheticDataGen() {
   const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([])
   
   // Form state
-  const [dataType, setDataType] = useState('customer-calls')
-  const [recordCount, setRecordCount] = useState('100')
-  const [promptTemplate, setPromptTemplate] = useState(
-    'Generate realistic customer service call transcripts with common issues like billing inquiries, technical support, and product questions.'
-  )
-  const [outputFormat, setOutputFormat] = useState('json')
+  const [companyName, setCompanyName] = useState('Acme Corp')
+  const [numCustomers, setNumCustomers] = useState('100')
+  const [numProducts, setNumProducts] = useState('10')
+  const [numConversations, setNumConversations] = useState('1000')
 
   const dataTypeOptions = [
     { value: 'customer-calls', label: 'Customer Service Calls' },
@@ -43,57 +41,51 @@ export function SyntheticDataGen() {
   ]
 
   const handleGenerate = async () => {
-    if (!recordCount || parseInt(recordCount) <= 0) {
-      toast.error('Please enter a valid number of records')
+    if (!companyName.trim()) {
+      toast.error('Please enter a company name')
+      return
+    }
+    if (!numCustomers || parseInt(numCustomers) <= 0) {
+      toast.error('Please enter a valid number of customers')
+      return
+    }
+    if (!numProducts || parseInt(numProducts) <= 0) {
+      toast.error('Please enter a valid number of products')
+      return
+    }
+    if (!numConversations || parseInt(numConversations) <= 0) {
+      toast.error('Please enter a valid number of conversations')
       return
     }
 
-    if (!promptTemplate.trim()) {
-      toast.error('Please provide a prompt template')
-      return
-    }
-
-    const newJob: GenerationJob = {
-      id: Date.now().toString(),
-      type: dataType,
-      recordCount: parseInt(recordCount),
-      status: 'running',
-      progress: 0,
-      startedAt: new Date().toISOString()
-    }
-
-    setGenerationJobs(prev => [newJob, ...prev])
     setIsGenerating(true)
     toast.success('Synthetic data generation started')
 
-    // Simulate generation progress
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += Math.random() * 15
-      if (progress >= 100) {
-        progress = 100
-        clearInterval(interval)
-        
-        setGenerationJobs(prev => prev.map(job => 
-          job.id === newJob.id 
-            ? { 
-                ...job, 
-                status: Math.random() > 0.1 ? 'completed' : 'failed',
-                progress: 100,
-                completedAt: new Date().toISOString(),
-                resultFile: Math.random() > 0.1 ? `synthetic_${dataType}_${recordCount}_records.${outputFormat}` : undefined
-              }
-            : job
-        ))
-        
-        setIsGenerating(false)
-        toast.success('Synthetic data generation completed')
-      } else {
-        setGenerationJobs(prev => prev.map(job => 
-          job.id === newJob.id ? { ...job, progress } : job
-        ))
-      }
-    }, 300)
+    // Call backend API
+    try {
+      const response = await fetch('/api/admin/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_name: companyName,
+          num_customers: parseInt(numCustomers),
+          num_products: parseInt(numProducts),
+          num_conversations: parseInt(numConversations)
+        })
+      })
+      const result = await response.json()
+      setGenerationJobs(prev => [{
+        id: Date.now().toString(),
+        type: 'synthesis',
+        recordCount: parseInt(numConversations),
+        status: 'running',
+        progress: 0,
+        startedAt: new Date().toISOString()
+      }, ...prev])
+    } catch (err) {
+      toast.error('Failed to start synthesis job')
+    }
+    setIsGenerating(false)
   }
 
   const formatDate = (dateString: string) => {
@@ -130,62 +122,54 @@ export function SyntheticDataGen() {
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="data-type">Data Type</Label>
-              <Select value={dataType} onValueChange={setDataType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {dataTypeOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label htmlFor="record-count">Number of Records</Label>
+              <Label htmlFor="company-name">Company Name</Label>
               <Input
-                id="record-count"
+                id="company-name"
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Acme Corp"
+              />
+            </div>
+            <div>
+              <Label htmlFor="num-customers">Number of Customers</Label>
+              <Input
+                id="num-customers"
+                type="number"
+                min="1"
+                max="100000"
+                value={numCustomers}
+                onChange={(e) => setNumCustomers(e.target.value)}
+                placeholder="100"
+              />
+            </div>
+            <div>
+              <Label htmlFor="num-products">Number of Products</Label>
+              <Input
+                id="num-products"
                 type="number"
                 min="1"
                 max="10000"
-                value={recordCount}
-                onChange={(e) => setRecordCount(e.target.value)}
-                placeholder="100"
+                value={numProducts}
+                onChange={(e) => setNumProducts(e.target.value)}
+                placeholder="10"
+              />
+            </div>
+            <div>
+              <Label htmlFor="num-conversations">Number of Conversations</Label>
+              <Input
+                id="num-conversations"
+                type="number"
+                min="1"
+                max="1000000"
+                value={numConversations}
+                onChange={(e) => setNumConversations(e.target.value)}
+                placeholder="1000"
               />
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="prompt-template">Prompt Template</Label>
-            <Textarea
-              id="prompt-template"
-              value={promptTemplate}
-              onChange={(e) => setPromptTemplate(e.target.value)}
-              placeholder="Describe the type of data you want to generate..."
-              className="min-h-[100px]"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="output-format">Output Format</Label>
-              <Select value={outputFormat} onValueChange={setOutputFormat}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="json">JSON</SelectItem>
-                  <SelectItem value="csv">CSV</SelectItem>
-                  <SelectItem value="xlsx">Excel (XLSX)</SelectItem>
-                  <SelectItem value="txt">Text</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          {/* Removed prompt template and output format fields, not used by backend */}
 
           <Button 
             onClick={handleGenerate} 
