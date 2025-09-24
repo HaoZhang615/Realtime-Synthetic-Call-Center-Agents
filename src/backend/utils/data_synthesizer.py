@@ -2,12 +2,24 @@ import json
 import os
 import uuid
 import random
+import logging
+import sys
 from openai import AzureOpenAI
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from datetime import datetime
 from utils import load_dotenv_from_azd
 
+# Set up logger for data synthesizer
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    # Ensure logs go to stdout so they can be captured if stdout is redirected
+    handler = logging.StreamHandler(stream=sys.stdout)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False  # Avoid duplicate emission to root logger
 
 load_dotenv_from_azd()
 token_provider = get_bearer_token_provider(
@@ -78,22 +90,22 @@ class DataSynthesizer:
             # Extract the partition key value from the document
             partition_key_value = item.get(self.get_partition_key_path(container).strip('/'))
             container.delete_item(item, partition_key=partition_key_value)
-        print(f"All items in container '{container.id}' have been deleted.")
+        logger.info(f"All items in container '{container.id}' have been deleted.")
 
     def refresh_container(self, database, container_name, partition_key_path):
         exists, container = self.container_exists(database, container_name)
         
         if exists:
-            print(f"Container '{container_name}' already exists. Deleting all items...")
+            logger.info(f"Container '{container_name}' already exists. Deleting all items...")
             self.delete_all_items(container)
         else:
-            print(f"Container '{container_name}' does not exist. Creating new container...")
+            logger.info(f"Container '{container_name}' does not exist. Creating new container...")
             container = database.create_container(
                 id=container_name, 
                 partition_key=PartitionKey(path=partition_key_path),
                 # offer_throughput=400
             )
-            print(f"Container '{container_name}' has been created.")
+            logger.info(f"Container '{container_name}' has been created.")
         
         return container
     def create_document(self, prompt, temperature=0.9, max_tokens=2000):
@@ -129,9 +141,9 @@ class DataSynthesizer:
             if partition_key_value:
                 try:
                     container.upsert_item(body=data)
-                    print(f"Document {filename} has been successfully created in Azure Cosmos DB!")
+                    logger.info(f"Document {filename} has been successfully created in Azure Cosmos DB!")
                 except Exception as e:
-                    print(f"Error uploading {filename}: {str(e)}")
+                    logger.error(f"Error uploading {filename}: {str(e)}")
     # delete all json files in the assets folder recursively
     def delete_json_files(self, base_dir):
         assets_dir = os.path.join(base_dir)
@@ -141,7 +153,7 @@ class DataSynthesizer:
                 if file.endswith(".json"):
                     file_path = os.path.join(root, file)
                     os.remove(file_path)
-                    print(f"Deleted: {file_path}")  # Optional: Print out deleted file paths for confirmation
+                    logger.info(f"Deleted: {file_path}")  # Optional: Log deleted file paths for confirmation
 
     def synthesize_everything(self, company_name, num_customers, num_products, num_conversations):
         
@@ -171,7 +183,7 @@ class DataSynthesizer:
             ('Cosmos_HumanConversations', self.containers['human_conversations'])
         ]:
             self.save_json_files_to_cosmos_db(os.path.join(self.base_dir, folder), container)
-        print("Data synthesis completed successfully!")
+        logger.info("Data synthesis completed successfully!")
 
     def create_product_and_url_list(self, company_name, number_of_product):
         
@@ -196,7 +208,7 @@ class DataSynthesizer:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(enhanced_document, f, ensure_ascii=False, indent=4)    
             
-        print(f"Document {document_name} has been successfully created!")
+        logger.info(f"Document {document_name} has been successfully created!")
 
     def synthesize_customer_profiles(self, num_customers):
         for i in range(num_customers):
@@ -232,7 +244,7 @@ class DataSynthesizer:
             file_path = os.path.join(self.base_dir, "Cosmos_Customer", document_name)
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(generated_document)
-            print(f"Document {document_name} has been successfully created!")
+            logger.info(f"Document {document_name} has been successfully created!")
         
         # Update the JSON files with customer_id and id fields
         directory = os.path.join(self.base_dir, "Cosmos_Customer")
@@ -245,7 +257,7 @@ class DataSynthesizer:
                 customer_profile['id'] = f"{filename.split('_')[0]}_{customer_id}"
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(customer_profile, f, ensure_ascii=False, indent=4)
-            print(f"Document {filename} has been successfully updated!")
+            logger.info(f"Document {filename} has been successfully updated!")
 
     def synthesize_product_profiles(self, company_name):
         producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
@@ -283,7 +295,7 @@ class DataSynthesizer:
             # Save the generated document to the local folder
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(generated_document)
-            print(f"Document {document_name} has been successfully created!")
+            logger.info(f"Document {document_name} has been successfully created!")
         
         # Additional logic to update product profiles:
         # loop through the files in the local folder Cosmos_Product and update them:
@@ -300,7 +312,7 @@ class DataSynthesizer:
                 product_profile['id'] = f"{filename.split('_')[0]}_{product_id}"
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(product_profile, f, ensure_ascii=False, indent=4)
-            print(f"Document {filename} has been successfully updated!")
+            logger.info(f"Document {filename} has been successfully updated!")
 
     # def create_document_name(self, index, product_id, customer_id, suffix):
     #     return f"{index}_{product_id}_{customer_id}{suffix}.json"
@@ -367,7 +379,7 @@ class DataSynthesizer:
                 file_path = os.path.join(self.base_dir, "Cosmos_Purchases", document_name)
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(generated_document)
-                print(f"Document {document_name} has been successfully created!")
+                logger.info(f"Document {document_name} has been successfully created!")
                 # time.sleep(1)
         
         # Update the purchase records with additional fields
@@ -380,7 +392,7 @@ class DataSynthesizer:
                 # Get product details for this purchase
                 product_details = self.get_product_profile(purchase.get('product_id', ''))
                 if not product_details:
-                    print(f"Warning: No product details found for product_id: {purchase.get('product_id')} in {filename}")
+                    logger.warning(f"Warning: No product details found for product_id: {purchase.get('product_id')} in {filename}")
                     
                 # Update purchase record
                 order_number = uuid.uuid3(uuid.NAMESPACE_DNS, f"{filename}").hex
@@ -392,7 +404,7 @@ class DataSynthesizer:
             # Save updated purchase record
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(purchase, f, ensure_ascii=False, indent=4)
-            print(f"Document {filename} has been successfully updated!")
+            logger.info(f"Document {filename} has been successfully updated!")
             # time.sleep(1)
 
     def randomized_prompt_elements(self, sentiments, topics, products, agents, customers):
@@ -453,7 +465,7 @@ class DataSynthesizer:
             # Save the generated document to the local folder
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(generated_document)
-            print(f"Document {document_name} has been successfully created!")
+            logger.info(f"Document {document_name} has been successfully created!")
         
         # Additional logic to update human conversations:
         # loop through the files in the local folder Cosmos_HumanConversations and update them:
@@ -477,7 +489,7 @@ class DataSynthesizer:
                 document['id'] = f"chat_{filename.split('_')[0]}_{session_id}"
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(document, f, ensure_ascii=False, indent=4)
-            print(f"Document {file} has been successfully updated!")
+            logger.info(f"Document {file} has been successfully updated!")
 
 
 def run_synthesis(company_name, num_customers, num_products, num_conversations):

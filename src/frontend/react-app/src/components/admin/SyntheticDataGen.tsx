@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { Sparkle, Play, Download, ArrowsClockwise } from '@phosphor-icons/react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Sparkle, Play, Download, ArrowsClockwise, CaretDown, CaretUp } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 type GenerationJob = {
@@ -19,13 +20,14 @@ type GenerationJob = {
   startedAt: string
   completedAt?: string
   resultFile?: string
+  logs?: string[]
 }
 
 export function SyntheticDataGen() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([])
-  
-  // Form state
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [expandedLogs, setExpandedLogs] = useState<{ [key: string]: boolean }>({})  // Form state
   const [companyName, setCompanyName] = useState('Acme Corp')
   const [numCustomers, setNumCustomers] = useState('100')
   const [numProducts, setNumProducts] = useState('10')
@@ -39,6 +41,38 @@ export function SyntheticDataGen() {
     { value: 'chat-conversations', label: 'Chat Conversations' },
     { value: 'email-exchanges', label: 'Email Exchanges' }
   ]
+
+  // Poll job status from backend
+  const pollJobStatus = async (jobId: string) => {
+    let completed = false;
+    while (!completed) {
+      try {
+        const res = await fetch(`/api/admin/job-status/${jobId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setGenerationJobs(prev => prev.map(job => job.id === jobId ? {
+            ...job,
+            progress: data.progress,
+            status: data.status === 'completed' ? 'completed' : (data.status === 'failed' ? 'failed' : 'running'),
+            logs: data.logs || []
+          } : job));
+          if (data.status === 'completed' || data.status === 'failed') {
+            completed = true;
+            setGenerationJobs(prev => prev.map(job => job.id === jobId ? {
+              ...job,
+              completedAt: new Date().toISOString()
+            } : job));
+            setActiveJobId(null);
+          }
+        } else {
+          completed = true;
+        }
+      } catch {
+        completed = true;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  };
 
   const handleGenerate = async () => {
     if (!companyName.trim()) {
@@ -73,19 +107,27 @@ export function SyntheticDataGen() {
           num_conversations: parseInt(numConversations)
         })
       })
-      const result = await response.json()
-      setGenerationJobs(prev => [{
-        id: Date.now().toString(),
-        type: 'synthesis',
-        recordCount: parseInt(numConversations),
-        status: 'running',
-        progress: 0,
-        startedAt: new Date().toISOString()
-      }, ...prev])
+      const result = await response.json();
+      if (result.job_id) {
+        const jobId = result.job_id;
+        setActiveJobId(jobId);
+        setGenerationJobs(prev => [{
+          id: jobId,
+          type: 'synthesis',
+          recordCount: parseInt(numConversations),
+          status: 'running',
+          progress: 0,
+          startedAt: new Date().toISOString(),
+          logs: []
+        }, ...prev]);
+        pollJobStatus(jobId);
+      } else {
+        toast.error('Failed to start synthesis job');
+      }
     } catch (err) {
-      toast.error('Failed to start synthesis job')
+      toast.error('Failed to start synthesis job');
     }
-    setIsGenerating(false)
+    setIsGenerating(false);
   }
 
   const formatDate = (dateString: string) => {
@@ -226,10 +268,43 @@ export function SyntheticDataGen() {
                         <span>{Math.round(job.progress)}%</span>
                       </div>
                       <Progress value={job.progress} className="h-2" />
+                      {job.logs && job.logs.length > 0 && (
+                        <Collapsible 
+                          open={expandedLogs[job.id]} 
+                          onOpenChange={(isOpen) => 
+                            setExpandedLogs(prev => ({ ...prev, [job.id]: isOpen }))
+                          }
+                        >
+                          <CollapsibleTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="mt-2 w-full justify-between text-xs"
+                            >
+                              <span>View Live Logs ({job.logs.length} entries)</span>
+                              {expandedLogs[job.id] ? (
+                                <CaretUp className="w-3 h-3" />
+                              ) : (
+                                <CaretDown className="w-3 h-3" />
+                              )}
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="mt-2 bg-muted rounded p-3 text-xs max-h-48 overflow-auto font-mono">
+                              {job.logs.map((log, idx) => (
+                                <div key={idx} className="py-1 border-b border-muted-foreground/10 last:border-0">
+                                  <span className="text-muted-foreground mr-2">
+                                    [{new Date().toLocaleTimeString()}]
+                                  </span>
+                                  {log}
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
                     </div>
-                  )}
-
-                  {job.status === 'completed' && job.resultFile && (
+                  )}                  {job.status === 'completed' && job.resultFile && (
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="outline">
                         <Download className="w-4 h-4 mr-2" />

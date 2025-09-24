@@ -37,8 +37,9 @@ from pydantic import BaseModel
 
 # Import existing utilities from the repo
 from utils.file_processor import upload_documents, setup_index
-from utils.data_synthesizer import DataSynthesizer, run_synthesis
+from utils.data_synthesizer import DataSynthesizer, run_synthesis, logger as synthesizer_logger
 from load_azd_env import load_azd_environment
+import uuid
 
 # Load environment variables automatically
 load_azd_environment()
@@ -48,6 +49,31 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Realtime Admin API")
 
+
+import uuid
+import sys
+from io import StringIO
+import contextlib
+
+JOBS = {}
+# ...existing code...
+
+# Endpoint to get job status and logs
+from fastapi import Path
+
+@app.get("/api/admin/job-status/{job_id}")
+async def get_job_status(job_id: str = Path(...)):
+    """
+    Return the status, progress, and logs for a synthesis job.
+    """
+    job = JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "status": job.get("status", "unknown"),
+        "progress": job.get("progress", 0),
+        "logs": job.get("logs", [])
+    }
 # Configure CORS for React dev server by default
 FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
@@ -333,30 +359,137 @@ async def bulk_delete_files(request: BulkDeleteRequest):
 async def synthesize_data(request: SynthesisRequest, background_tasks: BackgroundTasks):
     """Trigger data synthesis for CosmosDB."""
     try:
+        # Step-based progress tracking
+        job_id = str(uuid.uuid4())
+        job_status = {
+            "progress": 0,
+            "logs": [],
+            "status": "started"
+        }
+        JOBS[job_id] = job_status
+
         background_tasks.add_task(
             run_synthesis_task,
+            job_id,
             request.company_name,
             request.num_customers,
             request.num_products,
             request.num_conversations
         )
-        return {
-            "status": "synthesis_started",
-            "company_name": request.company_name,
-            "num_customers": request.num_customers,
-            "num_products": request.num_products,
-            "num_conversations": request.num_conversations
-        }
+
+        return {"status": "synthesis_started", "job_id": job_id}
     except Exception as ex:
         logger.exception("Failed to start synthesis: %s", ex)
         raise HTTPException(status_code=500, detail=str(ex))
 
-def run_synthesis_task(company_name: str, num_customers: int, num_products: int, num_conversations: int):
+class JobLogHandler(logging.Handler):
+    """Logging handler that streams synthesizer logs directly into the JOBS structure."""
+    def __init__(self, job_id: str):
+        super().__init__()
+        self.job_id = job_id
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            msg = self.format(record)
+            job_status = JOBS.get(self.job_id)
+            if job_status is not None:
+                job_status["logs"].append(msg)
+        except Exception:  # pragma: no cover
+            pass
+
+
+def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_products: int, num_conversations: int):
     """Background task to run data synthesis with parameters."""
     try:
+        job_status = JOBS.get(job_id)
+        if not job_status:
+            logger.error("Job %s not found in JOBS dictionary", job_id)
+            return
+
+        def log(msg):
+            job_status["logs"].append(msg)
+            logger.info("Job %s: %s", job_id, msg)
         logger.info(f"Starting data synthesis: company={company_name}, customers={num_customers}, products={num_products}, conversations={num_conversations}")
-        run_synthesis(company_name, num_customers, num_products, num_conversations)
-        logger.info("Data synthesis completed successfully")
+
+        # Attach real-time log handler to synthesizer logger
+        job_handler = JobLogHandler(job_id)
+        job_handler.setLevel(logging.INFO)
+        job_handler.setFormatter(logging.Formatter('[%(asctime)s] %(message)s'))
+        synthesizer_logger.addHandler(job_handler)
+
+        # Create synthesizer instance
+        import os
+        base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets')
+
+        # Ensure the assets directory structure exists
+        base_assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
+        for dir_name in ['Cosmos_Customer', 'Cosmos_Product', 'Cosmos_Purchases', 'Cosmos_HumanConversations', 'Cosmos_ProductUrl']:
+            os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
+
+        synthesizer = DataSynthesizer(base_dir)
+
+        # Initialize containers
+        cosmos_producturl_container_name = "producturl"
+        cosmos_customer_container_name = "customer"
+        cosmos_product_container_name = "product"
+        cosmos_purchases_container_name = "purchases"
+        cosmos_human_conversations_container_name = "humanconversations"
+
+        # Refresh Cosmos DB containers
+        synthesizer.refresh_container(synthesizer.database, cosmos_producturl_container_name, "/company_name")
+        synthesizer.refresh_container(synthesizer.database, cosmos_customer_container_name, "/customer_id")
+        synthesizer.refresh_container(synthesizer.database, cosmos_product_container_name, "/product_id")
+        synthesizer.refresh_container(synthesizer.database, cosmos_purchases_container_name, "/customer_id")
+        synthesizer.refresh_container(synthesizer.database, cosmos_human_conversations_container_name, "/customer_id")
+
+        # Step 1: Delete old data and create product URLs (20%)
+        log("Step 1/5: Deleting old data and creating product URLs...")
+        synthesizer.delete_json_files(synthesizer.base_dir)
+        synthesizer.create_product_and_url_list(company_name, num_products)
+        job_status["progress"] = 20
+
+        # Step 2: Generate customers (40%)
+        log("Step 2/5: Generating customer profiles...")
+        synthesizer.synthesize_customer_profiles(num_customers)
+        job_status["progress"] = 40
+
+        # Step 3: Generate products (60%)
+        log("Step 3/5: Generating product profiles...")
+        synthesizer.synthesize_product_profiles(company_name)
+        job_status["progress"] = 60
+
+        # Step 4: Generate conversations (80%)
+        log("Step 4/5: Generating human conversations...")
+        synthesizer.synthesize_human_conversations(num_conversations, company_name)
+        job_status["progress"] = 80
+
+        # Step 5: Generate purchases and save to Cosmos DB (100%)
+        log("Step 5/5: Generating purchases and saving to Cosmos DB...")
+        synthesizer.synthesize_purchases()
+        for folder, container in [
+            ('Cosmos_ProductUrl', synthesizer.containers['product_url']),
+            ('Cosmos_Customer', synthesizer.containers['customer']),
+            ('Cosmos_Product', synthesizer.containers['product']),
+            ('Cosmos_Purchases', synthesizer.containers['purchases']),
+            ('Cosmos_HumanConversations', synthesizer.containers['human_conversations'])
+        ]:
+            synthesizer.save_json_files_to_cosmos_db(os.path.join(synthesizer.base_dir, folder), container)
+
+        # Complete
+        job_status["progress"] = 100
+        job_status["status"] = "completed"
+        log("Data synthesis completed successfully!")
+
+        # Detach handler to avoid memory leaks for future jobs
+        synthesizer_logger.removeHandler(job_handler)
+        
     except Exception as ex:
         logger.exception("Data synthesis failed: %s", ex)
+        if job_id in JOBS:
+            JOBS[job_id]["status"] = "failed"
+            JOBS[job_id]["logs"].append(f"Error: {str(ex)}")
+        # Ensure handler removal if it was added
+        for h in list(synthesizer_logger.handlers):
+            if isinstance(h, JobLogHandler) and getattr(h, 'job_id', None) == job_id:
+                synthesizer_logger.removeHandler(h)
         raise
