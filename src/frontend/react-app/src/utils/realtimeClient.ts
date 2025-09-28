@@ -17,6 +17,7 @@ export type RealtimeEvent =
   | 'conversation.item.created'
   | 'conversation.item.truncated'
   | 'conversation.item.deleted'
+  | 'conversation.item.input_audio_transcription.delta'
   | 'conversation.item.input_audio_transcription.completed'
   | 'conversation.item.input_audio_transcription.failed'
   | 'input_audio_buffer.committed' 
@@ -358,6 +359,8 @@ export class RealtimeClient {
   private eventHandlers = new Map<RealtimeEvent, ((data: any) => void)[]>()
   private audioContext: AudioContext | null = null
   private nextPlayTime: number = 0
+  private currentAudioSources: AudioBufferSourceNode[] = []
+  private isPlayingAudio: boolean = false
 
   constructor(
     config: RealtimeClientConfig = {},
@@ -438,6 +441,19 @@ export class RealtimeClient {
       this.emit('conversation.item.created', { item })
     })
 
+    // Forward user transcription delta events for live display
+    this.api.on('conversation.item.input_audio_transcription.delta', (event) => {
+      this.emit('conversation.item.input_audio_transcription.delta', event)
+    })
+
+    this.api.on('conversation.item.input_audio_transcription.completed', (event) => {
+      this.emit('conversation.item.input_audio_transcription.completed', event)
+    })
+
+    this.api.on('conversation.item.input_audio_transcription.failed', (event) => {
+      this.emit('conversation.item.input_audio_transcription.failed', event)
+    })
+
     this.api.on('conversation.item.truncated', (event) => {
       const truncatedItems = this.conversation.truncate(event.item_id)
       this.emit('conversation.item.truncated', { items: truncatedItems })
@@ -450,7 +466,8 @@ export class RealtimeClient {
 
     // Audio buffer events
     this.api.on('input_audio_buffer.speech_started', (event) => {
-      console.log('Speech started')
+      console.log('Speech started - interrupting audio playback')
+      this.stopAllAudio()
       this.emit('input_audio_buffer.speech_started', event)
     })
 
@@ -466,6 +483,15 @@ export class RealtimeClient {
 
     this.api.on('response.audio.delta', (event) => {
       this.emit('response.audio.delta', event)
+    })
+
+    // Forward assistant transcript (text extracted from audio) streaming events
+    this.api.on('response.audio_transcript.delta', (event) => {
+      this.emit('response.audio_transcript.delta', event)
+    })
+
+    this.api.on('response.audio_transcript.done', (event) => {
+      this.emit('response.audio_transcript.done', event)
     })
 
     this.api.on('response.text.delta', (event) => {
@@ -695,6 +721,22 @@ export class RealtimeClient {
   }
 
   /**
+   * Stop all currently playing audio (for interruption)
+   */
+  private stopAllAudio() {
+    this.currentAudioSources.forEach(source => {
+      try {
+        source.stop()
+      } catch (e) {
+        // Source may already be stopped
+      }
+    })
+    this.currentAudioSources = []
+    this.isPlayingAudio = false
+    this.nextPlayTime = 0
+  }
+
+  /**
    * Convert base64 audio to PCM16 and play
    */
   async playAudioChunk(base64Audio: string) {
@@ -728,6 +770,21 @@ export class RealtimeClient {
       
       if (this.nextPlayTime === 0) {
         this.nextPlayTime = currentTime
+      }
+
+      // Track this source for potential interruption
+      this.currentAudioSources.push(source)
+      this.isPlayingAudio = true
+
+      // Remove from tracking when it ends
+      source.onended = () => {
+        const index = this.currentAudioSources.indexOf(source)
+        if (index !== -1) {
+          this.currentAudioSources.splice(index, 1)
+        }
+        if (this.currentAudioSources.length === 0) {
+          this.isPlayingAudio = false
+        }
       }
 
       source.start(startTime)

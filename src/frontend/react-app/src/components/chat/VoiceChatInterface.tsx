@@ -21,6 +21,7 @@ type ChatMessage = {
   content: string
   timestamp: string
   audioUrl?: string
+  streaming?: boolean
 }
 
 export function VoiceChatInterface() {
@@ -31,6 +32,7 @@ export function VoiceChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [currentTranscript, setCurrentTranscript] = useState('')
   const [audioLevel, setAudioLevel] = useState(0)
+  const [textInput, setTextInput] = useState('')
   
   // Customer selection state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
@@ -42,6 +44,11 @@ export function VoiceChatInterface() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const assistantStreamingIdRef = useRef<string | null>(null)
+  const assistantTranscriptRef = useRef<string>('')
+  const userStreamingIdRef = useRef<string | null>(null)
+  const userTranscriptRef = useRef<string>('')
+  const userSpeechStartRef = useRef<string | null>(null)
 
   useEffect(() => {
     // Initialize RealtimeClient
@@ -78,25 +85,47 @@ export function VoiceChatInterface() {
       }
     })
 
-    // Handle assistant text responses
-    let currentTranscript = ''
+    // Handle response completion (reset audio state)
+    client.on('response.done', () => {
+      console.log('Response completed')
+    })
+
+  // ===== Assistant transcript (streaming) handling =====
     client.on('response.audio_transcript.delta', (data) => {
-      if (data.delta) {
-        currentTranscript += data.delta
+      const delta: string | undefined = data?.delta
+      if (!delta) return
+      assistantTranscriptRef.current += delta
+
+      // Avoid creating an empty bubble; only after non-whitespace content exists
+      if (!assistantStreamingIdRef.current && assistantTranscriptRef.current.trim().length === 0) {
+        return
       }
+
+      setMessages(prev => {
+        if (!assistantStreamingIdRef.current) {
+          const id = `asst_${Date.now()}`
+          assistantStreamingIdRef.current = id
+          return [
+            ...prev,
+            {
+              id,
+              type: 'assistant',
+              content: assistantTranscriptRef.current,
+              timestamp: new Date().toISOString(),
+              streaming: true
+            }
+          ]
+        }
+        return prev.map(m => m.id === assistantStreamingIdRef.current ? { ...m, content: assistantTranscriptRef.current } : m)
+      })
     })
 
     client.on('response.audio_transcript.done', () => {
-      if (currentTranscript) {
-        const message: ChatMessage = {
-          id: Date.now().toString(),
-          content: currentTranscript,
-          type: 'assistant',
-          timestamp: new Date().toISOString()
-        }
-        setMessages(prev => [...prev, message])
-        currentTranscript = ''
-      }
+      if (!assistantStreamingIdRef.current) return
+      // Finalize the assistant message
+      setMessages(prev => prev.map(m => m.id === assistantStreamingIdRef.current ? { ...m, streaming: false } : m))
+      assistantStreamingIdRef.current = null
+      assistantTranscriptRef.current = ''
     })
 
     // Handle response creation (assistant is thinking)
@@ -112,14 +141,32 @@ export function VoiceChatInterface() {
           content: item.content?.[0]?.text || '',
           timestamp: new Date().toISOString()
         }
-        
+
         setMessages(prev => {
+          if (message.type === 'assistant' && assistantStreamingIdRef.current && prev.some(m => m.id === assistantStreamingIdRef.current)) {
+            const tempId = assistantStreamingIdRef.current
+            assistantStreamingIdRef.current = item.id
+            return prev.map(m => m.id === tempId ? { ...m, id: item.id, content: message.content || m.content, timestamp: message.timestamp } : m)
+          }
+
+          if (message.type === 'user' && userStreamingIdRef.current && prev.some(m => m.id === userStreamingIdRef.current)) {
+            const tempId = userStreamingIdRef.current
+            userStreamingIdRef.current = item.id
+            return prev.map(m => m.id === tempId ? { ...m, id: item.id, content: message.content || m.content, timestamp: message.timestamp, streaming: false } : m)
+          }
+
+          // Avoid duplicate optimistic messages
+          const last = prev[prev.length - 1]
+          if (last && last.type === message.type && last.content === message.content) {
+            return prev
+          }
+
           const existing = prev.find(m => m.id === item.id)
           if (existing) {
             return prev.map(m => m.id === item.id ? message : m)
-          } else {
-            return [...prev, message]
           }
+
+          return [...prev, message]
         })
       }
     })
@@ -135,8 +182,77 @@ export function VoiceChatInterface() {
       }
     })
 
+    // ===== User transcription handling =====
+    // Clear live transcript at start of speech (server VAD)
+    client.on('input_audio_buffer.speech_started', () => {
+      userTranscriptRef.current = ''
+      userSpeechStartRef.current = new Date().toISOString()
+      const messageId = `user_${Date.now()}`
+      userStreamingIdRef.current = messageId
+      setMessages(prev => [
+        ...prev,
+        {
+          id: messageId,
+          type: 'user',
+          content: '',
+          timestamp: userSpeechStartRef.current || new Date().toISOString(),
+          streaming: true
+        }
+      ])
+      // Show placeholder bubble immediately for each new user turn
+      setCurrentTranscript('…')
+      // Show visual feedback that user is interrupting
+      toast.info('Listening...', { duration: 1000 })
+    })
+
+    // Live delta (if backend forwards) - update ephemeral transcript state
+    client.on('conversation.item.input_audio_transcription.delta', ({ delta }) => {
+      if (delta) {
+        userTranscriptRef.current += delta
+        setCurrentTranscript(userTranscriptRef.current)
+        if (userStreamingIdRef.current) {
+          const id = userStreamingIdRef.current
+          setMessages(prev => prev.map(m => m.id === id ? { ...m, content: userTranscriptRef.current } : m))
+        }
+      }
+    })
+
+    // Completed transcription: commit to messages and clear live transcript
     client.on('conversation.item.input_audio_transcription.completed', ({ transcript }) => {
-      setCurrentTranscript(transcript || '')
+      const finalText = transcript || userTranscriptRef.current
+      if (finalText && userStreamingIdRef.current) {
+        const id = userStreamingIdRef.current
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, content: finalText, streaming: false } : m))
+      } else if (finalText) {
+        const message: ChatMessage = {
+          id: `user_${Date.now()}`,
+          type: 'user',
+          content: finalText,
+          timestamp: userSpeechStartRef.current || new Date().toISOString()
+        }
+        setMessages(prev => [...prev, message])
+      }
+      if (userStreamingIdRef.current) {
+        // Ensure timestamp reflects start time
+        const start = userSpeechStartRef.current
+        if (start) {
+          setMessages(prev => prev.map(m => m.id === userStreamingIdRef.current ? { ...m, timestamp: start } : m))
+        }
+      }
+      userTranscriptRef.current = ''
+      setCurrentTranscript('')
+      userStreamingIdRef.current = null
+      userSpeechStartRef.current = null
+    })
+
+    client.on('conversation.item.input_audio_transcription.failed', () => {
+      userTranscriptRef.current = ''
+      setCurrentTranscript('')
+      if (userStreamingIdRef.current) {
+        const id = userStreamingIdRef.current
+        setMessages(prev => prev.filter(m => m.id !== id))
+        userStreamingIdRef.current = null
+      }
     })
 
     return () => {
@@ -225,6 +341,28 @@ export function VoiceChatInterface() {
       setCallStatus('idle')
       toast.info('Call ended')
     }, 1000)
+  }
+
+  const sendTextInput = () => {
+    const trimmed = textInput.trim()
+    if (!trimmed || !realtimeClientRef.current) return
+    // Optimistic user message
+    const optimistic: ChatMessage = {
+      id: `user_temp_${Date.now()}`,
+      type: 'user',
+      content: trimmed,
+      timestamp: new Date().toISOString()
+    }
+    setMessages(prev => [...prev, optimistic])
+    realtimeClientRef.current.sendTextMessage(trimmed)
+    setTextInput('')
+  }
+
+  const handleTextInputKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendTextInput()
+    }
   }
 
   // Helper function to convert Float32Array to PCM16
@@ -399,7 +537,27 @@ export function VoiceChatInterface() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
-              <ChatHistory messages={messages} currentTranscript={currentTranscript} />
+              <div className="flex-1 min-h-0 flex flex-col">
+                <ChatHistory
+                  className="flex-1 min-h-0"
+                  messages={messages}
+                  currentTranscript={currentTranscript}
+                />
+                <div className="pt-3 mt-3 border-t border-border flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={textInput}
+                    onChange={e => setTextInput(e.target.value)}
+                    onKeyDown={handleTextInputKey}
+                    placeholder={connectionStatus === 'connected' ? 'Type a message...' : 'Connect to start chatting'}
+                    disabled={connectionStatus !== 'connected'}
+                    className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  />
+                  <Button size="sm" onClick={sendTextInput} disabled={!textInput.trim() || connectionStatus !== 'connected'}>
+                    Send
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -420,19 +578,6 @@ export function VoiceChatInterface() {
                 onEndCall={endCall}
                 onToggleRecording={toggleRecording}
                 onToggleMute={() => setIsMuted(!isMuted)}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Audio Visualizer */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Audio Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AudioVisualizer 
-                isActive={isRecording} 
-                audioLevel={audioLevel}
               />
             </CardContent>
           </Card>

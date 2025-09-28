@@ -16,15 +16,18 @@ type ChatMessage = {
 interface ChatHistoryProps {
   messages: ChatMessage[]
   currentTranscript: string
+  className?: string
 }
 
-export function ChatHistory({ messages, currentTranscript }: ChatHistoryProps) {
+export function ChatHistory({ messages, currentTranscript, className = '' }: ChatHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    if (!scrollRef.current) return
+    // Radix ScrollArea viewport
+    const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null
+    const el = viewport || scrollRef.current
+    el.scrollTop = el.scrollHeight
   }, [messages, currentTranscript])
 
   const formatTime = (timestamp: string) => {
@@ -58,7 +61,7 @@ export function ChatHistory({ messages, currentTranscript }: ChatHistoryProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className={`flex flex-col h-full min-h-0 ${className}`}>
       {/* Export Button */}
       {messages.length > 0 && (
         <div className="flex justify-end mb-4">
@@ -75,7 +78,10 @@ export function ChatHistory({ messages, currentTranscript }: ChatHistoryProps) {
       )}
 
       {/* Messages */}
-      <ScrollArea className="flex-1" ref={scrollRef}>
+      <ScrollArea
+        className="flex-1 min-h-0 max-h-[500px] overflow-y-auto pr-1"
+        ref={scrollRef}
+      >
         <div className="space-y-4 pr-4">
           {messages.length === 0 && !currentTranscript && (
             <div className="text-center text-muted-foreground py-12">
@@ -84,7 +90,9 @@ export function ChatHistory({ messages, currentTranscript }: ChatHistoryProps) {
             </div>
           )}
 
-          {messages.map((message) => (
+          {messages
+            .filter(m => m.content && m.content.trim().length > 0)
+            .map((message) => (
             <div
               key={message.id}
               className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -151,7 +159,18 @@ export function ChatHistory({ messages, currentTranscript }: ChatHistoryProps) {
           {currentTranscript && (
             <div className="flex gap-3 justify-end">
               <div className="max-w-[70%] rounded-lg p-4 bg-primary/70 text-primary-foreground">
-                <p className="text-sm leading-relaxed">{currentTranscript}</p>
+                <p className="text-sm leading-relaxed">
+                  {currentTranscript === '…' ? (
+                    <span className="flex items-center gap-2">
+                      <span>Listening</span>
+                      <span className="flex gap-1">
+                        <span className="w-1 h-1 bg-primary-foreground rounded-full animate-pulse" />
+                        <span className="w-1 h-1 bg-primary-foreground rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                        <span className="w-1 h-1 bg-primary-foreground rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+                      </span>
+                    </span>
+                  ) : currentTranscript }
+                </p>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="secondary" className="text-xs">
                     Live
