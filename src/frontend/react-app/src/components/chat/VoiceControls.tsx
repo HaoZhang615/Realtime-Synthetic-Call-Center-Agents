@@ -1,25 +1,21 @@
 import { Button } from '@/components/ui/button'
-import { Microphone, MicrophoneSlash, Phone, PhoneDisconnect, Record, Stop } from '@phosphor-icons/react'
+import { Microphone, MicrophoneSlash, Phone, PhoneDisconnect } from '@phosphor-icons/react'
 
 type CallStatus = 'idle' | 'calling' | 'active' | 'ended'
 
 interface VoiceControlsProps {
   callStatus: CallStatus
-  isRecording: boolean
   isMuted: boolean
   onStartCall: () => void
   onEndCall: () => void
-  onToggleRecording: () => void
   onToggleMute: () => void
 }
 
 export function VoiceControls({
   callStatus,
-  isRecording,
   isMuted,
   onStartCall,
   onEndCall,
-  onToggleRecording,
   onToggleMute
 }: VoiceControlsProps) {
   return (
@@ -45,26 +41,12 @@ export function VoiceControls({
           </Button>
         )}
       </div>
-
-      {/* Recording and Mute Controls */}
+      {/* Mute Control */}
       {callStatus === 'active' && (
-        <div className="flex justify-center gap-4">
+        <div className="flex justify-center">
           <Button
             size="lg"
-            variant={isRecording ? "destructive" : "default"}
-            onClick={onToggleRecording}
-            className="w-14 h-14 rounded-full"
-          >
-            {isRecording ? (
-              <Stop className="w-5 h-5" />
-            ) : (
-              <Record className="w-5 h-5" />
-            )}
-          </Button>
-
-          <Button
-            size="lg"
-            variant={isMuted ? "destructive" : "outline"}
+            variant={isMuted ? 'destructive' : 'outline'}
             onClick={onToggleMute}
             className="w-14 h-14 rounded-full"
           >
@@ -81,8 +63,8 @@ export function VoiceControls({
       <div className="text-center text-sm text-muted-foreground">
         {callStatus === 'idle' && 'Click to start a voice call'}
         {callStatus === 'calling' && 'Connecting to AI assistant...'}
-        {callStatus === 'active' && !isRecording && 'Click record to speak'}
-        {callStatus === 'active' && isRecording && 'Listening... Click stop when done'}
+        {callStatus === 'active' && !isMuted && 'Microphone is live'}
+        {callStatus === 'active' && isMuted && 'Microphone muted'}
         {callStatus === 'ended' && 'Call ended'}
       </div>
     </div>

@@ -329,7 +329,7 @@ export class RealtimeConversation {
  */
 export interface RealtimeClientConfig {
   model?: string
-  voice?: 'alloy' | 'shimmer' | 'echo' | 'onyx' | 'nova' | 'coral' | 'fable'
+  voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse'
   temperature?: number
   maxResponseTokens?: number
   instructions?: string
@@ -559,6 +559,9 @@ export class RealtimeClient {
         console.log('Loaded session config from backend:', backendConfig)
         
         // Merge backend config with local overrides
+        if (this.sessionConfig.voice) {
+          backendConfig.voice = this.sessionConfig.voice
+        }
         const sessionPayload = this.buildSessionPayload(backendConfig)
         console.log('Sending session update with payload:', sessionPayload)
         
@@ -665,6 +668,25 @@ export class RealtimeClient {
     this.api.sendEvent({
       type: 'response.create'
     })
+  }
+
+  /**
+   * Request the assistant to generate a response with optional instructions
+   */
+  requestResponse(options?: { instructions?: string }) {
+    if (!this.isConnected) return
+
+    const event: Record<string, any> = {
+      type: 'response.create'
+    }
+
+    if (options?.instructions) {
+      event.response = {
+        instructions: options.instructions
+      }
+    }
+
+    this.api.sendEvent(event)
   }
 
   /**

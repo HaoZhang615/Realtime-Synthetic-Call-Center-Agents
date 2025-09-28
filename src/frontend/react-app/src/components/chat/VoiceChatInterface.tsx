@@ -2,13 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { VoiceControls } from './VoiceControls'
 import { ChatHistory } from './ChatHistory'
-import { AudioVisualizer } from './AudioVisualizer'
 import { VoiceSettings } from './VoiceSettings'
 import { CustomerSelection } from './CustomerSelection'
-import { ChatText, Microphone, MicrophoneSlash, Phone, PhoneDisconnect } from '@phosphor-icons/react'
+import { ChatText } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { RealtimeClient } from '@/utils/realtimeClient'
 
@@ -29,9 +27,9 @@ export function VoiceChatInterface() {
   const [callStatus, setCallStatus] = useState<CallStatus>('idle')
   const [isRecording, setIsRecording] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const isMutedRef = useRef(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [currentTranscript, setCurrentTranscript] = useState('')
-  const [audioLevel, setAudioLevel] = useState(0)
   const [textInput, setTextInput] = useState('')
   
   // Customer selection state
@@ -40,15 +38,18 @@ export function VoiceChatInterface() {
   const [showCustomerSelection, setShowCustomerSelection] = useState(true)
   
   const realtimeClientRef = useRef<RealtimeClient | null>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const assistantStreamingIdRef = useRef<string | null>(null)
   const assistantTranscriptRef = useRef<string>('')
   const userStreamingIdRef = useRef<string | null>(null)
   const userTranscriptRef = useRef<string>('')
   const userSpeechStartRef = useRef<string | null>(null)
+  const pendingCustomerIdRef = useRef<string | null>(null)
+  const connectedCustomerIdRef = useRef<string | null>(null)
+  const hasPlayedGreetingRef = useRef<boolean>(false)
 
   useEffect(() => {
     // Initialize RealtimeClient
@@ -62,6 +63,8 @@ export function VoiceChatInterface() {
     
     client.on('connected', () => {
       setConnectionStatus('connected')
+      connectedCustomerIdRef.current = pendingCustomerIdRef.current
+      pendingCustomerIdRef.current = null
       toast.success('Connected to AI voice service')
     })
 
@@ -69,6 +72,9 @@ export function VoiceChatInterface() {
       setConnectionStatus('disconnected')
       setCallStatus('idle')
       setIsRecording(false)
+      pendingCustomerIdRef.current = null
+      connectedCustomerIdRef.current = null
+      hasPlayedGreetingRef.current = false
       toast.info('Disconnected from voice service')
     })
 
@@ -262,35 +268,170 @@ export function VoiceChatInterface() {
     }
   }, [])
 
-  const handleCustomerSelected = (customerId: string, customerName: string) => {
+  const handleCustomerSelected = async (customerId: string, customerName: string) => {
     setSelectedCustomerId(customerId)
     setSelectedCustomerName(customerName)
     setShowCustomerSelection(false)
     toast.success(`Selected customer: ${customerName}`)
+
+    try {
+      await connectWebSocket(customerId)
+    } catch (error) {
+      console.error('Failed to auto-connect after customer selection:', error)
+    }
   }
 
-  const connectWebSocket = async () => {
-    if (connectionStatus === 'connected' || !realtimeClientRef.current) return
-    if (!selectedCustomerId) {
+  const connectWebSocket = async (customerIdOverride?: string) => {
+    const client = realtimeClientRef.current
+    if (!client) return
+
+    const targetCustomerId = customerIdOverride ?? selectedCustomerId
+    if (!targetCustomerId) {
       toast.error('Please select a customer first')
       return
     }
 
+    if (client.isConnected) {
+      if (connectedCustomerIdRef.current === targetCustomerId) {
+        setConnectionStatus('connected')
+        return
+      }
+      client.disconnect()
+      connectedCustomerIdRef.current = null
+    }
+
+    if (connectionStatus === 'connecting') {
+      return
+    }
+
+    pendingCustomerIdRef.current = targetCustomerId
     setConnectionStatus('connecting')
     
     try {
-      await realtimeClientRef.current.connect(selectedCustomerId)
+      await client.connect(targetCustomerId)
     } catch (error) {
+      pendingCustomerIdRef.current = null
       setConnectionStatus('error')
       toast.error(`Connection failed: ${error}`)
     }
   }
 
   const disconnectWebSocket = () => {
-    if (realtimeClientRef.current) {
-      realtimeClientRef.current.disconnect()
+    const client = realtimeClientRef.current
+    if (client) {
+      pendingCustomerIdRef.current = null
+      connectedCustomerIdRef.current = null
+      client.disconnect()
     }
   }
+
+  const startRecording = async (options: { playGreeting?: boolean } = {}) => {
+    if (isRecording || !realtimeClientRef.current) return
+
+    try {
+      // Get microphone access with specific constraints for 24kHz
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 24000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      })
+
+      streamRef.current = stream
+
+      // Create audio context with 24kHz sample rate
+      const audioContext = new AudioContext({ sampleRate: 24000 })
+      audioContextRef.current = audioContext
+
+  const source = audioContext.createMediaStreamSource(stream)
+  audioSourceRef.current = source
+      const processor = audioContext.createScriptProcessor(4096, 1, 1)
+      scriptProcessorRef.current = processor
+
+      processor.onaudioprocess = (event) => {
+        const inputBuffer = event.inputBuffer
+        const inputData = inputBuffer.getChannelData(0)
+
+        if (isMutedRef.current) {
+          return
+        }
+
+        // Convert to PCM16 and send to realtime client
+        const pcmData = convertToPCM16(inputData)
+        if (realtimeClientRef.current) {
+          realtimeClientRef.current.sendAudioData(pcmData)
+        }
+      }
+
+      source.connect(processor)
+      processor.connect(audioContext.destination)
+
+      setIsRecording(true)
+      toast.info('Recording started')
+
+      updateMuteState()
+
+      if (options.playGreeting && !hasPlayedGreetingRef.current && realtimeClientRef.current?.isConnected) {
+        const customerName = selectedCustomerName || 'there'
+        realtimeClientRef.current.requestResponse({
+          instructions: `Please greet ${customerName} warmly to start the conversation. Respond in English only.`
+        })
+        hasPlayedGreetingRef.current = true
+      }
+    } catch (error) {
+      console.error('Failed to start recording:', error)
+      toast.error('Failed to start recording')
+      throw error
+    }
+  }
+
+  const stopRecording = (options: { silent?: boolean } = {}) => {
+    const hasAudioResources = scriptProcessorRef.current || audioContextRef.current || streamRef.current
+    if (!hasAudioResources && !isRecording) {
+      return
+    }
+
+    if (scriptProcessorRef.current) {
+      scriptProcessorRef.current.disconnect()
+      scriptProcessorRef.current = null
+    }
+    if (audioSourceRef.current) {
+      audioSourceRef.current.disconnect()
+      audioSourceRef.current = null
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+
+    setIsRecording(false)
+    if (isMuted) {
+      setIsMuted(false)
+    }
+    if (!options.silent) {
+      toast.info('Recording stopped')
+    }
+  }
+  const updateMuteState = () => {
+    const stream = streamRef.current
+    if (!stream) return
+
+    stream.getAudioTracks().forEach(track => {
+      track.enabled = !isMuted
+    })
+  }
+
+  useEffect(() => {
+    isMutedRef.current = isMuted
+    updateMuteState()
+  }, [isMuted])
+
 
   const startCall = async () => {
     if (!selectedCustomerId) {
@@ -298,45 +439,44 @@ export function VoiceChatInterface() {
       toast.error('Please select a customer first')
       return
     }
-    
-    if (connectionStatus !== 'connected') {
-      await connectWebSocket()
-      return
-    }
+
+    const client = realtimeClientRef.current
+    if (!client) return
 
     try {
       setCallStatus('calling')
-      
-      // Start audio recording and send to RealtimeClient
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      
+      setMessages([])
+      setCurrentTranscript('')
+
+      if (!client.isConnected) {
+        await connectWebSocket(selectedCustomerId)
+      }
+
+      if (!client.isConnected) {
+        throw new Error('Voice service not connected')
+      }
+
+      await startRecording({ playGreeting: true })
+
       setCallStatus('active')
       toast.success(`Call started for ${selectedCustomerName}`)
-      
-      // Add welcome message with customer name
-      const welcomeMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: `Hello ${selectedCustomerName}! I'm your AI assistant. How can I help you today?`,
-        timestamp: new Date().toISOString()
-      }
-      setMessages([welcomeMessage])
-      
     } catch (error) {
-      toast.error('Microphone access denied')
+      console.error('Failed to start call:', error)
+      toast.error('Unable to start the call')
       setCallStatus('idle')
+      stopRecording({ silent: true })
     }
   }
 
   const endCall = () => {
+    stopRecording({ silent: true })
+    hasPlayedGreetingRef.current = false
     setCallStatus('ended')
-    setIsRecording(false)
     setCurrentTranscript('')
-    
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop()
-    }
-    
+    setIsMuted(false)
+
+    disconnectWebSocket()
+
     setTimeout(() => {
       setCallStatus('idle')
       toast.info('Call ended')
@@ -376,71 +516,8 @@ export function VoiceChatInterface() {
     return arrayBuffer
   }
 
-  const toggleRecording = async () => {
-    if (callStatus !== 'active' || !realtimeClientRef.current) return
-
-    if (isRecording) {
-      setIsRecording(false)
-      
-      // Stop audio processing
-      if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.disconnect()
-        scriptProcessorRef.current = null
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
-        audioContextRef.current = null
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
-        streamRef.current = null
-      }
-      
-      toast.info('Recording stopped')
-    } else {
-      try {
-        // Get microphone access with specific constraints for 24kHz
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: 24000,
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true
-          }
-        })
-        
-        streamRef.current = stream
-        
-        // Create audio context with 24kHz sample rate
-        const audioContext = new AudioContext({ sampleRate: 24000 })
-        audioContextRef.current = audioContext
-        
-        const source = audioContext.createMediaStreamSource(stream)
-        const processor = audioContext.createScriptProcessor(4096, 1, 1)
-        scriptProcessorRef.current = processor
-        
-        processor.onaudioprocess = (event) => {
-          const inputBuffer = event.inputBuffer
-          const inputData = inputBuffer.getChannelData(0)
-          
-          // Convert to PCM16 and send to realtime client
-          const pcmData = convertToPCM16(inputData)
-          if (realtimeClientRef.current) {
-            realtimeClientRef.current.sendAudioData(pcmData)
-          }
-        }
-        
-        source.connect(processor)
-        processor.connect(audioContext.destination)
-        
-        setIsRecording(true)
-        toast.info('Recording started')
-        
-      } catch (error) {
-        console.error('Failed to start recording:', error)
-        toast.error('Failed to start recording')
-      }
-    }
+  const toggleMute = () => {
+    setIsMuted(prev => !prev)
   }
 
   const getConnectionStatusColor = () => {
@@ -449,6 +526,12 @@ export function VoiceChatInterface() {
       case 'connecting': return 'bg-yellow-500'
       case 'error': return 'bg-red-500'
       default: return 'bg-gray-500'
+    }
+  }
+
+  const handleVoiceChange = (voice: string) => {
+    if (realtimeClientRef.current) {
+      realtimeClientRef.current.updateSession({ voice: voice as any })
     }
   }
 
@@ -572,12 +655,10 @@ export function VoiceChatInterface() {
             <CardContent>
               <VoiceControls
                 callStatus={callStatus}
-                isRecording={isRecording}
                 isMuted={isMuted}
                 onStartCall={startCall}
                 onEndCall={endCall}
-                onToggleRecording={toggleRecording}
-                onToggleMute={() => setIsMuted(!isMuted)}
+                onToggleMute={toggleMute}
               />
             </CardContent>
           </Card>
@@ -588,7 +669,7 @@ export function VoiceChatInterface() {
               <CardTitle>Settings</CardTitle>
             </CardHeader>
             <CardContent>
-              <VoiceSettings />
+              <VoiceSettings onVoiceChange={handleVoiceChange} />
             </CardContent>
           </Card>
         </div>

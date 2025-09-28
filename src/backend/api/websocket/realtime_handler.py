@@ -65,7 +65,7 @@ class RealtimeHandler:
         # Session configuration
         self.default_session_config = {
             "modalities": ["text", "audio"],
-            "voice": "shimmer",
+            "voice": "shimmer",  # Default voice - will be overridden by frontend selection  
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
             "input_audio_transcription": {"model": "whisper-1"},
@@ -147,11 +147,13 @@ class RealtimeHandler:
         if root_tools:
             session["tools"] = root_tools
             
-        # Merge with default configuration
-        merged_session = {**self.default_session_config, **session}
+        # Merge with default configuration, giving priority to frontend settings
+        # This ensures voice and other user preferences are preserved
+        merged_session = {**self.default_session_config}
+        merged_session.update(session)  # Frontend settings override defaults
         message["session"] = merged_session
         
-        logger.info(f"Updated session config with agent: root, tools: {len(root_tools) if root_tools else 0}")
+        logger.info(f"Updated session config with agent: root, tools: {len(root_tools) if root_tools else 0}, voice: {merged_session.get('voice', 'not set')}")
         return message
 
     async def _handle_conversation_item(self, message: Dict[str, Any]) -> Dict[str, Any]:

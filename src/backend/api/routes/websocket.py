@@ -25,7 +25,7 @@ websocket_router = APIRouter()
 # Session configuration for frontend
 REALTIME_SESSION_CONFIG = {
     "instructions": "You are a helpful voice assistant for a call center. Please respond with both text and audio. Always provide an audio response.",
-    "voice": "shimmer",
+    "voice": "shimmer",  # Default voice - will be overridden by frontend selection
     "input_audio_format": "pcm16",
     "output_audio_format": "pcm16", 
     "modalities": ["text", "audio"],
