@@ -409,11 +409,11 @@ def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_p
         synthesizer = DataSynthesizer(base_dir)
 
         # Initialize containers
-        cosmos_producturl_container_name = "producturl"
-        cosmos_customer_container_name = "customer"
-        cosmos_product_container_name = "product"
-        cosmos_purchases_container_name = "purchases"
-        cosmos_human_conversations_container_name = "humanconversations"
+        cosmos_producturl_container_name = "ProductUrl"
+        cosmos_customer_container_name = "Customer"
+        cosmos_product_container_name = "Product"
+        cosmos_purchases_container_name = "Purchases"
+        cosmos_human_conversations_container_name = "Human_Conversations"
 
         # Refresh Cosmos DB containers
         synthesizer.refresh_container(synthesizer.database, cosmos_producturl_container_name, "/company_name")

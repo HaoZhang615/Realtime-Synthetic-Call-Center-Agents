@@ -1,0 +1,14 @@
+{
+    "first_name": "David",
+    "last_name": "Clark",
+    "email": "david.clark@email.com",
+    "address": {
+        "street": "Maple Avenue 45",
+        "city": "Seattle",
+        "postal_code": "98109",
+        "country": "USA"
+    },
+    "phone_number": "+12065551234",
+    "customer_id": "278166b0432a362c87c2d7d8c43c149e",
+    "id": "1_278166b0432a362c87c2d7d8c43c149e"
+}

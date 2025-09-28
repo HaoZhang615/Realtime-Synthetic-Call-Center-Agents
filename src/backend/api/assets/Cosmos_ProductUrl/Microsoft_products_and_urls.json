@@ -1,0 +1,12 @@
+{
+    "company_name": "Microsoft",
+    "id": "Microsoft_products_and_urls",
+    "products": [
+        "Windows",
+        "Microsoft Office"
+    ],
+    "urls": [
+        "https://www.microsoft.com/en-us/windows",
+        "https://www.microsoft.com/en-us/microsoft-365"
+    ]
+}

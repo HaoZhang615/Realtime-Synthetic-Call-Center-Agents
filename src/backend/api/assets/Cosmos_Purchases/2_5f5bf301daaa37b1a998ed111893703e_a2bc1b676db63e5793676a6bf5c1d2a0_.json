@@ -1,0 +1,25 @@
+{
+    "customer_id": "a2bc1b676db63e5793676a6bf5c1d2a0",
+    "product_id": "5f5bf301daaa37b1a998ed111893703e",
+    "quantity": 7,
+    "purchasing_date": "2025-04-15T10:30:00",
+    "delivered_date": "2025-04-20T15:45:00",
+    "order_number": "c6f4d721b74d314d90bcda92bc240e51",
+    "product_details": {
+        "name": "Windows 11 Pro",
+        "category": "Operating System",
+        "type": "Software",
+        "brand": "Windows",
+        "company": "Microsoft",
+        "unit_price": 149.99,
+        "weight": {
+            "value": 0,
+            "unit": ""
+        },
+        "color": "",
+        "material": "",
+        "product_id": "5f5bf301daaa37b1a998ed111893703e"
+    },
+    "total_price": 1049.93,
+    "id": "2_c6f4d721b74d314d90bcda92bc240e51"
+}

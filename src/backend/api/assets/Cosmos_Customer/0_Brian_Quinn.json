@@ -1,0 +1,14 @@
+{
+    "first_name": "Brian",
+    "last_name": "Quinn",
+    "email": "brian.quinn@example.com",
+    "address": {
+        "street": "Maple Avenue 42",
+        "city": "Austin",
+        "postal_code": "73301",
+        "country": "USA"
+    },
+    "phone_number": "+15125551234",
+    "customer_id": "a2bc1b676db63e5793676a6bf5c1d2a0",
+    "id": "0_a2bc1b676db63e5793676a6bf5c1d2a0"
+}
