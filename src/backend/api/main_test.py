@@ -1,24 +1,14 @@
 """
-FastAPI Backend for Realtime Synthetic Call Center Agents
+FastAPI Backend for WebSocket Testing
 
-Provides both admin portal functionality and WebSocket endpoints for realtime voice communication.
-
-Main endpoints:
-- POST /api/realtime/token       : returns a short-lived access token for browser realtime clients (AOAI/Realtime)
-- WS   /api/realtime             : WebSocket endpoint for real-time voice communication
-- WS   /api/transcription        : WebSocket endpoint for real-time transcription
-- POST /api/admin/upload         : accept multipart files and schedule processing using existing utils.upload_documents
-- GET  /api/health               : basic health check
-
-This module integrates the repository's existing utilities with new WebSocket infrastructure
-for real-time voice communication.
+Minimal version for testing WebSocket connectivity.
 """
 
 import logging
 import os
 import sys
 
-# Ensure repo `src` directory is importable so we can `import utils.*` like existing pages do.
+# Ensure repo `src` directory is importable
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))  # <repo>/src
 BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))  # <repo>/src/backend
 if ROOT not in sys.path:
@@ -29,8 +19,7 @@ if BACKEND_ROOT not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import route modules
-from api.routes.admin import admin_router
+# Import route modules (skip admin for now due to dependencies)
 from api.routes.realtime import realtime_router 
 from api.routes.websocket import websocket_router
 
@@ -42,7 +31,7 @@ load_azd_environment()
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Realtime Admin API")
+app = FastAPI(title="Realtime WebSocket API (Test)")
 
 # Configure CORS for React dev server by default
 FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
@@ -54,8 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers with their respective prefixes
-app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+# Include routers
 app.include_router(realtime_router, prefix="/api/realtime", tags=["realtime"])
 app.include_router(websocket_router, prefix="/api", tags=["websocket"])
 
@@ -63,14 +51,21 @@ app.include_router(websocket_router, prefix="/api", tags=["websocket"])
 @app.get("/api/health")
 async def health():
     """Health check endpoint"""
-    return {"status": "ok"}
+    return {"status": "ok", "message": "WebSocket API is running"}
 
 
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
-        "message": "Realtime Synthetic Call Center Agents API",
+        "message": "Realtime Synthetic Call Center Agents API - WebSocket Test Mode",
         "status": "running",
-        "docs": "/docs"
+        "docs": "/docs",
+        "endpoints": {
+            "health": "/api/health",
+            "session_config": "/api/session/config", 
+            "transcription_config": "/api/transcription/config",
+            "realtime_websocket": "ws://localhost:8000/api/realtime",
+            "transcription_websocket": "ws://localhost:8000/api/transcription"
+        }
     }

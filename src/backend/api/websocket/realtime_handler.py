@@ -1,0 +1,353 @@
+"""
+Realtime Handler for Azure OpenAI WebSocket Bridge
+
+Handles the connection between browser WebSockets and Azure OpenAI Realtime API.
+Integrates with existing RealtimeClient and AssistantService architecture.
+"""
+
+import asyncio
+import contextlib
+import json
+import logging
+import os
+import sys
+from typing import Optional, Dict, Any
+import websockets
+from azure.core.exceptions import ClientAuthenticationError
+from azure.identity import DefaultAzureCredential, CredentialUnavailableError
+from fastapi import WebSocket, WebSocketDisconnect
+
+# Import existing components
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+try:
+    from services.assistant_service import AssistantService
+except ImportError:
+    logger.warning("Could not import AssistantService - using mock implementation")
+    class AssistantService:
+        def get_agent(self, name): return {"id": name, "system_message": "You are a helpful assistant."}
+        def get_tools_for_assistant(self, name): return []
+        async def get_tool_response(self, **kwargs): return {"result": "mock response"}
+from load_azd_env import load_azd_environment
+
+# Load environment
+load_azd_environment()
+
+logger = logging.getLogger(__name__)
+
+
+class RealtimeHandler:
+    """
+    Handles real-time voice communication between browser and Azure OpenAI
+    
+    This class acts as a bridge, connecting the browser's WebSocket to Azure OpenAI's
+    Realtime API while integrating with the existing multi-agent system.
+    """
+    
+    def __init__(self):
+        self.credential = DefaultAzureCredential()
+        self.assistant_service = AssistantService()
+        
+        # Azure OpenAI configuration
+        self.azure_endpoint = os.getenv("AZURE_AI_FOUNDRY_ENDPOINT", "").replace("https://", "wss://")
+        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
+        self.deployment = os.getenv("AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT")
+        self.scope = "https://cognitiveservices.azure.com/.default"
+        
+        # Session configuration
+        self.default_session_config = {
+            "modalities": ["text", "audio"],
+            "voice": "shimmer",
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16",
+            "input_audio_transcription": {"model": "whisper-1"},
+            "turn_detection": {"type": "server_vad"},
+            "tools": [],
+            "tool_choice": "auto",
+            "temperature": 0.8,
+            "max_response_output_tokens": 4096,
+        }
+
+    def build_azure_headers(self) -> Dict[str, str]:
+        """Build headers for Azure OpenAI WebSocket connection"""
+        try:
+            token = self.credential.get_token(self.scope)
+            return {
+                "Authorization": f"Bearer {token.token}",
+                "x-ms-client-request-id": "realtime-voice-bot",
+                "x-ms-useragent": "realtime-synthetic-call-center/1.0.0",
+            }
+        except Exception as e:
+            logger.exception("Failed to build Azure headers: %s", e)
+            raise
+
+    def build_azure_ws_url(self) -> str:
+        """Build Azure OpenAI WebSocket URL"""
+        return f"{self.azure_endpoint}/openai/realtime?api-version={self.api_version}&deployment={self.deployment}"
+
+    async def handle_client_message(self, message: Dict[str, Any], vendor_ws) -> Optional[Dict[str, Any]]:
+        """
+        Process message from browser client before forwarding to Azure
+        
+        This allows us to intercept and modify messages, handle tool calls,
+        and integrate with the existing agent system.
+        """
+        message_type = message.get("type")
+        
+        # Handle session updates to inject our agent configuration
+        if message_type == "session.update":
+            return await self._handle_session_update(message)
+        
+        # Handle tool calls through our assistant service
+        elif message_type == "conversation.item.create":
+            return await self._handle_conversation_item(message)
+            
+        # Forward other messages as-is
+        return message
+
+    async def _handle_session_update(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle session update to inject agent configuration"""
+        session = message.get("session", {})
+        
+        # Start with root agent configuration
+        root_agent = self.assistant_service.get_agent("root")
+        if root_agent:
+            session["instructions"] = root_agent.get("system_message", session.get("instructions"))
+            
+        # Get tools for root agent (includes other agents as tools)
+        root_tools = self.assistant_service.get_tools_for_assistant("root")
+        if root_tools:
+            session["tools"] = root_tools
+            
+        # Merge with default configuration
+        merged_session = {**self.default_session_config, **session}
+        message["session"] = merged_session
+        
+        logger.info(f"Updated session config with agent: root, tools: {len(root_tools)}")
+        return message
+
+    async def _handle_conversation_item(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle conversation item creation"""
+        # For now, just forward the message
+        # Later, we can add customer context injection here
+        return message
+
+    async def handle_azure_message(self, message: Dict[str, Any], session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Process message from Azure OpenAI before forwarding to client
+        
+        This allows us to intercept tool calls and handle them through
+        our existing assistant service.
+        """
+        message_type = message.get("type")
+        
+        # Handle tool calls
+        if message_type == "response.function_call_arguments.done":
+            await self._handle_tool_call(message, session_id)
+            
+        # Forward message to client
+        return message
+
+    async def _handle_tool_call(self, message: Dict[str, Any], session_id: str):
+        """Handle tool calls through the assistant service"""
+        try:
+            item_id = message.get("item_id")
+            call_id = message.get("call_id") 
+            name = message.get("name")
+            arguments = message.get("arguments", "{}")
+            
+            logger.info(f"Processing tool call: {name} for session {session_id}")
+            
+            # Parse arguments
+            try:
+                parsed_args = json.loads(arguments) if arguments else {}
+            except json.JSONDecodeError:
+                parsed_args = {}
+                
+            # Call through assistant service
+            result = await self.assistant_service.get_tool_response(
+                tool_name=name,
+                parameters=parsed_args,
+                call_id=call_id
+            )
+            
+            # Check if this was an agent switch
+            if "assistant" in name.lower():
+                agent = self.assistant_service.get_agent(name)
+                if agent:
+                    logger.info(f"Agent switched to: {agent['id']}")
+                    # Note: Agent switching will be handled by sending session.update
+                    
+            return {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps(result),
+                }
+            }
+            
+        except Exception as e:
+            logger.exception(f"Tool call failed: {e}")
+            return {
+                "type": "conversation.item.create", 
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps({"error": str(e)}),
+                }
+            }
+
+    async def relay_messages(self, client_ws: WebSocket, vendor_ws, session_id: str):
+        """
+        Relay messages bidirectionally between client and Azure OpenAI
+        
+        This is the core bridge function that handles all message routing.
+        """
+        
+        async def client_to_vendor():
+            """Forward messages from browser client to Azure OpenAI"""
+            try:
+                while True:
+                    message = await client_ws.receive()
+                    
+                    # Handle WebSocket disconnect
+                    if message.get("type") == "websocket.disconnect":
+                        raise WebSocketDisconnect
+                    
+                    # Handle text messages (JSON)
+                    if "text" in message:
+                        try:
+                            payload = json.loads(message["text"])
+                        except json.JSONDecodeError:
+                            logger.warning("Invalid JSON from client")
+                            continue
+                            
+                        # Process message through handler
+                        processed = await self.handle_client_message(payload, vendor_ws)
+                        if processed:
+                            await vendor_ws.send(json.dumps(processed))
+                            
+                            # Log non-audio message types
+                            if payload.get("type") not in {
+                                "input_audio_buffer.append", 
+                                "response.audio.delta"
+                            }:
+                                logger.debug(f"Client->Azure: {payload.get('type')}")
+                    
+                    # Handle binary messages
+                    elif "bytes" in message and message["bytes"]:
+                        logger.debug("Received binary data from client - not supported yet")
+                        
+            except WebSocketDisconnect:
+                logger.info("Client WebSocket disconnected")
+            except Exception as e:
+                logger.exception(f"Error in client_to_vendor: {e}")
+
+        async def vendor_to_client():
+            """Forward messages from Azure OpenAI to browser client"""
+            try:
+                while True:
+                    data = await vendor_ws.recv()
+                    
+                    # Parse Azure response
+                    try:
+                        azure_message = json.loads(data)
+                    except json.JSONDecodeError:
+                        logger.warning("Invalid JSON from Azure")
+                        continue
+                        
+                    # Process message through handler
+                    processed = await self.handle_azure_message(azure_message, session_id)
+                    if processed:
+                        await client_ws.send_text(json.dumps(processed))
+                        
+                        # Log significant events
+                        msg_type = azure_message.get("type")
+                        if msg_type and msg_type not in {
+                            "response.audio.delta",
+                            "response.audio_transcript.delta"
+                        }:
+                            logger.debug(f"Azure->Client: {msg_type}")
+                            
+            except websockets.exceptions.ConnectionClosed:
+                logger.info("Azure WebSocket disconnected")
+            except Exception as e:
+                logger.exception(f"Error in vendor_to_client: {e}")
+
+        # Run both relay tasks concurrently
+        tasks = [
+            asyncio.create_task(client_to_vendor()),
+            asyncio.create_task(vendor_to_client())
+        ]
+        
+        try:
+            # Wait for either task to complete (indicating connection closed)
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            
+            # Cancel remaining tasks
+            for task in pending:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+                    
+        except Exception as e:
+            logger.exception(f"Error in message relay: {e}")
+
+    async def create_azure_connection(self) -> websockets.WebSocketClientProtocol:
+        """Create WebSocket connection to Azure OpenAI"""
+        headers = self.build_azure_headers()
+        url = self.build_azure_ws_url()
+        
+        logger.info(f"Connecting to Azure OpenAI: {url}")
+        
+        try:
+            return await websockets.connect(url, extra_headers=headers)
+        except websockets.exceptions.InvalidHandshake as e:
+            logger.error(f"Azure WebSocket handshake failed: {e}")
+            raise
+        except Exception as e:
+            logger.exception(f"Failed to connect to Azure OpenAI: {e}")
+            raise
+
+    async def handle_session(self, client_ws: WebSocket, session_id: str, customer_id: Optional[str] = None):
+        """
+        Handle a complete voice session
+        
+        This is the main entry point for handling a WebSocket session.
+        """
+        logger.info(f"Starting voice session {session_id} for customer {customer_id}")
+        
+        try:
+            # Create Azure OpenAI connection
+            vendor_ws = await self.create_azure_connection()
+            
+            try:
+                # Start message relay
+                await self.relay_messages(client_ws, vendor_ws, session_id)
+            finally:
+                # Ensure Azure connection is closed
+                await vendor_ws.close()
+                
+        except (CredentialUnavailableError, ClientAuthenticationError) as e:
+            error_msg = f"Azure authentication failed: {e}"
+            logger.error(error_msg)
+            try:
+                await client_ws.send_text(json.dumps({
+                    "type": "error",
+                    "error": error_msg
+                }))
+            except:
+                pass
+        except Exception as e:
+            logger.exception(f"Voice session {session_id} failed: {e}")
+            try:
+                await client_ws.send_text(json.dumps({
+                    "type": "error", 
+                    "error": f"Session error: {str(e)}"
+                }))
+            except:
+                pass
+
+
+# Global handler instance
+realtime_handler = RealtimeHandler()

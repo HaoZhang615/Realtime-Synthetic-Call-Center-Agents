@@ -130,66 +130,67 @@ export class RealtimeAPI {
   /**
    * Connect to the Azure OpenAI Realtime API
    */
-  async connect(websocketUrl?: string, apiKey?: string, deployment?: string, apiVersion?: string): Promise<void> {
+  async connect(
+    websocketUrl?: string,
+    apiKey?: string,
+    deployment?: string,
+    apiVersion?: string
+  ): Promise<void> {
     if (websocketUrl) this.url = websocketUrl
     if (apiKey) this.apiKey = apiKey
 
-    if (!this.url || !this.apiKey) {
-      throw new Error('WebSocket URL and API key are required')
+    if (!this.url) {
+      throw new Error('WebSocket URL is required')
     }
+
+    const urlInstance = new URL(this.url)
+    const isLocalProxy =
+      urlInstance.hostname.includes('localhost') ||
+      urlInstance.hostname.includes('127.0.0.1')
+
+    if (!isLocalProxy && !this.apiKey) {
+      throw new Error('Realtime authentication token is required for cloud connections')
+    }
+
+    const protocols: string[] = ['realtime']
+
+    if (!isLocalProxy) {
+      const version = apiVersion || '2024-10-01-preview'
+      urlInstance.searchParams.set('api-version', version)
+      if (deployment) {
+        urlInstance.searchParams.set('deployment', deployment)
+      }
+
+      const isAzureEndpoint = urlInstance.hostname.includes('azure.com')
+      if (this.apiKey) {
+        if (isAzureEndpoint) {
+          urlInstance.searchParams.set('access_token', this.apiKey)
+        } else {
+          protocols.push(`openai-insecure-api-key.${this.apiKey}`)
+        }
+      }
+    } else if (this.apiKey) {
+      // Allow local proxies to receive the token via query parameter if needed
+      urlInstance.searchParams.set('token', this.apiKey)
+    }
+
+    const wsUrl = urlInstance.toString()
+    const urlForLog = new URL(wsUrl)
+    if (urlForLog.searchParams.has('access_token')) {
+      urlForLog.searchParams.set('access_token', '***')
+    }
+    if (urlForLog.searchParams.has('token')) {
+      urlForLog.searchParams.set('token', '***')
+    }
+    const safeWsUrl = urlForLog.toString()
 
     return new Promise((resolve, reject) => {
       this.emit('connecting')
-      
-      // Check if this is a local proxy URL vs direct Azure URL
-      const isLocalProxy = this.url.includes('localhost') || this.url.includes('127.0.0.1')
-      
-      let wsUrl: string
-      if (isLocalProxy) {
-        // Local proxy - use the URL as-is, proxy will handle Azure authentication
-        wsUrl = this.url
-        console.log('Connecting to local WebSocket proxy:', wsUrl)
-      } else {
-        // Direct Azure connection - construct full URL with parameters
-        const version = apiVersion || '2024-10-01-preview'
-        wsUrl = `${this.url}/openai/realtime?api-version=${version}`
-        if (deployment) wsUrl += `&deployment=${deployment}`
-        console.log('Connecting directly to Azure OpenAI:', wsUrl)
-      }
-      
-      console.log('Using deployment:', deployment)
-      console.log('Using token:', this.apiKey.substring(0, 20) + '...')
-      
-      // Create WebSocket connection
-      this.ws = new WebSocket(wsUrl)
+  console.log('Connecting to realtime endpoint:', safeWsUrl)
 
-      this.ws.addEventListener('open', (event) => {
-        console.log('WebSocket connected successfully')
-        
-        if (!isLocalProxy) {
-          // For direct Azure connections, send authentication via session update
-          try {
-            const sessionUpdate = {
-              type: 'session.update',
-              session: {
-                modalities: ['text', 'audio'],
-                instructions: 'You are a helpful AI assistant.',
-                voice: 'alloy',
-                input_audio_format: 'pcm16',
-                output_audio_format: 'pcm16',
-                input_audio_transcription: {
-                  model: 'whisper-1'
-                }
-              }
-            }
-            
-            this.ws!.send(JSON.stringify(sessionUpdate))
-            console.log('Sent session update with auth context')
-          } catch (error) {
-            console.error('Session update failed:', error)
-          }
-        }
-        
+      this.ws = new WebSocket(wsUrl, protocols)
+
+      this.ws.addEventListener('open', () => {
         console.log('WebSocket connection established')
         this.emit('connected')
         resolve()
@@ -201,10 +202,10 @@ export class RealtimeAPI {
       })
 
       this.ws.addEventListener('error', (event) => {
-        console.error('WebSocket error:', event)
-        console.error('WebSocket URL was:', wsUrl)
+  console.error('WebSocket error:', event)
+  console.error('WebSocket URL was:', safeWsUrl)
         console.error('Connection failed with error:', event)
-        const error = new Error(`WebSocket connection failed. URL: ${wsUrl}. Check console for details.`)
+  const error = new Error(`WebSocket connection failed. URL: ${safeWsUrl}. Check console for details.`)
         this.emit('error', error)
         reject(error)
       })
@@ -404,9 +405,10 @@ export class RealtimeClient {
     deployment?: string
     apiVersion?: string
   } = {}
+  private authToken: string | null = null
 
   constructor(
-    apiKey: string,
+    apiKey?: string,
     config: RealtimeClientConfig = {}
   ) {
     // Default configuration
@@ -430,10 +432,15 @@ export class RealtimeClient {
     }
 
   this.api = new RealtimeAPI()
+  this.authToken = apiKey ?? null
   this.conversation = new RealtimeConversation()
 
   // Set up default event handlers
   this.setupDefaultHandlers()
+  }
+
+  setAuthToken(token: string) {
+    this.authToken = token
   }
 
   private buildSessionPayload(overrides: Partial<RealtimeClientConfig> = {}) {
@@ -472,9 +479,10 @@ export class RealtimeClient {
    * Get WebSocket URL for Azure OpenAI Realtime API from environment
    */
   private getWebSocketUrl(): string {
-    // Get from backend via an API call since we can't access env vars directly in browser
-    // This will be set when we get the token from backend
-    return '' // Will be populated from backend response
+    if (!this.connectionConfig.websocketUrl) {
+      throw new Error('Realtime WebSocket URL is not set. Call connect() with backend token metadata first.')
+    }
+    return this.connectionConfig.websocketUrl
   }
 
   /**
@@ -574,11 +582,17 @@ export class RealtimeClient {
     if (websocketUrl) this.connectionConfig.websocketUrl = websocketUrl
     if (deployment) this.connectionConfig.deployment = deployment
     if (apiVersion) this.connectionConfig.apiVersion = apiVersion
+    if (apiKey) this.authToken = apiKey
     
+    const resolvedWebsocketUrl = this.connectionConfig.websocketUrl
+    if (!resolvedWebsocketUrl) {
+      throw new Error('Realtime WebSocket URL is required for connection')
+    }
+
     // Connect to the WebSocket API
     await this.api.connect(
-      this.connectionConfig.websocketUrl,
-      apiKey,
+      resolvedWebsocketUrl,
+      this.authToken ?? undefined,
       this.connectionConfig.deployment,
       this.connectionConfig.apiVersion
     )
@@ -643,6 +657,17 @@ export class RealtimeClient {
 
     this.api.sendEvent({
       type: 'input_audio_buffer.clear'
+    })
+  }
+
+  /**
+   * Request the assistant to generate a response based on current conversation state
+   */
+  createResponse() {
+    if (!this.isConnected) return
+
+    this.api.sendEvent({
+      type: 'response.create'
     })
   }
 

@@ -7,10 +7,12 @@ name = "agentic-voice-assistant"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "azure-core" },
     { name = "azure-cosmos" },
     { name = "azure-identity" },
     { name = "azure-keyvault" },
     { name = "azure-monitor-opentelemetry" },
+    { name = "azure-search" },
     { name = "azure-search-documents" },
     { name = "azure-storage-blob" },
     { name = "fastapi" },
@@ -25,10 +27,12 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "azure-core", specifier = ">=1.33.0" },
     { name = "azure-cosmos", specifier = ">=4.9.0" },
     { name = "azure-identity" },
     { name = "azure-keyvault" },
     { name = "azure-monitor-opentelemetry" },
+    { name = "azure-search", specifier = ">=1.0.0b2" },
     { name = "azure-search-documents", specifier = "==11.6.0b8" },
     { name = "azure-storage-blob" },
     { name = "fastapi", specifier = ">=0.95.0" },
@@ -259,6 +263,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/38/34/4a545d8613262361e83125df8108806584853f60cc054c675d87efb06c93/azure_monitor_opentelemetry_exporter-1.0.0b36.tar.gz", hash = "sha256:82977b9576a694362ea9c6a9eec6add6e56314da759dbc543d02f50962d4b72d", size = 189364, upload_time = "2025-04-07T18:23:22.871Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/d9/e1130395b3575544b6dce87b414452ec9c8d3b2c3f75d515c3c4cd391159/azure_monitor_opentelemetry_exporter-1.0.0b36-py2.py3-none-any.whl", hash = "sha256:8b669deae6a247246944495f519fd93dbdfa9c0150d1222cfc780de098338546", size = 154118, upload_time = "2025-04-07T18:23:24.522Z" },
+]
+
+[[package]]
+name = "azure-search"
+version = "1.0.0b2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "msrest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/41/1ff51d12d0fc0554697e48f22e5c4479480f81a33ca7995efb0a04ffd2c9/azure-search-1.0.0b2.zip", hash = "sha256:49cbb1937b2e256f6631d467f62f8a1c94a14c5fed84f6625d24bc7b210a25d4", size = 80702, upload_time = "2021-01-22T20:29:07.743Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/05/53/4df854bed465b52d72cd66ae74f32f89e65d005f0022ac030d235e7b3d14/azure_search-1.0.0b2-py2.py3-none-any.whl", hash = "sha256:ba3974224be1329d26e58e63df9c8561b416e7536b79a1c5576055dfb6c472ae", size = 46816, upload_time = "2021-01-22T20:29:06.351Z" },
 ]
 
 [[package]]
