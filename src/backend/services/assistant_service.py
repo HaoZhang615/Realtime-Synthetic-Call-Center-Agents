@@ -9,13 +9,42 @@ import os
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
-from backend.agents.assistant_agent import assistant_agent
-from backend.agents.database_agent import database_agent
-from backend.agents.internal_kb import internal_kb_agent
-from backend.agents.root import root_assistant
-from backend.agents.web_search_agent import web_search_agent
-
 logger = logging.getLogger(__name__)
+
+try:
+    from agents.assistant_agent import assistant_agent
+    logger.info("Successfully imported assistant_agent")
+except Exception as e:
+    logger.error(f"Failed to import assistant_agent: {e}")
+    assistant_agent = None
+
+try:
+    from agents.database_agent import database_agent
+    logger.info("Successfully imported database_agent")
+except Exception as e:
+    logger.error(f"Failed to import database_agent: {e}")
+    database_agent = None
+
+try:
+    from agents.internal_kb import internal_kb_agent
+    logger.info("Successfully imported internal_kb_agent")
+except Exception as e:
+    logger.error(f"Failed to import internal_kb_agent: {e}")
+    internal_kb_agent = None
+
+try:
+    from agents.root import root_assistant
+    logger.info("Successfully imported root_assistant")
+except Exception as e:
+    logger.error(f"Failed to import root_assistant: {e}")
+    root_assistant = None
+
+try:
+    from agents.web_search_agent import web_search_agent
+    logger.info("Successfully imported web_search_agent")
+except Exception as e:
+    logger.error(f"Failed to import web_search_agent: {e}")
+    web_search_agent = None
 
 _AGENT_ID_PATTERN = re.compile(r"assistant", re.IGNORECASE)
 
@@ -74,7 +103,19 @@ class AssistantService:
         """Return a list of tool definitions for the supplied agent."""
         agent = self.agents[agent_id]
         agent_tools = agent.get("tools", [])
-        return list(agent_tools)
+        
+        # Convert to Azure OpenAI Realtime-compatible format
+        realtime_tools = []
+        for tool in agent_tools:
+            realtime_tool = {
+                "type": "function",
+                "name": tool.get("name"),
+                "description": tool.get("description", ""),
+                "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+            }
+            realtime_tools.append(realtime_tool)
+        
+        return realtime_tools
 
     def _other_agents_as_tools(self, agent_id: str) -> List[Dict[str, Any]]:
         """Expose every other agent as a tool for the active agent."""
@@ -84,12 +125,10 @@ class AssistantService:
                 continue
             tools.append(
                 {
+                    "type": "function",
                     "name": config["id"],
                     "description": config.get("description", ""),
                     "parameters": {"type": "object", "properties": {}},
-                    "returns": (
-                        lambda _params, target=config["id"]: target  # noqa: E731
-                    ),
                 }
             )
         return tools
@@ -175,18 +214,41 @@ class AgentOrchestrator:
     """High-level helper that wires all default agents for a session."""
 
     def __init__(self, language: str = "English") -> None:
-        self.assistant_service = AssistantService(language=language)
+        try:
+            logger.info(f"Creating AssistantService with language: {language}")
+            self.assistant_service = AssistantService(language=language)
+            logger.info("AssistantService created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create AssistantService: {e}")
+            import traceback
+            traceback.print_exc()
+            self.assistant_service = None
 
     def initialise_agents(self, customer_id: str) -> None:
         """Register core agents for the supplied customer identifier."""
-        self.assistant_service.register_agent(internal_kb_agent)
-        self.assistant_service.register_agent(database_agent(customer_id))
-        self.assistant_service.register_agent(assistant_agent)
+        if internal_kb_agent:
+            self.assistant_service.register_agent(internal_kb_agent)
+        else:
+            logger.warning("internal_kb_agent not available")
+            
+        if database_agent:
+            self.assistant_service.register_agent(database_agent(customer_id))
+        else:
+            logger.warning("database_agent not available")
+            
+        if assistant_agent:
+            self.assistant_service.register_agent(assistant_agent)
+        else:
+            logger.warning("assistant_agent not available")
 
-        if os.getenv("BING_SEARCH_API_KEY"):
+        if os.getenv("BING_SEARCH_API_KEY") and web_search_agent:
             self.assistant_service.register_agent(web_search_agent)
 
-        self.assistant_service.register_root_agent(root_assistant(customer_id))
+        if root_assistant:
+            self.assistant_service.register_root_agent(root_assistant(customer_id))
+        else:
+            logger.warning("root_assistant not available")
+            
         logger.info("Initialised agents for customer %s", customer_id)
 
     async def handle_tool_call(

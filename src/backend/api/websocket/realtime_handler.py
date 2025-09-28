@@ -18,15 +18,17 @@ from azure.identity import DefaultAzureCredential, CredentialUnavailableError
 from fastapi import WebSocket, WebSocketDisconnect
 
 # Import existing components
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 try:
-    from services.assistant_service import AssistantService
-except ImportError:
-    logger.warning("Could not import AssistantService - using mock implementation")
-    class AssistantService:
-        def get_agent(self, name): return {"id": name, "system_message": "You are a helpful assistant."}
-        def get_tools_for_assistant(self, name): return []
-        async def get_tool_response(self, **kwargs): return {"result": "mock response"}
+    from services.assistant_service import AgentOrchestrator
+    logging.info("Successfully imported AgentOrchestrator")
+except ImportError as e:
+    logging.error(f"Could not import AgentOrchestrator: {e} - using mock implementation")
+    class AgentOrchestrator:
+        def __init__(self, language="English"): 
+            self.assistant_service = None
+        def initialise_agents(self, customer_id): pass
+        async def handle_tool_call(self, **kwargs): return {"result": "mock response"}
 from load_azd_env import load_azd_environment
 
 # Load environment
@@ -45,7 +47,14 @@ class RealtimeHandler:
     
     def __init__(self):
         self.credential = DefaultAzureCredential()
-        self.assistant_service = AssistantService()
+        self.agent_orchestrator = AgentOrchestrator()
+        self.customer_initialized = {}  # Track which customers have been initialized
+        
+        # Verify AgentOrchestrator is properly initialized
+        if self.agent_orchestrator.assistant_service is None:
+            logging.error("AgentOrchestrator.assistant_service is None!")
+        else:
+            logging.info("AgentOrchestrator.assistant_service initialized successfully")
         
         # Azure OpenAI configuration
         self.azure_endpoint = os.getenv("AZURE_AI_FOUNDRY_ENDPOINT", "").replace("https://", "wss://")
@@ -84,7 +93,7 @@ class RealtimeHandler:
         """Build Azure OpenAI WebSocket URL"""
         return f"{self.azure_endpoint}/openai/realtime?api-version={self.api_version}&deployment={self.deployment}"
 
-    async def handle_client_message(self, message: Dict[str, Any], vendor_ws) -> Optional[Dict[str, Any]]:
+    async def handle_client_message(self, message: Dict[str, Any], vendor_ws, customer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Process message from browser client before forwarding to Azure
         
@@ -95,7 +104,7 @@ class RealtimeHandler:
         
         # Handle session updates to inject our agent configuration
         if message_type == "session.update":
-            return await self._handle_session_update(message)
+            return await self._handle_session_update(message, customer_id)
         
         # Handle tool calls through our assistant service
         elif message_type == "conversation.item.create":
@@ -104,17 +113,37 @@ class RealtimeHandler:
         # Forward other messages as-is
         return message
 
-    async def _handle_session_update(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    def ensure_customer_initialized(self, customer_id: str):
+        """Ensure agents are initialized for the given customer"""
+        if customer_id not in self.customer_initialized:
+            self.agent_orchestrator.initialise_agents(customer_id)
+            self.customer_initialized[customer_id] = True
+            logger.info(f"Initialized agents for customer: {customer_id}")
+
+    async def _handle_session_update(self, message: Dict[str, Any], customer_id: str = None) -> Dict[str, Any]:
         """Handle session update to inject agent configuration"""
         session = message.get("session", {})
         
+        # Safety check for agent_orchestrator
+        if not self.agent_orchestrator:
+            logging.error("agent_orchestrator is None!")
+            return message
+            
+        if not self.agent_orchestrator.assistant_service:
+            logging.error("agent_orchestrator.assistant_service is None!")
+            return message
+        
+        # Ensure customer agents are initialized if customer_id provided
+        if customer_id:
+            self.ensure_customer_initialized(customer_id)
+        
         # Start with root agent configuration
-        root_agent = self.assistant_service.get_agent("root")
+        root_agent = self.agent_orchestrator.assistant_service.get_agent("root")
         if root_agent:
             session["instructions"] = root_agent.get("system_message", session.get("instructions"))
             
         # Get tools for root agent (includes other agents as tools)
-        root_tools = self.assistant_service.get_tools_for_assistant("root")
+        root_tools = self.agent_orchestrator.assistant_service.get_tools_for_agent("root")
         if root_tools:
             session["tools"] = root_tools
             
@@ -122,7 +151,7 @@ class RealtimeHandler:
         merged_session = {**self.default_session_config, **session}
         message["session"] = merged_session
         
-        logger.info(f"Updated session config with agent: root, tools: {len(root_tools)}")
+        logger.info(f"Updated session config with agent: root, tools: {len(root_tools) if root_tools else 0}")
         return message
 
     async def _handle_conversation_item(self, message: Dict[str, Any]) -> Dict[str, Any]:
@@ -197,7 +226,7 @@ class RealtimeHandler:
                 }
             }
 
-    async def relay_messages(self, client_ws: WebSocket, vendor_ws, session_id: str):
+    async def relay_messages(self, client_ws: WebSocket, vendor_ws, session_id: str, customer_id: Optional[str] = None):
         """
         Relay messages bidirectionally between client and Azure OpenAI
         
@@ -223,7 +252,7 @@ class RealtimeHandler:
                             continue
                             
                         # Process message through handler
-                        processed = await self.handle_client_message(payload, vendor_ws)
+                        processed = await self.handle_client_message(payload, vendor_ws, customer_id)
                         if processed:
                             await vendor_ws.send(json.dumps(processed))
                             
@@ -252,6 +281,16 @@ class RealtimeHandler:
                     # Parse Azure response
                     try:
                         azure_message = json.loads(data)
+                        msg_type = azure_message.get("type")
+                        
+                        # Log all Azure messages for debugging
+                        if msg_type not in {"response.audio.delta", "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped"}:
+                            logger.info(f"Azure->Client: {msg_type} - {azure_message}")
+                        elif msg_type in {"response.audio.delta"}:
+                            logger.debug(f"Azure->Client: {msg_type} (audio data)")
+                        else:
+                            logger.debug(f"Azure->Client: {msg_type}")
+                            
                     except json.JSONDecodeError:
                         logger.warning("Invalid JSON from Azure")
                         continue
@@ -260,14 +299,8 @@ class RealtimeHandler:
                     processed = await self.handle_azure_message(azure_message, session_id)
                     if processed:
                         await client_ws.send_text(json.dumps(processed))
-                        
-                        # Log significant events
-                        msg_type = azure_message.get("type")
-                        if msg_type and msg_type not in {
-                            "response.audio.delta",
-                            "response.audio_transcript.delta"
-                        }:
-                            logger.debug(f"Azure->Client: {msg_type}")
+                    else:
+                        logger.warning(f"Processed message was None for type: {msg_type}")
                             
             except websockets.exceptions.ConnectionClosed:
                 logger.info("Azure WebSocket disconnected")
@@ -301,7 +334,7 @@ class RealtimeHandler:
         logger.info(f"Connecting to Azure OpenAI: {url}")
         
         try:
-            return await websockets.connect(url, extra_headers=headers)
+            return await websockets.connect(url, additional_headers=headers)
         except websockets.exceptions.InvalidHandshake as e:
             logger.error(f"Azure WebSocket handshake failed: {e}")
             raise
@@ -323,7 +356,7 @@ class RealtimeHandler:
             
             try:
                 # Start message relay
-                await self.relay_messages(client_ws, vendor_ws, session_id)
+                await self.relay_messages(client_ws, vendor_ws, session_id, customer_id)
             finally:
                 # Ensure Azure connection is closed
                 await vendor_ws.close()

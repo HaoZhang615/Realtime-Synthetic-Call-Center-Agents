@@ -78,21 +78,11 @@ def root_assistant(customer_id: str) -> Dict[str, Any]:
     customer_profile = get_customer_info(customer_id)
     profile_json = json.dumps(customer_profile, indent=4) if customer_profile else "{}"
 
-    instructions = [
-        f"You are a helpful assistant working for the company {company}.",
-        "You oversee four specialized agents (web search, email, database,",
-        "and knowledge base).",
-        "Keep answers short, professional, and suited for voice interactions.",
-        "Always route tasks to the appropriate agent instead of answering",
-        "directly. Confirm additional questions and close once resolved.",
-    ]
+    instructions = [f"You are a helpful assistant working for the company {company}.", "You oversee four specialized agents (web search, email, database, and knowledge base).", "Keep answers short, professional, and suited for voice interactions.", "Always route tasks to the appropriate agent instead of answering directly. Confirm additional questions and close once resolved."]
 
     if not HAS_BING_KEY:
-        instructions.append(
-            "Inform users that web search requires a Bing Search API key if",
-            "they request that capability and it is unavailable.",
-        )
-
+        instructions.append("Inform users that web search requires a Bing Search API key if they request that capability and it is unavailable.")
+        
     instructions.append("Customer context:\n" + profile_json)
 
     return {

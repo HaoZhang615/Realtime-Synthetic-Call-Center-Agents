@@ -35,13 +35,10 @@ export function VoiceChatInterface() {
   // Customer selection state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [selectedCustomerName, setSelectedCustomerName] = useState<string>('')
-  const [showCustomerSelection, setShowCustomerSelection] = useState(true)
   
   const realtimeClientRef = useRef<RealtimeClient | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
     // Initialize RealtimeClient
@@ -68,40 +65,6 @@ export function VoiceChatInterface() {
     client.on('error', (error) => {
       setConnectionStatus('error')
       toast.error(`Connection error: ${error.message}`)
-    })
-
-    // Handle assistant audio responses
-    client.on('response.audio.delta', (data) => {
-      if (data.delta && realtimeClientRef.current) {
-        // Play audio chunk
-        realtimeClientRef.current.playAudioChunk(data.delta)
-      }
-    })
-
-    // Handle assistant text responses
-    let currentTranscript = ''
-    client.on('response.audio_transcript.delta', (data) => {
-      if (data.delta) {
-        currentTranscript += data.delta
-      }
-    })
-
-    client.on('response.audio_transcript.done', () => {
-      if (currentTranscript) {
-        const message: ChatMessage = {
-          id: Date.now().toString(),
-          content: currentTranscript,
-          type: 'assistant',
-          timestamp: new Date().toISOString()
-        }
-        setMessages(prev => [...prev, message])
-        currentTranscript = ''
-      }
-    })
-
-    // Handle response creation (assistant is thinking)
-    client.on('response.created', () => {
-      console.log('Assistant is generating response...')
     })
 
     client.on('conversation.item.created', ({ item }) => {
@@ -146,13 +109,6 @@ export function VoiceChatInterface() {
     }
   }, [])
 
-  const handleCustomerSelected = (customerId: string, customerName: string) => {
-    setSelectedCustomerId(customerId)
-    setSelectedCustomerName(customerName)
-    setShowCustomerSelection(false)
-    toast.success(`Selected customer: ${customerName}`)
-  }
-
   const connectWebSocket = async () => {
     if (connectionStatus === 'connected' || !realtimeClientRef.current) return
     if (!selectedCustomerId) {
@@ -169,6 +125,9 @@ export function VoiceChatInterface() {
       toast.error(`Connection failed: ${error}`)
     }
   }
+      toast.error('Failed to connect to voice service')
+    }
+  }
 
   const disconnectWebSocket = () => {
     if (realtimeClientRef.current) {
@@ -177,12 +136,6 @@ export function VoiceChatInterface() {
   }
 
   const startCall = async () => {
-    if (!selectedCustomerId) {
-      setShowCustomerSelection(true)
-      toast.error('Please select a customer first')
-      return
-    }
-    
     if (connectionStatus !== 'connected') {
       await connectWebSocket()
       return
@@ -195,16 +148,10 @@ export function VoiceChatInterface() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       
       setCallStatus('active')
-      toast.success(`Call started for ${selectedCustomerName}`)
+      toast.success('Call started')
       
-      // Add welcome message with customer name
-      const welcomeMessage: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'assistant',
-        content: `Hello ${selectedCustomerName}! I'm your AI assistant. How can I help you today?`,
-        timestamp: new Date().toISOString()
-      }
-      setMessages([welcomeMessage])
+      // TODO: Implement audio streaming to RealtimeClient
+      // This would involve setting up MediaRecorder and sending chunks
       
     } catch (error) {
       toast.error('Microphone access denied')
@@ -227,79 +174,38 @@ export function VoiceChatInterface() {
     }, 1000)
   }
 
-  // Helper function to convert Float32Array to PCM16
-  const convertToPCM16 = (float32Array: Float32Array): ArrayBuffer => {
-    const arrayBuffer = new ArrayBuffer(float32Array.length * 2)
-    const view = new DataView(arrayBuffer)
-    for (let i = 0; i < float32Array.length; i++) {
-      const sample = Math.max(-1, Math.min(1, float32Array[i]))
-      view.setInt16(i * 2, sample * 0x7FFF, true) // little-endian
-    }
-    return arrayBuffer
-  }
-
   const toggleRecording = async () => {
     if (callStatus !== 'active' || !realtimeClientRef.current) return
 
     if (isRecording) {
       setIsRecording(false)
-      
-      // Stop audio processing
-      if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.disconnect()
-        scriptProcessorRef.current = null
+      // Stop recording
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop()
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
-        audioContextRef.current = null
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
-        streamRef.current = null
-      }
-      
       toast.info('Recording stopped')
     } else {
       try {
-        // Get microphone access with specific constraints for 24kHz
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: 24000,
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true
-          }
-        })
+        // Start recording and streaming to RealtimeClient
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         
-        streamRef.current = stream
+        const mediaRecorder = new MediaRecorder(stream)
+        mediaRecorderRef.current = mediaRecorder
         
-        // Create audio context with 24kHz sample rate
-        const audioContext = new AudioContext({ sampleRate: 24000 })
-        audioContextRef.current = audioContext
-        
-        const source = audioContext.createMediaStreamSource(stream)
-        const processor = audioContext.createScriptProcessor(4096, 1, 1)
-        scriptProcessorRef.current = processor
-        
-        processor.onaudioprocess = (event) => {
-          const inputBuffer = event.inputBuffer
-          const inputData = inputBuffer.getChannelData(0)
-          
-          // Convert to PCM16 and send to realtime client
-          const pcmData = convertToPCM16(inputData)
-          if (realtimeClientRef.current) {
-            realtimeClientRef.current.sendAudioData(pcmData)
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0 && realtimeClientRef.current) {
+            // Convert blob to ArrayBuffer and send
+            event.data.arrayBuffer().then((arrayBuffer) => {
+              realtimeClientRef.current!.sendAudioData(arrayBuffer)
+            })
           }
         }
         
-        source.connect(processor)
-        processor.connect(audioContext.destination)
-        
+        mediaRecorder.start(100) // Record in 100ms chunks
         setIsRecording(true)
         toast.info('Recording started')
         
       } catch (error) {
-        console.error('Failed to start recording:', error)
         toast.error('Failed to start recording')
       }
     }
@@ -323,30 +229,6 @@ export function VoiceChatInterface() {
     }
   }
 
-  // Show customer selection if no customer is selected
-  if (showCustomerSelection || !selectedCustomerId) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="border-b border-border bg-card">
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <ChatText className="w-6 h-6 text-primary" />
-              Voice Chat Interface
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Select a customer to start your voice conversation
-            </p>
-          </div>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-2xl">
-            <CustomerSelection onCustomerSelected={handleCustomerSelected} />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -359,19 +241,11 @@ export function VoiceChatInterface() {
                 Voice Chat Interface
               </h1>
               <p className="text-muted-foreground mt-1">
-                Conversation with {selectedCustomerName}
+                Real-time AI-powered voice conversations
               </p>
             </div>
             
             <div className="flex items-center gap-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowCustomerSelection(true)}
-              >
-                Change Customer
-              </Button>
-              
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${getConnectionStatusColor()}`}></div>
                 <span className="text-sm text-muted-foreground">

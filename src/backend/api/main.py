@@ -33,6 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes.admin import admin_router
 from api.routes.realtime import realtime_router 
 from api.routes.websocket import websocket_router
+from api.routes.customers import router as customers_router
 
 from load_azd_env import load_azd_environment
 
@@ -45,7 +46,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Realtime Admin API")
 
 # Configure CORS for React dev server by default
-FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://localhost:5001,http://localhost:5000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in FRONTEND_ORIGINS if o.strip()],
@@ -58,6 +59,7 @@ app.add_middleware(
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(realtime_router, prefix="/api/realtime", tags=["realtime"])
 app.include_router(websocket_router, prefix="/api", tags=["websocket"])
+app.include_router(customers_router, prefix="/api", tags=["customers"])
 
 
 @app.get("/api/health")

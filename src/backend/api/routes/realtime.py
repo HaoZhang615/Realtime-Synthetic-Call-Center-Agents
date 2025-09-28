@@ -38,7 +38,7 @@ async def get_realtime_token():
             "expires_on": token.expires_on,
             "websocket_url": os.getenv("AZURE_AI_FOUNDRY_ENDPOINT", "").replace("https://", "wss://"),
             "deployment": os.getenv("AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT"),
-            "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
+            "api_version": "2025-04-01-preview"
         }
     except Exception as ex:  # pragma: no cover - depends on local env
         logger.warning("Could not acquire Azure token: %s", ex)
@@ -48,5 +48,5 @@ async def get_realtime_token():
             "expires_on": 0,
             "websocket_url": "ws://localhost:8000/api/realtime", 
             "deployment": "dev-deployment",
-            "api_version": "2024-10-01-preview"
+            "api_version": "2025-04-01-preview"
         }

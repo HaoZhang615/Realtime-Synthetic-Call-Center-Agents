@@ -1,10 +1,11 @@
 // Phase 2: TODO - Wire RealtimeClient into VoiceChatInterface and supply a backend token provider
 
 /**
- * Azure OpenAI Realtime API Client for TypeScript/React
- * Provides real-time voice communication with Azure OpenAI's realtime service
+ * Realtime Voice Client for TypeScript/React
+ * Connects to FastAPI backend which bridges to Azure OpenAI Realtime API
  * 
- * Based on Python realtime2.py implementation
+ * Updated for Phase 2: Uses FastAPI WebSocket proxy instead of direct Azure connection
+ * Based on openai-realtime-voice-template patterns and Python realtime2.py implementation
  */
 
 // Event types for the realtime API
@@ -78,18 +79,17 @@ class Base64Utils {
 }
 
 /**
- * WebSocket connection manager for Azure OpenAI Realtime API
+ * WebSocket connection manager for FastAPI Realtime Proxy
+ * Connects to our FastAPI backend which handles Azure OpenAI communication
  */
 export class RealtimeAPI {
   private ws: WebSocket | null = null
-  private url: string = ''
-  private apiKey: string = ''
+  private backendUrl: string = 'http://localhost:8000'
   private eventListeners = new Map<RealtimeEvent, Set<(data: any) => void>>()
 
-  constructor(url?: string, apiKey?: string) {
-    if (url && apiKey) {
-      this.url = url
-      this.apiKey = apiKey
+  constructor(backendUrl?: string) {
+    if (backendUrl) {
+      this.backendUrl = backendUrl.replace(/\/$/, '') // Remove trailing slash
     }
   }
 
@@ -128,70 +128,27 @@ export class RealtimeAPI {
   }
 
   /**
-   * Connect to the Azure OpenAI Realtime API
+   * Connect to the FastAPI WebSocket endpoint
    */
-  async connect(
-    websocketUrl?: string,
-    apiKey?: string,
-    deployment?: string,
-    apiVersion?: string
-  ): Promise<void> {
-    if (websocketUrl) this.url = websocketUrl
-    if (apiKey) this.apiKey = apiKey
-
-    if (!this.url) {
-      throw new Error('WebSocket URL is required')
-    }
-
-    const urlInstance = new URL(this.url)
-    const isLocalProxy =
-      urlInstance.hostname.includes('localhost') ||
-      urlInstance.hostname.includes('127.0.0.1')
-
-    if (!isLocalProxy && !this.apiKey) {
-      throw new Error('Realtime authentication token is required for cloud connections')
-    }
-
-    const protocols: string[] = ['realtime']
-
-    if (!isLocalProxy) {
-      const version = apiVersion || '2024-10-01-preview'
-      urlInstance.searchParams.set('api-version', version)
-      if (deployment) {
-        urlInstance.searchParams.set('deployment', deployment)
-      }
-
-      const isAzureEndpoint = urlInstance.hostname.includes('azure.com')
-      if (this.apiKey) {
-        if (isAzureEndpoint) {
-          urlInstance.searchParams.set('access_token', this.apiKey)
-        } else {
-          protocols.push(`openai-insecure-api-key.${this.apiKey}`)
-        }
-      }
-    } else if (this.apiKey) {
-      // Allow local proxies to receive the token via query parameter if needed
-      urlInstance.searchParams.set('token', this.apiKey)
-    }
-
-    const wsUrl = urlInstance.toString()
-    const urlForLog = new URL(wsUrl)
-    if (urlForLog.searchParams.has('access_token')) {
-      urlForLog.searchParams.set('access_token', '***')
-    }
-    if (urlForLog.searchParams.has('token')) {
-      urlForLog.searchParams.set('token', '***')
-    }
-    const safeWsUrl = urlForLog.toString()
-
+  async connect(customerId?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       this.emit('connecting')
-  console.log('Connecting to realtime endpoint:', safeWsUrl)
+      
+      // Build WebSocket URL for our FastAPI backend
+      let wsUrl = this.backendUrl.replace('http://', 'ws://').replace('https://', 'wss://')
+      wsUrl += '/api/realtime'
+      
+      if (customerId) {
+        wsUrl += `?customer_id=${encodeURIComponent(customerId)}`
+      }
+      
+      console.log('Connecting to FastAPI WebSocket proxy:', wsUrl)
+      
+      // Create WebSocket connection
+      this.ws = new WebSocket(wsUrl)
 
-      this.ws = new WebSocket(wsUrl, protocols)
-
-      this.ws.addEventListener('open', () => {
-        console.log('WebSocket connection established')
+      this.ws.addEventListener('open', (event) => {
+        console.log('WebSocket connected to FastAPI backend')
         this.emit('connected')
         resolve()
       })
@@ -202,10 +159,9 @@ export class RealtimeAPI {
       })
 
       this.ws.addEventListener('error', (event) => {
-  console.error('WebSocket error:', event)
-  console.error('WebSocket URL was:', safeWsUrl)
-        console.error('Connection failed with error:', event)
-  const error = new Error(`WebSocket connection failed. URL: ${safeWsUrl}. Check console for details.`)
+        console.error('WebSocket error:', event)
+        console.error('WebSocket URL was:', wsUrl)
+        const error = new Error(`WebSocket connection failed. URL: ${wsUrl}. Check console for details.`)
         this.emit('error', error)
         reject(error)
       })
@@ -393,28 +349,24 @@ export interface RealtimeClientConfig {
 
 /**
  * Main RealtimeClient class
- * High-level interface for Azure OpenAI Realtime API
+ * High-level interface for FastAPI Realtime Proxy
  */
 export class RealtimeClient {
   private api: RealtimeAPI
   private conversation: RealtimeConversation
   private sessionConfig: RealtimeClientConfig
   private eventHandlers = new Map<RealtimeEvent, ((data: any) => void)[]>()
-  private connectionConfig: {
-    websocketUrl?: string
-    deployment?: string
-    apiVersion?: string
-  } = {}
-  private authToken: string | null = null
+  private audioContext: AudioContext | null = null
+  private nextPlayTime: number = 0
 
   constructor(
-    apiKey?: string,
-    config: RealtimeClientConfig = {}
+    config: RealtimeClientConfig = {},
+    backendUrl?: string
   ) {
     // Default configuration
     this.sessionConfig = {
       model: config.model ?? 'gpt-realtime',
-      voice: config.voice ?? 'alloy',
+      voice: config.voice ?? 'shimmer', // Changed default to match backend
       temperature: config.temperature ?? 0.8,
       maxResponseTokens: config.maxResponseTokens ?? 4096,
       modalities: config.modalities ?? ['text', 'audio'],
@@ -427,20 +379,15 @@ export class RealtimeClient {
         prefix_padding_ms: 300,
         silence_duration_ms: 200
       },
-  instructions: config.instructions ?? 'You are a helpful AI assistant.',
+      instructions: config.instructions ?? 'You are a helpful AI assistant.',
       tools: config.tools
     }
 
-  this.api = new RealtimeAPI()
-  this.authToken = apiKey ?? null
-  this.conversation = new RealtimeConversation()
+    this.api = new RealtimeAPI(backendUrl)
+    this.conversation = new RealtimeConversation()
 
-  // Set up default event handlers
-  this.setupDefaultHandlers()
-  }
-
-  setAuthToken(token: string) {
-    this.authToken = token
+    // Set up default event handlers
+    this.setupDefaultHandlers()
   }
 
   private buildSessionPayload(overrides: Partial<RealtimeClientConfig> = {}) {
@@ -449,7 +396,7 @@ export class RealtimeClient {
 
     if (config.model) session.model = config.model
     if (config.voice) session.voice = config.voice
-    // Azure Realtime API currently ignores temperature/max tokens at the session level
+    // Note: Temperature and max tokens are handled by the backend
     if (config.instructions) session.instructions = config.instructions
     if (config.modalities) session.modalities = config.modalities
     if (config.inputAudioFormat) {
@@ -473,16 +420,6 @@ export class RealtimeClient {
     }
 
     return session
-  }
-
-  /**
-   * Get WebSocket URL for Azure OpenAI Realtime API from environment
-   */
-  private getWebSocketUrl(): string {
-    if (!this.connectionConfig.websocketUrl) {
-      throw new Error('Realtime WebSocket URL is not set. Call connect() with backend token metadata first.')
-    }
-    return this.connectionConfig.websocketUrl
   }
 
   /**
@@ -575,35 +512,52 @@ export class RealtimeClient {
   }
 
   /**
-   * Connect to Azure OpenAI Realtime API
+   * Connect to FastAPI backend
    */
-  async connect(websocketUrl?: string, apiKey?: string, deployment?: string, apiVersion?: string): Promise<void> {
-    // Store connection configuration
-    if (websocketUrl) this.connectionConfig.websocketUrl = websocketUrl
-    if (deployment) this.connectionConfig.deployment = deployment
-    if (apiVersion) this.connectionConfig.apiVersion = apiVersion
-    if (apiKey) this.authToken = apiKey
-    
-    const resolvedWebsocketUrl = this.connectionConfig.websocketUrl
-    if (!resolvedWebsocketUrl) {
-      throw new Error('Realtime WebSocket URL is required for connection')
+  async connect(customerId?: string, backendUrl?: string): Promise<void> {
+    // Update backend URL if provided
+    if (backendUrl) {
+      this.api = new RealtimeAPI(backendUrl)
+      this.setupDefaultHandlers() // Re-setup handlers with new API instance
     }
-
-    // Connect to the WebSocket API
-    await this.api.connect(
-      resolvedWebsocketUrl,
-      this.authToken ?? undefined,
-      this.connectionConfig.deployment,
-      this.connectionConfig.apiVersion
-    )
     
-    // Send session configuration immediately after connection
-    const sessionPayload = this.buildSessionPayload()
-    console.log('Sending session update with payload:', sessionPayload)
-    this.api.sendEvent({
-      type: 'session.update',
-      session: sessionPayload
-    })
+    // Connect to the FastAPI WebSocket endpoint
+    await this.api.connect(customerId)
+    
+    // Get session configuration from backend and send session update
+    try {
+      const backendBaseUrl = backendUrl || 'http://localhost:8000'
+      const configResponse = await fetch(`${backendBaseUrl}/api/session/config`)
+      if (configResponse.ok) {
+        const backendConfig = await configResponse.json()
+        console.log('Loaded session config from backend:', backendConfig)
+        
+        // Merge backend config with local overrides
+        const sessionPayload = this.buildSessionPayload(backendConfig)
+        console.log('Sending session update with payload:', sessionPayload)
+        
+        this.api.sendEvent({
+          type: 'session.update',
+          session: sessionPayload
+        })
+      } else {
+        console.warn('Failed to load session config from backend, using defaults')
+        // Fall back to local configuration
+        const sessionPayload = this.buildSessionPayload()
+        this.api.sendEvent({
+          type: 'session.update',
+          session: sessionPayload
+        })
+      }
+    } catch (error) {
+      console.warn('Error loading session config from backend:', error)
+      // Fall back to local configuration
+      const sessionPayload = this.buildSessionPayload()
+      this.api.sendEvent({
+        type: 'session.update',
+        session: sessionPayload
+      })
+    }
   }
 
   /**
@@ -657,17 +611,6 @@ export class RealtimeClient {
 
     this.api.sendEvent({
       type: 'input_audio_buffer.clear'
-    })
-  }
-
-  /**
-   * Request the assistant to generate a response based on current conversation state
-   */
-  createResponse() {
-    if (!this.isConnected) return
-
-    this.api.sendEvent({
-      type: 'response.create'
     })
   }
 
@@ -729,5 +672,107 @@ export class RealtimeClient {
    */
   getConversationItems() {
     return this.conversation.getItems()
+  }
+
+  /**
+   * Initialize audio context for playback
+   */
+  private initializeAudioContext() {
+    if (!this.audioContext || this.audioContext.state === 'closed') {
+      this.audioContext = new AudioContext({ sampleRate: 24000 })
+      this.nextPlayTime = 0
+    }
+    return this.audioContext
+  }
+
+  /**
+   * Resume audio context if suspended
+   */
+  private async resumeAudioContext() {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      await this.audioContext.resume()
+    }
+  }
+
+  /**
+   * Convert base64 audio to PCM16 and play
+   */
+  async playAudioChunk(base64Audio: string) {
+    try {
+      const audioContext = this.initializeAudioContext()
+      await this.resumeAudioContext()
+
+      // Convert base64 to binary
+      const audioData = atob(base64Audio)
+      const audioBytes = new Uint8Array(audioData.length)
+      for (let i = 0; i < audioData.length; i++) {
+        audioBytes[i] = audioData.charCodeAt(i)
+      }
+
+      // Convert to Int16Array (PCM16)
+      const pcm16Data = new Int16Array(audioBytes.buffer)
+      
+      if (pcm16Data.length === 0) return
+
+      // Create WAV buffer for decoding
+      const wavBuffer = this.createWavBuffer(pcm16Data)
+      const audioBuffer = await audioContext.decodeAudioData(wavBuffer)
+
+      // Create and play audio source
+      const source = audioContext.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(audioContext.destination)
+
+      const currentTime = audioContext.currentTime
+      const startTime = Math.max(currentTime, this.nextPlayTime)
+      
+      if (this.nextPlayTime === 0) {
+        this.nextPlayTime = currentTime
+      }
+
+      source.start(startTime)
+      this.nextPlayTime = startTime + audioBuffer.duration
+
+    } catch (error) {
+      console.error('Failed to play audio chunk:', error)
+    }
+  }
+
+  /**
+   * Create WAV buffer from PCM16 data for AudioContext decoding
+   */
+  private createWavBuffer(pcm16Data: Int16Array): ArrayBuffer {
+    const length = pcm16Data.length
+    const buffer = new ArrayBuffer(44 + length * 2)
+    const view = new DataView(buffer)
+    
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i))
+      }
+    }
+
+    writeString(0, 'RIFF')
+    view.setUint32(4, 36 + length * 2, true)
+    writeString(8, 'WAVE')
+    writeString(12, 'fmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true)
+    view.setUint16(22, 1, true)
+    view.setUint32(24, 24000, true) // 24kHz sample rate
+    view.setUint32(28, 24000 * 2, true)
+    view.setUint16(32, 2, true)
+    view.setUint16(34, 16, true)
+    writeString(36, 'data')
+    view.setUint32(40, length * 2, true)
+
+    // Copy PCM data
+    let offset = 44
+    for (let i = 0; i < length; i++) {
+      view.setInt16(offset, pcm16Data[i], true)
+      offset += 2
+    }
+
+    return buffer
   }
 }
