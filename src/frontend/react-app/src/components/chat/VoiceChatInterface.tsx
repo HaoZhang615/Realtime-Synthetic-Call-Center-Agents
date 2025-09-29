@@ -272,6 +272,22 @@ export function VoiceChatInterface() {
     setSelectedCustomerId(customerId)
     setSelectedCustomerName(customerName)
     setShowCustomerSelection(false)
+
+    // Reset conversation state when switching customers
+    stopRecording({ silent: true })
+    disconnectWebSocket()
+    hasPlayedGreetingRef.current = false
+    assistantStreamingIdRef.current = null
+    assistantTranscriptRef.current = ''
+    userStreamingIdRef.current = null
+    userTranscriptRef.current = ''
+    userSpeechStartRef.current = null
+    setMessages([])
+    setCurrentTranscript('')
+    setTextInput('')
+    setCallStatus('idle')
+    setIsMuted(false)
+
     toast.success(`Selected customer: ${customerName}`)
 
     try {
