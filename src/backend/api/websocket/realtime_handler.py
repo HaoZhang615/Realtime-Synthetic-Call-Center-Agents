@@ -48,7 +48,6 @@ class RealtimeHandler:
     def __init__(self):
         self.credential = DefaultAzureCredential()
         self.agent_orchestrator = AgentOrchestrator()
-        self.assistant_service = self.agent_orchestrator.assistant_service
         self.customer_initialized = {}  # Track which customers have been initialized
         self.current_customer_id: Optional[str] = None
         
@@ -123,7 +122,6 @@ class RealtimeHandler:
         if (customer_id not in self.customer_initialized or
                 self.current_customer_id != customer_id):
             self.agent_orchestrator.initialise_agents(customer_id)
-            self.assistant_service = self.agent_orchestrator.assistant_service
             self.customer_initialized[customer_id] = True
             self.current_customer_id = customer_id
             logger.info("Initialized agents for customer: %s", customer_id)
@@ -170,7 +168,7 @@ class RealtimeHandler:
         # Later, we can add customer context injection here
         return message
 
-    async def handle_azure_message(self, message: Dict[str, Any], session_id: str, vendor_ws) -> Optional[Dict[str, Any]]:
+    async def handle_azure_message(self, message: Dict[str, Any], session_id: str) -> Optional[Dict[str, Any]]:
         """
         Process message from Azure OpenAI before forwarding to client
         
@@ -181,16 +179,16 @@ class RealtimeHandler:
         
         # Handle tool calls
         if message_type == "response.function_call_arguments.done":
-            await self._handle_tool_call(message, session_id, vendor_ws)
+            await self._handle_tool_call(message, session_id)
             
         # Forward message to client
         return message
 
-    async def _handle_tool_call(self, message: Dict[str, Any], session_id: str, vendor_ws):
+    async def _handle_tool_call(self, message: Dict[str, Any], session_id: str):
         """Handle tool calls through the assistant service"""
         try:
             item_id = message.get("item_id")
-            call_id = message.get("call_id")
+            call_id = message.get("call_id") 
             name = message.get("name")
             arguments = message.get("arguments", "{}")
             
@@ -202,9 +200,6 @@ class RealtimeHandler:
             except json.JSONDecodeError:
                 parsed_args = {}
                 
-            if not self.assistant_service:
-                raise RuntimeError("Assistant service is not initialised")
-
             # Call through assistant service
             result = await self.assistant_service.get_tool_response(
                 tool_name=name,
@@ -219,30 +214,25 @@ class RealtimeHandler:
                     logger.info(f"Agent switched to: {agent['id']}")
                     # Note: Agent switching will be handled by sending session.update
                     
-            await vendor_ws.send(json.dumps(result))
-
-            # After returning function output, request the next assistant response
-            if result.get("type") == "conversation.item.create":
-                await vendor_ws.send(json.dumps({"type": "response.create"}))
-
-            return None
+            return {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps(result),
+                }
+            }
             
         except Exception as e:
             logger.exception(f"Tool call failed: {e}")
-            error_event = {
-                "type": "conversation.item.create",
+            return {
+                "type": "conversation.item.create", 
                 "item": {
                     "type": "function_call_output",
                     "call_id": call_id,
                     "output": json.dumps({"error": str(e)}),
                 }
             }
-            try:
-                await vendor_ws.send(json.dumps(error_event))
-                await vendor_ws.send(json.dumps({"type": "response.create"}))
-            except Exception as send_error:
-                logger.exception("Failed to send error response to Azure: %s", send_error)
-            return None
 
     async def relay_messages(self, client_ws: WebSocket, vendor_ws, session_id: str, customer_id: Optional[str] = None):
         """
@@ -314,7 +304,7 @@ class RealtimeHandler:
                         continue
                         
                     # Process message through handler
-                    processed = await self.handle_azure_message(azure_message, session_id, vendor_ws)
+                    processed = await self.handle_azure_message(azure_message, session_id)
                     if processed:
                         await client_ws.send_text(json.dumps(processed))
                     else:
