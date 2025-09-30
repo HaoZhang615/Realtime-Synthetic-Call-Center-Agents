@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import time
 from typing import Optional, Dict, Any
 import websockets
 from azure.core.exceptions import ClientAuthenticationError
@@ -50,6 +51,9 @@ class RealtimeHandler:
         self.agent_orchestrator = AgentOrchestrator()
         self.customer_initialized = {}  # Track which customers have been initialized
         self.current_customer_id: Optional[str] = None
+        self.active_agents: Dict[str, str] = {}
+        self.session_state: Dict[str, Dict[str, Any]] = {}
+        self.tool_call_timeout = float(os.getenv("TOOL_CALL_TIMEOUT_SECONDS", "15"))
         
         # Verify AgentOrchestrator is properly initialized
         if self.agent_orchestrator.assistant_service is None:
@@ -94,7 +98,13 @@ class RealtimeHandler:
         """Build Azure OpenAI WebSocket URL"""
         return f"{self.azure_endpoint}/openai/realtime?api-version={self.api_version}&deployment={self.deployment}"
 
-    async def handle_client_message(self, message: Dict[str, Any], vendor_ws, customer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def handle_client_message(
+        self,
+        message: Dict[str, Any],
+        vendor_ws,
+        customer_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
         Process message from browser client before forwarding to Azure
         
@@ -105,7 +115,7 @@ class RealtimeHandler:
         
         # Handle session updates to inject our agent configuration
         if message_type == "session.update":
-            return await self._handle_session_update(message, customer_id)
+            return await self._handle_session_update(message, customer_id, session_id)
         
         # Handle tool calls through our assistant service
         elif message_type == "conversation.item.create":
@@ -126,7 +136,12 @@ class RealtimeHandler:
             self.current_customer_id = customer_id
             logger.info("Initialized agents for customer: %s", customer_id)
 
-    async def _handle_session_update(self, message: Dict[str, Any], customer_id: str = None) -> Dict[str, Any]:
+    async def _handle_session_update(
+        self,
+        message: Dict[str, Any],
+        customer_id: str = None,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Handle session update to inject agent configuration"""
         session = message.get("session", {})
         
@@ -147,6 +162,8 @@ class RealtimeHandler:
         root_agent = self.agent_orchestrator.assistant_service.get_agent("root")
         if root_agent:
             session["instructions"] = root_agent.get("system_message", session.get("instructions"))
+            if session_id:
+                self.active_agents[session_id] = root_agent.get("id", "root")
             
         # Get tools for root agent (includes other agents as tools)
         root_tools = self.agent_orchestrator.assistant_service.get_tools_for_agent("root")
@@ -158,6 +175,8 @@ class RealtimeHandler:
         merged_session = {**self.default_session_config}
         merged_session.update(session)  # Frontend settings override defaults
         message["session"] = merged_session
+        if session_id:
+            self.session_state[session_id] = merged_session
         
         logger.info(f"Updated session config with agent: root, tools: {len(root_tools) if root_tools else 0}, voice: {merged_session.get('voice', 'not set')}")
         return message
@@ -168,7 +187,12 @@ class RealtimeHandler:
         # Later, we can add customer context injection here
         return message
 
-    async def handle_azure_message(self, message: Dict[str, Any], session_id: str) -> Optional[Dict[str, Any]]:
+    async def handle_azure_message(
+        self,
+        message: Dict[str, Any],
+        session_id: str,
+        vendor_ws: websockets.WebSocketClientProtocol,
+    ) -> Optional[Dict[str, Any]]:
         """
         Process message from Azure OpenAI before forwarding to client
         
@@ -179,12 +203,28 @@ class RealtimeHandler:
         
         # Handle tool calls
         if message_type == "response.function_call_arguments.done":
-            await self._handle_tool_call(message, session_id)
+            await self._handle_tool_call(message, session_id, vendor_ws)
             
         # Forward message to client
         return message
 
-    async def _handle_tool_call(self, message: Dict[str, Any], session_id: str):
+    def _compose_session_update(
+        self, session_id: str, overrides: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Merge default, previously stored, and override session values."""
+        base = {**self.default_session_config}
+        previous = self.session_state.get(session_id) or {}
+        base.update(previous)
+        base.update(overrides)
+        self.session_state[session_id] = base
+        return base
+
+    async def _handle_tool_call(
+        self,
+        message: Dict[str, Any],
+        session_id: str,
+        vendor_ws: websockets.WebSocketClientProtocol,
+    ):
         """Handle tool calls through the assistant service"""
         try:
             item_id = message.get("item_id")
@@ -194,45 +234,113 @@ class RealtimeHandler:
             
             logger.info(f"Processing tool call: {name} for session {session_id}")
             
+            if not name:
+                logger.error("Tool call missing name field; aborting")
+                await vendor_ws.send(
+                    json.dumps(
+                        {
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "function_call_output",
+                                "call_id": call_id,
+                                "output": json.dumps({"error": "Tool name missing"}),
+                            },
+                        }
+                    )
+                )
+                await vendor_ws.send(json.dumps({"type": "response.create"}))
+                return None
+
             # Parse arguments
             try:
                 parsed_args = json.loads(arguments) if arguments else {}
             except json.JSONDecodeError:
                 parsed_args = {}
                 
+            logger.debug("Tool %s arguments: %s", name, parsed_args)
+
             # Call through assistant service
-            result = await self.assistant_service.get_tool_response(
-                tool_name=name,
-                parameters=parsed_args,
-                call_id=call_id
-            )
+            assistant_service = self.agent_orchestrator.assistant_service
+            if not assistant_service:
+                logger.error("Assistant service not initialised; cannot handle tool call")
+                return
+
+            start_time = time.perf_counter()
+            try:
+                result = await asyncio.wait_for(
+                    assistant_service.get_tool_response(
+                        tool_name=name,
+                        parameters=parsed_args,
+                        call_id=call_id,
+                    ),
+                    timeout=self.tool_call_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.exception(
+                    "Tool %s timed out after %ss", name, self.tool_call_timeout
+                )
+                timeout_payload = {
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": json.dumps(
+                            {"error": f"Tool {name} timed out."}
+                        ),
+                    },
+                }
+                await vendor_ws.send(json.dumps(timeout_payload))
+                await vendor_ws.send(json.dumps({"type": "response.create"}))
+                return None
             
-            # Check if this was an agent switch
-            if "assistant" in name.lower():
-                agent = self.assistant_service.get_agent(name)
+            outbound_messages = []
+
+            if result.get("type") == "session.update":
+                agent = assistant_service.get_agent(name)
                 if agent:
                     logger.info(f"Agent switched to: {agent['id']}")
-                    # Note: Agent switching will be handled by sending session.update
-                    
-            return {
+                    self.active_agents[session_id] = agent["id"]
+
+                session_payload = result.get("session", {})
+                composed_session = self._compose_session_update(session_id, session_payload)
+                outbound_messages.append({"type": "session.update", "session": composed_session})
+            elif result.get("type") == "conversation.item.create":
+                item = result.get("item", {})
+                output = item.get("output")
+                if isinstance(output, (dict, list)):
+                    item["output"] = json.dumps(output)
+                elif output is not None and not isinstance(output, str):
+                    item["output"] = str(output)
+                outbound_messages.append(result)
+            else:
+                outbound_messages.append(result)
+
+            for outbound in outbound_messages:
+                await vendor_ws.send(json.dumps(outbound))
+                logger.debug("Sent vendor message: %s", outbound.get("type"))
+
+            # Resume response generation after tool handling
+            await vendor_ws.send(json.dumps({"type": "response.create"}))
+            logger.debug("Requested new response after tool call")
+
+            elapsed = time.perf_counter() - start_time
+            logger.info("Tool %s handled in %.2fs", name, elapsed)
+
+            return None
+            
+        except Exception as e:
+            logger.exception(f"Tool call failed: {e}")
+            error_payload = {
                 "type": "conversation.item.create",
                 "item": {
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": json.dumps(result),
-                }
-            }
-            
-        except Exception as e:
-            logger.exception(f"Tool call failed: {e}")
-            return {
-                "type": "conversation.item.create", 
-                "item": {
-                    "type": "function_call_output",
-                    "call_id": call_id,
                     "output": json.dumps({"error": str(e)}),
-                }
+                },
             }
+            await vendor_ws.send(json.dumps(error_payload))
+            await vendor_ws.send(json.dumps({"type": "response.create"}))
+            return None
 
     async def relay_messages(self, client_ws: WebSocket, vendor_ws, session_id: str, customer_id: Optional[str] = None):
         """
@@ -260,7 +368,12 @@ class RealtimeHandler:
                             continue
                             
                         # Process message through handler
-                        processed = await self.handle_client_message(payload, vendor_ws, customer_id)
+                        processed = await self.handle_client_message(
+                            payload,
+                            vendor_ws,
+                            customer_id,
+                            session_id,
+                        )
                         if processed:
                             await vendor_ws.send(json.dumps(processed))
                             
@@ -304,7 +417,7 @@ class RealtimeHandler:
                         continue
                         
                     # Process message through handler
-                    processed = await self.handle_azure_message(azure_message, session_id)
+                    processed = await self.handle_azure_message(azure_message, session_id, vendor_ws)
                     if processed:
                         await client_ws.send_text(json.dumps(processed))
                     else:

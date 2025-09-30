@@ -198,6 +198,13 @@ The solution is built on Azure Container Apps with configurable security archite
 - **Azure OpenAI**: GPT-4o models for chat completion and text-embedding-3-large for vector embeddings
 - **Azure Logic Apps**: Email automation workflows using Office 365 connectors
 
+### Realtime multi-agent orchestration
+
+- **FastAPI bridge**: `src/backend/api/websocket/realtime_handler.py` now owns agent selection and emits merged `session.update` payloads whenever an agent tool is invoked. Per-session configuration (voice, turn detection, tool list) is cached so the browser keeps its preferences while agents switch.
+- **Assistant service**: `src/backend/services/assistant_service.py` centralises agent registration and returns either tool outputs or new session instructions; unit tests in `src/backend/tests/test_assistant_service.py` cover both paths so regressions are caught early.
+- **React realtime client**: `src/frontend/react-app/src/utils/realtimeClient.ts` listens for `session.updated` events, keeps the active agent id for UI hints, and surfaces function-call errors via the shared error channel for quick operator feedback.
+- **Tool safety**: Backend tool execution is now time-bound, with structured logging and graceful fallbacks so a slow tool cannot stall the voice conversation loop.
+
 ### Networking Architecture
 The solution supports two deployment modes:
 

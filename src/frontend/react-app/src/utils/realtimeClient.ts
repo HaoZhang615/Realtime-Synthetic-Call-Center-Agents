@@ -361,6 +361,7 @@ export class RealtimeClient {
   private nextPlayTime: number = 0
   private currentAudioSources: AudioBufferSourceNode[] = []
   private isPlayingAudio: boolean = false
+  private activeAgentId: string | null = null
 
   constructor(
     config: RealtimeClientConfig = {},
@@ -434,11 +435,71 @@ export class RealtimeClient {
       console.log('Session created:', event.session)
     })
 
+    this.api.on('session.updated', (event) => {
+      if (event.session) {
+        const session = event.session
+        const mergedConfig: Partial<RealtimeClientConfig> = {}
+
+        if (typeof session.instructions === 'string') {
+          mergedConfig.instructions = session.instructions
+        }
+        if (typeof session.voice === 'string') {
+          mergedConfig.voice = session.voice
+        }
+        if (Array.isArray(session.modalities)) {
+          mergedConfig.modalities = session.modalities
+        }
+        if (session.turn_detection) {
+          mergedConfig.turnDetection = session.turn_detection
+        }
+        if (session.input_audio_format) {
+          mergedConfig.inputAudioFormat = session.input_audio_format
+        }
+        if (session.output_audio_format) {
+          mergedConfig.outputAudioFormat = session.output_audio_format
+        }
+        if (session.input_audio_transcription) {
+          mergedConfig.inputAudioTranscription = session.input_audio_transcription
+        }
+        if (Array.isArray(session.tools)) {
+          mergedConfig.tools = session.tools
+          const agentTool = session.tools.find((tool: any) =>
+            typeof tool?.name === 'string' && /assistant/i.test(tool.name)
+          )
+          if (agentTool?.name) {
+            this.activeAgentId = agentTool.name
+          }
+        }
+
+        this.sessionConfig = {
+          ...this.sessionConfig,
+          ...mergedConfig
+        }
+      }
+      this.emit('session.updated', event)
+    })
+
     // Conversation events
     this.api.on('conversation.item.created', (event) => {
       const item = event.item
       this.conversation.addItem(item)
       this.emit('conversation.item.created', { item })
+
+      if (item?.type === 'function_call_output' && item.output) {
+        let parsedOutput: any = item.output
+        if (typeof item.output === 'string') {
+          try {
+            parsedOutput = JSON.parse(item.output)
+          } catch (err) {
+            parsedOutput = item.output
+          }
+        }
+        const errorMessage = parsedOutput?.error
+        if (errorMessage) {
+          console.error('Tool call error:', errorMessage)
+          this.emit('error', new Error(errorMessage))
+        }
+      }
     })
 
     // Forward user transcription delta events for live display
@@ -502,6 +563,10 @@ export class RealtimeClient {
     this.api.on('connected', () => this.emit('connected'))
     this.api.on('disconnected', (data) => this.emit('disconnected', data))
     this.api.on('error', (error) => this.emit('error', error))
+  }
+
+  getActiveAgentId(): string | null {
+    return this.activeAgentId
   }
 
   /**
