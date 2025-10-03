@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -12,6 +13,7 @@ from azure.cosmos import CosmosClient, exceptions
 from azure.identity import DefaultAzureCredential
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # Azure Cosmos DB configuration
 CREDENTIAL = DefaultAzureCredential()
@@ -20,9 +22,16 @@ COSMOS_DATABASE = os.getenv("COSMOSDB_DATABASE")
 
 if not COSMOS_ENDPOINT or not COSMOS_DATABASE:
     logger.warning("Cosmos DB configuration is incomplete.")
+else:
+    logger.info(f"Cosmos DB configured: endpoint={COSMOS_ENDPOINT}, database={COSMOS_DATABASE}")
 
+logger.debug("Initializing Cosmos DB client...")
+init_start = time.perf_counter()
 COSMOS_CLIENT = CosmosClient(COSMOS_ENDPOINT, CREDENTIAL)
 DATABASE = COSMOS_CLIENT.create_database_if_not_exists(id=COSMOS_DATABASE)
+init_elapsed = time.perf_counter() - init_start
+logger.info(f"Cosmos DB client initialized in {init_elapsed:.2f}s")
+
 CUSTOMER_CONTAINER = "Customer"
 PURCHASE_CONTAINER = "Purchases"
 PRODUCT_CONTAINER = "Product"
@@ -76,21 +85,35 @@ class DatabaseAgent:
 
     def create_purchases_record(self, parameters: Dict[str, Any]) -> str:
         """Create a purchase record for the current customer."""
+        start_time = time.perf_counter()
+        logger.info(f"[DB_Agent][Customer:{self.customer_id}] Starting create_purchases_record")
+        logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Parameters: {parameters}")
+        
         purchase_record = parameters.get("purchase_record", {})
         if "product_id" not in purchase_record:
             if "product_id" in parameters:
                 purchase_record["product_id"] = parameters["product_id"]
             elif not self._derive_product_id(purchase_record):
+                logger.warning(f"[DB_Agent][Customer:{self.customer_id}] Missing product details")
                 return (
                     "Product details are missing. Provide a product_id or a "
                     "product_name that can be resolved."
                 )
 
+        validation_start = time.perf_counter()
         if not self.validate_customer_exists():
+            logger.warning(f"[DB_Agent][Customer:{self.customer_id}] Customer validation failed")
             return f"Customer with ID {self.customer_id} not found."
+        validation_elapsed = time.perf_counter() - validation_start
+        logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Customer validation took {validation_elapsed:.2f}s")
 
+        product_lookup_start = time.perf_counter()
         product_details = self._load_product_details(purchase_record["product_id"])
+        product_lookup_elapsed = time.perf_counter() - product_lookup_start
+        logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Product lookup took {product_lookup_elapsed:.2f}s")
+        
         if not product_details:
+            logger.warning(f"[DB_Agent][Customer:{self.customer_id}] Product {purchase_record['product_id']} not found")
             return (
                 f"Product with ID {purchase_record['product_id']} could not "
                 "be found."
@@ -112,11 +135,17 @@ class DatabaseAgent:
             "id": str(uuid.uuid4()),
         }
 
+        write_start = time.perf_counter()
         try:
             container.create_item(body=final_record)
+            write_elapsed = time.perf_counter() - write_start
+            logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Cosmos write took {write_elapsed:.2f}s")
         except exceptions.CosmosHttpResponseError as exc:
-            logger.exception("Failed to create purchase record")
+            logger.exception(f"[DB_Agent][Customer:{self.customer_id}] Failed to create purchase record")
             return f"Failed to create purchase record: {exc}"
+        
+        total_elapsed = time.perf_counter() - start_time
+        logger.info(f"[DB_Agent][Customer:{self.customer_id}] create_purchases_record completed in {total_elapsed:.2f}s")
         return "Purchase record created successfully."
 
     def _load_product_details(self, product_id: str) -> Optional[Dict[str, Any]]:
@@ -185,6 +214,9 @@ class DatabaseAgent:
 
     def get_customer_record(self, parameters: Dict[str, Any]) -> Union[Dict[str, Any], str]:
         """Return the customer profile for the active customer."""
+        start_time = time.perf_counter()
+        logger.info(f"[DB_Agent][Customer:{self.customer_id}] Starting get_customer_record")
+        
         container = self._get_container(CUSTOMER_CONTAINER)
         query = (
             "SELECT c.customer_id, c.first_name, c.last_name, c.email, "
@@ -200,8 +232,13 @@ class DatabaseAgent:
                     enable_cross_partition_query=True,
                 )
             )
+            elapsed = time.perf_counter() - start_time
+            logger.info(
+                f"[DB_Agent][Customer:{self.customer_id}] get_customer_record completed in {elapsed:.2f}s, "
+                f"found {len(items)} records"
+            )
         except exceptions.CosmosHttpResponseError as exc:
-            logger.exception("Failed to retrieve customer record")
+            logger.exception(f"[DB_Agent][Customer:{self.customer_id}] Failed to retrieve customer record")
             return f"Failed to get customer record: {exc}"
 
         if not items:
@@ -210,6 +247,9 @@ class DatabaseAgent:
 
     def get_product_record(self, parameters: Dict[str, Any]) -> Union[List[Dict[str, Any]], Dict[str, Any], str]:
         """Return product metadata or a specific product lookup."""
+        start_time = time.perf_counter()
+        logger.info(f"[DB_Agent][Customer:{self.customer_id}] Starting get_product_record with params: {parameters}")
+        
         container = self._get_container(PRODUCT_CONTAINER)
         try:
             if "product_id" in parameters:
@@ -230,30 +270,49 @@ class DatabaseAgent:
                         enable_cross_partition_query=True,
                     )
                 )
+                elapsed = time.perf_counter() - start_time
+                logger.info(
+                    f"[DB_Agent][Customer:{self.customer_id}] get_product_record (single) completed in {elapsed:.2f}s"
+                )
                 if not items:
                     return (
                         f"No product found with ID: {parameters['product_id']}."
                     )
                 return items[0]
 
+            logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Fetching all products (no product_id filter)")
             items = list(container.read_all_items())
+            elapsed = time.perf_counter() - start_time
+            logger.info(
+                f"[DB_Agent][Customer:{self.customer_id}] get_product_record (all) completed in {elapsed:.2f}s, "
+                f"found {len(items)} products"
+            )
             return items if items else "No products found."
         except exceptions.CosmosHttpResponseError as exc:
-            logger.exception("Failed to retrieve product records")
+            logger.exception(f"[DB_Agent][Customer:{self.customer_id}] Failed to retrieve product records")
             return f"Failed to get product record(s): {exc}"
 
     def get_purchases_record(self, parameters: Dict[str, Any]) -> Union[List[Dict[str, Any]], str]:
         """Return enriched purchase history for the active customer."""
+        start_time = time.perf_counter()
+        logger.info(f"[DB_Agent][Customer:{self.customer_id}] Starting get_purchases_record")
+        
         if not self.validate_customer_exists():
+            logger.warning(f"[DB_Agent][Customer:{self.customer_id}] Customer not found")
             return f"Customer with ID {self.customer_id} not found."
 
         purchase_container = self._get_container(PURCHASE_CONTAINER)
         product_container = self._get_container(PRODUCT_CONTAINER)
+        
         query = (
             "SELECT c.customer_id, c.product_id, c.quantity, c.purchasing_date, "
             "c.delivered_date, c.order_number, c.total_price FROM c "
             "WHERE c.customer_id = @customer_id"
         )
+        
+        query_start = time.perf_counter()
+        logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Querying purchases container")
+        
         try:
             purchases = list(
                 purchase_container.query_items(
@@ -264,15 +323,30 @@ class DatabaseAgent:
                     enable_cross_partition_query=True,
                 )
             )
+            query_elapsed = time.perf_counter() - query_start
+            logger.info(
+                f"[DB_Agent][Customer:{self.customer_id}] Purchase query completed in {query_elapsed:.2f}s, "
+                f"found {len(purchases)} records"
+            )
         except exceptions.CosmosHttpResponseError as exc:
-            logger.exception("Failed to retrieve purchase records")
+            logger.exception(f"[DB_Agent][Customer:{self.customer_id}] Failed to retrieve purchase records")
             return f"Failed to get purchase records: {exc}"
 
         if not purchases:
+            logger.info(f"[DB_Agent][Customer:{self.customer_id}] No purchases found")
             return f"No purchases found for customer: {self.customer_id}."
 
+        logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Enriching {len(purchases)} purchases with product details")
         enhanced: List[Dict[str, Any]] = []
-        for purchase in purchases:
+        product_lookup_time = 0.0
+        
+        for idx, purchase in enumerate(purchases):
+            product_start = time.perf_counter()
+            logger.debug(
+                f"[DB_Agent][Customer:{self.customer_id}] Enriching purchase {idx+1}/{len(purchases)}, "
+                f"product_id={purchase.get('product_id')}"
+            )
+            
             product = list(
                 product_container.query_items(
                     query=(
@@ -285,6 +359,13 @@ class DatabaseAgent:
                     enable_cross_partition_query=True,
                 )
             )
+            
+            product_elapsed = time.perf_counter() - product_start
+            product_lookup_time += product_elapsed
+            logger.debug(
+                f"[DB_Agent][Customer:{self.customer_id}] Product lookup {idx+1} took {product_elapsed:.2f}s"
+            )
+            
             product_info = (
                 {
                     "name": product[0].get("name"),
@@ -307,6 +388,12 @@ class DatabaseAgent:
                     "product": product_info,
                 }
             )
+        
+        total_elapsed = time.perf_counter() - start_time
+        logger.info(
+            f"[DB_Agent][Customer:{self.customer_id}] get_purchases_record completed in {total_elapsed:.2f}s "
+            f"(query: {query_elapsed:.2f}s, product lookups: {product_lookup_time:.2f}s)"
+        )
         return enhanced
 
 
@@ -328,16 +415,13 @@ def database_agent(customer_id: str) -> Dict[str, Any]:
         "tools": [
             {
                 "name": "create_purchases_record",
-                "description": "Create a new purchase record.",
+                "description": "Create a new purchase record for the customer.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "purchase_record": {
                             "type": "object",
-                            "description": (
-                                "Payload containing product details and "
-                                "quantity."
-                            ),
+                            "description": "Purchase details including product_id or product_name, and quantity.",
                         }
                     },
                     "required": ["purchase_record"],
@@ -346,43 +430,68 @@ def database_agent(customer_id: str) -> Dict[str, Any]:
             },
             {
                 "name": "update_customer_record",
-                "description": "Update customer profile information.",
+                "description": "Update the customer's profile information with new values.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "first_name": {"type": "string"},
-                        "last_name": {"type": "string"},
-                        "email": {"type": "string"},
-                        "address": {"type": "object"},
-                        "phone_number": {"type": "string"},
+                        "first_name": {
+                            "type": "string",
+                            "description": "Customer's first name.",
+                        },
+                        "last_name": {
+                            "type": "string",
+                            "description": "Customer's last name.",
+                        },
+                        "email": {
+                            "type": "string",
+                            "description": "Customer's email address.",
+                        },
+                        "address": {
+                            "type": "object",
+                            "description": "Customer's mailing address.",
+                        },
+                        "phone_number": {
+                            "type": "string",
+                            "description": "Customer's phone number.",
+                        },
                     },
+                    # No required fields - update only what's provided
                 },
                 "returns": agent.update_customer_record,
             },
             {
                 "name": "get_customer_record",
-                "description": "Retrieve the current customer's profile.",
-                "parameters": {"type": "object", "properties": {}},
+                "description": "Retrieve the current customer's profile information.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    # No parameters needed
+                },
                 "returns": agent.get_customer_record,
             },
             {
                 "name": "get_product_record",
-                "description": "Retrieve product catalog details.",
+                "description": "Retrieve product information from the catalog. Call without parameters to list all products.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "product_id": {
                             "type": "string",
-                            "description": "Specific product identifier.",
+                            "description": "Specific product identifier to retrieve details for one product.",
                         }
                     },
+                    # product_id is optional - omit to get all products
                 },
                 "returns": agent.get_product_record,
             },
             {
                 "name": "get_purchases_record",
-                "description": "Retrieve purchase history for the customer.",
-                "parameters": {"type": "object", "properties": {}},
+                "description": "Retrieve the customer's complete purchase history.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    # No parameters needed
+                },
                 "returns": agent.get_purchases_record,
             },
         ],

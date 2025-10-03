@@ -141,13 +141,16 @@ class AssistantService:
         self, tool_name: str, parameters: Dict[str, Any], call_id: str
     ) -> Dict[str, Any]:
         """Execute a tool call or return a routing instruction."""
+        import time
+        start_time = time.perf_counter()
+        
         logger.debug(
-            "Handling tool invocation %s with parameters %s", tool_name, parameters
+            "[AssistantService] Starting tool invocation: %s with parameters %s", tool_name, parameters
         )
         tools = list(self._iterate_tools())
         tool = next((item for item in tools if item["name"] == tool_name), None)
         if tool is None:
-            logger.warning("Received unknown tool invocation: %s", tool_name)
+            logger.warning("[AssistantService] Unknown tool invocation: %s", tool_name)
             return {
                 "type": "conversation.item.create",
                 "item": {
@@ -158,8 +161,10 @@ class AssistantService:
             }
 
         if _AGENT_ID_PATTERN.search(tool_name):
-            logger.debug("Switching active agent to %s", tool_name)
+            logger.debug("[AssistantService] Switching active agent to %s", tool_name)
             agent = self.agents[tool_name]
+            elapsed = time.perf_counter() - start_time
+            logger.debug(f"[AssistantService] Agent switch completed in {elapsed:.4f}s")
             return {
                 "type": "session.update",
                 "session": {
@@ -173,6 +178,7 @@ class AssistantService:
             }
 
         returns = tool.get("returns")
+        exec_start = time.perf_counter()
         if callable(returns):
             if inspect.iscoroutinefunction(returns):
                 result = await returns(parameters)
@@ -180,14 +186,33 @@ class AssistantService:
                 result = returns(parameters)
         else:
             result = returns
+        exec_elapsed = time.perf_counter() - exec_start
 
-        logger.debug("Tool %s completed", tool_name)
+        # Serialize result to JSON to measure serialization time
+        serialize_start = time.perf_counter()
+        if isinstance(result, str):
+            output = result
+        else:
+            try:
+                import json
+                output = json.dumps(result)
+            except Exception as e:
+                logger.error(f"[AssistantService] Failed to serialize tool output for {tool_name}: {e}")
+                output = str(result)
+        serialize_elapsed = time.perf_counter() - serialize_start
+        
+        total_elapsed = time.perf_counter() - start_time
+        logger.debug(
+            f"[AssistantService] Tool {tool_name} completed in {total_elapsed:.4f}s "
+            f"(exec: {exec_elapsed:.4f}s, serialize: {serialize_elapsed:.4f}s, output length: {len(output)} chars)"
+        )
+        
         return {
             "type": "conversation.item.create",
             "item": {
                 "type": "function_call_output",
                 "call_id": call_id,
-                "output": result,
+                "output": output,
             },
         }
 

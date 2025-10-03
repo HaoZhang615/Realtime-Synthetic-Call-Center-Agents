@@ -1,0 +1,25 @@
+{
+    "customer_id": "5e17e7ac50453023941dc74a5e118eec",
+    "product_id": "e50d6afd22b8350b809acb020c7fcafa",
+    "quantity": 7,
+    "purchasing_date": "2025-04-15T10:30:00",
+    "delivered_date": "2025-04-20T15:45:00",
+    "order_number": "de33dc41568c30acb6503030c116d440",
+    "product_details": {
+        "name": "Microsoft Office 365",
+        "category": "Productivity Software",
+        "type": "Software Suite",
+        "brand": "Microsoft Office",
+        "company": "Microsoft",
+        "unit_price": 149.99,
+        "weight": {
+            "value": 0,
+            "unit": "kg"
+        },
+        "color": "",
+        "material": "",
+        "product_id": "e50d6afd22b8350b809acb020c7fcafa"
+    },
+    "total_price": 1049.93,
+    "id": "3_de33dc41568c30acb6503030c116d440"
+}

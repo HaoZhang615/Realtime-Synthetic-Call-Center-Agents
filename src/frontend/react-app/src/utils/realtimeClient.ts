@@ -38,6 +38,7 @@ export type RealtimeEvent =
   | 'response.audio.done'
   | 'response.function_call_arguments.delta'
   | 'response.function_call_arguments.done'
+  | 'diagnostic.tool.status'
   | 'rate_limits.updated'
   | 'error'
   | 'connected'
@@ -557,6 +558,19 @@ export class RealtimeClient {
 
     this.api.on('response.text.delta', (event) => {
       this.emit('response.text.delta', event)
+    })
+
+    this.api.on('diagnostic.tool.status', (event) => {
+      const { tool_name, status, elapsed, message } = event
+      const summary = `Tool ${tool_name ?? 'unknown'} status: ${status}`
+      if (status === 'running') {
+        console.info(summary, { warningAfter: event.warning_after })
+      } else if (status === 'error' || status === 'timeout') {
+        console.error(summary, { message, elapsed })
+      } else {
+        console.debug(summary, { elapsed })
+      }
+      this.emit('diagnostic.tool.status', event)
     })
 
     // Forward connection events

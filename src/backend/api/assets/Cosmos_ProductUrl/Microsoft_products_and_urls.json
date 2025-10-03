@@ -2,11 +2,11 @@
     "company_name": "Microsoft",
     "id": "Microsoft_products_and_urls",
     "products": [
-        "Windows",
-        "Microsoft Office"
+        "Microsoft Office",
+        "Microsoft Windows"
     ],
     "urls": [
-        "https://www.microsoft.com/en-us/windows",
-        "https://www.microsoft.com/en-us/microsoft-365"
+        "https://www.microsoft.com/en-us/microsoft-365",
+        "https://www.microsoft.com/en-us/software-download/windows10"
     ]
 }

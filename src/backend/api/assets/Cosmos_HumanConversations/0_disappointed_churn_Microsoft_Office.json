@@ -1,0 +1,36 @@
+{
+    "conversation_id": "conv_123456",
+    "customer_id": "cust_78910",
+    "agent_id": "agent_emil",
+    "messages": [
+        {
+            "sender": "customer",
+            "message": "Hi Emil, I'm really frustrated. I feel like I'm being pushed to churn from Microsoft Office, and it's disappointing because I rely on it daily."
+        },
+        {
+            "sender": "agent",
+            "message": "I'm sorry to hear you're feeling this way, Fiona. Can you tell me what's been happening that led to this disappointment?"
+        },
+        {
+            "sender": "customer",
+            "message": "My subscription keeps getting renewed automatically without clear options to cancel easily. It's making me consider switching to another provider."
+        },
+        {
+            "sender": "agent",
+            "message": "I understand your frustration. Let me assist you with managing your subscription and explore some options to better suit your needs."
+        },
+        {
+            "sender": "customer",
+            "message": "That would be helpful. I just want to feel valued and have control over my subscriptions."
+        },
+        {
+            "sender": "agent",
+            "message": "Absolutely, Fiona. I'll guide you through the cancellation process if you decide to go that route, or help you modify your plan to prevent future issues. Your satisfaction is important to us."
+        }
+    ],
+    "sentiment": "disappointed",
+    "topic": "churn",
+    "product": "Microsoft",
+    "session_id": "a74542c64ff03acc96a6fdecf915d5c0",
+    "id": "chat_0_a74542c64ff03acc96a6fdecf915d5c0"
+}

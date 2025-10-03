@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any, Dict
 
 import requests
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 SEND_EMAIL_LOGIC_APP_URL = os.getenv("SEND_EMAIL_LOGIC_APP_URL")
 
@@ -27,16 +29,68 @@ def send_email(params: Dict[str, Any]) -> str:
     str
         A short status message describing whether the request succeeded.
     """
+    start_time = time.perf_counter()
+    
+    recipient = params.get("to", "unknown")
+    subject = params.get("subject", "")
+    body_preview = params.get("body", "")[:100]  # First 100 chars for logging
+    
+    logger.info(
+        f"[Assistant_Agent][Email] Starting email send request\n"
+        f"  To: {recipient}\n"
+        f"  Subject: {subject}\n"
+        f"  Body preview: {body_preview}{'...' if len(params.get('body', '')) > 100 else ''}"
+    )
+    
     if not SEND_EMAIL_LOGIC_APP_URL:
-        logger.warning("SEND_EMAIL_LOGIC_APP_URL is not configured; cannot send email")
+        logger.warning("[Assistant_Agent][Email] SEND_EMAIL_LOGIC_APP_URL is not configured")
         return "Email service is not configured."
 
     try:
+        logger.debug(f"[Assistant_Agent][Email] Sending POST request to Logic App")
+        api_start = time.perf_counter()
+        
         response = requests.post(SEND_EMAIL_LOGIC_APP_URL, json=params, timeout=15)
+        
+        api_elapsed = time.perf_counter() - api_start
+        logger.debug(f"[Assistant_Agent][Email] Logic App responded in {api_elapsed:.2f}s with status {response.status_code}")
+        
         response.raise_for_status()
+        
+        total_elapsed = time.perf_counter() - start_time
+        logger.info(
+            f"[Assistant_Agent][Email] Email sent successfully in {total_elapsed:.2f}s\n"
+            f"  To: {recipient}\n"
+            f"  Subject: {subject}"
+        )
         return "Email sent successfully."
+        
+    except requests.Timeout as exc:
+        elapsed = time.perf_counter() - start_time
+        logger.error(
+            f"[Assistant_Agent][Email] Request timed out after {elapsed:.2f}s\n"
+            f"  To: {recipient}\n"
+            f"  Error: {exc}"
+        )
+        return "Failed to send email: Request timed out."
+        
+    except requests.HTTPError as exc:
+        elapsed = time.perf_counter() - start_time
+        logger.error(
+            f"[Assistant_Agent][Email] HTTP error after {elapsed:.2f}s\n"
+            f"  To: {recipient}\n"
+            f"  Status: {response.status_code}\n"
+            f"  Error: {exc}"
+        )
+        return f"Failed to send email: HTTP {response.status_code}"
+        
     except requests.RequestException as exc:
-        logger.exception("Failed to send email via Logic App")
+        elapsed = time.perf_counter() - start_time
+        logger.exception(
+            f"[Assistant_Agent][Email] Failed to send email after {elapsed:.2f}s\n"
+            f"  To: {recipient}\n"
+            f"  Error: {exc}"
+        )
         return f"Failed to send email: {exc}"
 
 

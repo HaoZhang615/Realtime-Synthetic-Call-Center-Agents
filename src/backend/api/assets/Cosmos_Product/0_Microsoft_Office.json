@@ -1,16 +1,16 @@
 {
     "name": "Microsoft Office 365",
     "category": "Productivity Software",
-    "type": "Subscription Service",
+    "type": "Software Suite",
     "brand": "Microsoft Office",
     "company": "Microsoft",
-    "unit_price": 99.99,
+    "unit_price": 149.99,
     "weight": {
         "value": 0,
         "unit": "kg"
     },
     "color": "",
     "material": "",
-    "product_id": "695a9cef22ea3fec9db811d4fa7af284",
-    "id": "1_695a9cef22ea3fec9db811d4fa7af284"
+    "product_id": "e50d6afd22b8350b809acb020c7fcafa",
+    "id": "0_e50d6afd22b8350b809acb020c7fcafa"
 }

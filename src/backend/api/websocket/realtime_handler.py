@@ -201,11 +201,18 @@ class RealtimeHandler:
         """
         message_type = message.get("type")
         
-        # Handle tool calls
-        if message_type == "response.function_call_arguments.done":
-            await self._handle_tool_call(message, session_id, vendor_ws)
+        # Block ALL function call related events from reaching client
+        # We handle tool execution server-side
+        if message_type in {
+            "response.function_call_arguments.delta",
+            "response.function_call_arguments.done",
+        }:
+            # Only process the tool call when arguments are complete
+            if message_type == "response.function_call_arguments.done":
+                await self._handle_tool_call(message, session_id, vendor_ws)
+            return None  # Block from client
             
-        # Forward message to client
+        # Forward all other messages to client
         return message
 
     def _compose_session_update(
@@ -226,16 +233,24 @@ class RealtimeHandler:
         vendor_ws: websockets.WebSocketClientProtocol,
     ):
         """Handle tool calls through the assistant service"""
+        current_agent_id = self.active_agents.get(session_id, "unknown")
+        customer_id = self.current_customer_id or "unknown"
+        
         try:
             item_id = message.get("item_id")
             call_id = message.get("call_id") 
             name = message.get("name")
             arguments = message.get("arguments", "{}")
             
-            logger.info(f"Processing tool call: {name} for session {session_id}")
+            logger.info(
+                f"[Session:{session_id}][Customer:{customer_id}][Agent:{current_agent_id}] "
+                f"Processing tool call: {name}"
+            )
             
             if not name:
-                logger.error("Tool call missing name field; aborting")
+                logger.error(
+                    f"[Session:{session_id}] Tool call missing name field; aborting"
+                )
                 await vendor_ws.send(
                     json.dumps(
                         {
@@ -257,12 +272,18 @@ class RealtimeHandler:
             except json.JSONDecodeError:
                 parsed_args = {}
                 
-            logger.debug("Tool %s arguments: %s", name, parsed_args)
+            logger.debug(
+                f"[Session:{session_id}][Agent:{current_agent_id}] "
+                f"Tool {name} arguments: {parsed_args}"
+            )
 
             # Call through assistant service
             assistant_service = self.agent_orchestrator.assistant_service
             if not assistant_service:
-                logger.error("Assistant service not initialised; cannot handle tool call")
+                logger.error(
+                    f"[Session:{session_id}] Assistant service not initialised; "
+                    f"cannot handle tool call"
+                )
                 return
 
             start_time = time.perf_counter()
@@ -276,8 +297,9 @@ class RealtimeHandler:
                     timeout=self.tool_call_timeout,
                 )
             except asyncio.TimeoutError:
-                logger.exception(
-                    "Tool %s timed out after %ss", name, self.tool_call_timeout
+                logger.error(
+                    f"[Session:{session_id}][Agent:{current_agent_id}] "
+                    f"Tool {name} timed out after {self.tool_call_timeout}s"
                 )
                 timeout_payload = {
                     "type": "conversation.item.create",
@@ -294,17 +316,25 @@ class RealtimeHandler:
                 return None
             
             outbound_messages = []
+            is_agent_switch = False
 
             if result.get("type") == "session.update":
+                # Agent switch detected - update active agent and session
+                is_agent_switch = True
                 agent = assistant_service.get_agent(name)
                 if agent:
-                    logger.info(f"Agent switched to: {agent['id']}")
+                    logger.info(
+                        f"[Session:{session_id}][Customer:{customer_id}] "
+                        f"Agent switched from {current_agent_id} to {agent['id']}"
+                    )
                     self.active_agents[session_id] = agent["id"]
+                    current_agent_id = agent["id"]  # Update for subsequent logs
 
                 session_payload = result.get("session", {})
                 composed_session = self._compose_session_update(session_id, session_payload)
                 outbound_messages.append({"type": "session.update", "session": composed_session})
             elif result.get("type") == "conversation.item.create":
+                # Regular tool output - add to conversation
                 item = result.get("item", {})
                 output = item.get("output")
                 if isinstance(output, (dict, list)):
@@ -317,19 +347,37 @@ class RealtimeHandler:
 
             for outbound in outbound_messages:
                 await vendor_ws.send(json.dumps(outbound))
-                logger.debug("Sent vendor message: %s", outbound.get("type"))
+                logger.info(
+                    f"[Session:{session_id}][Agent:{current_agent_id}] "
+                    f"Sent to Azure: {outbound.get('type')}"
+                )
 
+            # Only add delay and response.create for agent switches
+            # For regular tool calls, Azure OpenAI automatically continues the response
+            if is_agent_switch:
+                # Give Azure time to process the session update before requesting response
+                await asyncio.sleep(0.2)
+                
             # Resume response generation after tool handling
             await vendor_ws.send(json.dumps({"type": "response.create"}))
-            logger.debug("Requested new response after tool call")
+            logger.info(
+                f"[Session:{session_id}][Agent:{current_agent_id}] "
+                f"Sent response.create to trigger assistant reply"
+            )
 
             elapsed = time.perf_counter() - start_time
-            logger.info("Tool %s handled in %.2fs", name, elapsed)
+            logger.info(
+                f"[Session:{session_id}][Agent:{current_agent_id}] "
+                f"Tool {name} completed in {elapsed:.2f}s"
+            )
 
             return None
             
         except Exception as e:
-            logger.exception(f"Tool call failed: {e}")
+            logger.exception(
+                f"[Session:{session_id}][Agent:{current_agent_id}] "
+                f"Tool call failed: {e}"
+            )
             error_payload = {
                 "type": "conversation.item.create",
                 "item": {
@@ -406,11 +454,11 @@ class RealtimeHandler:
                         
                         # Log all Azure messages for debugging
                         if msg_type not in {"response.audio.delta", "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped"}:
-                            logger.info(f"Azure->Client: {msg_type} - {azure_message}")
+                            logger.info(f"Azure->Backend: {msg_type}")
                         elif msg_type in {"response.audio.delta"}:
-                            logger.debug(f"Azure->Client: {msg_type} (audio data)")
+                            logger.debug(f"Azure->Backend: {msg_type} (audio data)")
                         else:
-                            logger.debug(f"Azure->Client: {msg_type}")
+                            logger.debug(f"Azure->Backend: {msg_type}")
                             
                     except json.JSONDecodeError:
                         logger.warning("Invalid JSON from Azure")
@@ -420,8 +468,10 @@ class RealtimeHandler:
                     processed = await self.handle_azure_message(azure_message, session_id, vendor_ws)
                     if processed:
                         await client_ws.send_text(json.dumps(processed))
+                        logger.debug(f"Forwarded to client: {msg_type}")
                     else:
-                        logger.warning(f"Processed message was None for type: {msg_type}")
+                        # None means intentionally blocked (e.g., tool calls handled server-side)
+                        logger.debug(f"Blocked from client (handled server-side): {msg_type}")
                             
             except websockets.exceptions.ConnectionClosed:
                 logger.info("Azure WebSocket disconnected")
