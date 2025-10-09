@@ -9,6 +9,7 @@ import { CustomerSelection } from './CustomerSelection'
 import { ChatText } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { RealtimeClient } from '@/utils/realtimeClient'
+import { getRealtimeApiBase } from '@/config'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 type CallStatus = 'idle' | 'calling' | 'active' | 'ended'
@@ -56,7 +57,7 @@ export function VoiceChatInterface() {
     realtimeClientRef.current = new RealtimeClient({
       voice: 'shimmer',
       instructions: 'You are a helpful customer service AI assistant. Be friendly, professional, and assist with customer inquiries.'
-    }, 'http://localhost:8000')
+    }, getRealtimeApiBase())
 
     // Set up event listeners
     const client = realtimeClientRef.current

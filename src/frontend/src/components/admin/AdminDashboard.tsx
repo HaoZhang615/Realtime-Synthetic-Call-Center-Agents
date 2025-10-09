@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { FileText, Database, ChatText, TrendUp, ArrowsClockwise, CheckCircle, XCircle } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { useState, useEffect, useCallback } from 'react'
+import { getApiBase } from '@/config'
 
 type IndexStatus = 'active' | 'syncing' | 'error'
 
@@ -44,8 +45,6 @@ export function AdminDashboard() {
   const [indexData, setIndexData] = useState(defaultIndex)
   const [loading, setLoading] = useState(false)
 
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || ''
-
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 MB'
     const k = 1024
@@ -57,7 +56,7 @@ export function AdminDashboard() {
   const fetchDashboardStats = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/admin/dashboard`)
+      const res = await fetch(`${getApiBase()}/api/admin/dashboard`)
       if (!res.ok) throw new Error(`Failed to fetch dashboard stats: ${res.status}`)
       const data: DashboardStats = await res.json()
       
@@ -77,7 +76,7 @@ export function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [API_BASE])
+  }, [])
 
   useEffect(() => {
     fetchDashboardStats()

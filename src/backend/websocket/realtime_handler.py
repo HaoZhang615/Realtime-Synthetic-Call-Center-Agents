@@ -62,7 +62,9 @@ class RealtimeHandler:
             logging.info("AgentOrchestrator.assistant_service initialized successfully")
         
         # Azure OpenAI configuration
-        self.azure_endpoint = os.getenv("AZURE_AI_FOUNDRY_ENDPOINT", "").replace("https://", "wss://")
+        # Get endpoint and normalize it (remove trailing slash, convert to wss)
+        foundry_endpoint = os.getenv("AZURE_AI_FOUNDRY_ENDPOINT", "").rstrip("/")
+        self.azure_endpoint = foundry_endpoint.replace("https://", "wss://")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
         self.deployment = os.getenv("AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT")
         self.scope = "https://cognitiveservices.azure.com/.default"
@@ -503,14 +505,17 @@ class RealtimeHandler:
         url = self.build_azure_ws_url()
         
         logger.info(f"Connecting to Azure OpenAI: {url}")
+        logger.debug(f"Headers: {list(headers.keys())}")
         
         try:
             return await websockets.connect(url, additional_headers=headers)
         except websockets.exceptions.InvalidHandshake as e:
             logger.error(f"Azure WebSocket handshake failed: {e}")
+            logger.error(f"URL was: {url}")
             raise
         except Exception as e:
             logger.exception(f"Failed to connect to Azure OpenAI: {e}")
+            logger.error(f"URL was: {url}")
             raise
 
     async def handle_session(self, client_ws: WebSocket, session_id: str, customer_id: Optional[str] = None):

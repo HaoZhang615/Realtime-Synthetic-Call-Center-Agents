@@ -250,6 +250,8 @@ module appIdentity './modules/app/identity.bicep' = {
 // [ Array of AI Services Model deployments ]
 param aoaiGptRealtimeModelName string = 'gpt-realtime'
 param aoaiGptRealtimeModelVersion string = '2025-08-28'
+param aoaiGptRealtimeMiniModelName string = 'gpt-realtime-mini'
+param aoaiGptRealtimeMiniModelVersion string = '2025-10-06'
 param aoaiGptChatModelName string = 'gpt-4.1-nano'
 param aoaiGptChatModelVersion string = '2025-04-14'
 param embedModel string = 'text-embedding-3-large'
@@ -323,6 +325,18 @@ module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
         sku: { 
           name: 'GlobalStandard'
           capacity: 1
+        }
+      }
+      {
+        name: aoaiGptRealtimeMiniModelName
+        model: {
+          format: 'OpenAI'
+          name: aoaiGptRealtimeMiniModelName
+          version: aoaiGptRealtimeMiniModelVersion
+        }
+        sku: { 
+          name: 'GlobalStandard'
+          capacity: 10
         }
       }
       {
@@ -548,6 +562,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
       AZURE_OPENAI_GPT_CHAT_DEPLOYMENT: aoaiGptChatModelName
+      AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT: aoaiGptRealtimeModelName
       AZURE_SEARCH_ENDPOINT: 'https://${searchService.outputs.name}.search.windows.net'
       AZURE_SEARCH_INDEX: searchIndexName
       AZURE_STORAGE_ENDPOINT: storage.outputs.primaryBlobEndpoint

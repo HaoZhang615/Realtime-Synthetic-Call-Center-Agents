@@ -1,0 +1,7 @@
+
+Deploying services (azd deploy)
+
+  (-) Skipped: Deploying service backend
+Deploying service frontend
+Deploying service frontend (Packing remote build context)
+Deploying service frontend (Uploading remote build context)

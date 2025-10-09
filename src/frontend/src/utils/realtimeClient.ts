@@ -356,6 +356,7 @@ export class RealtimeClient {
   private api: RealtimeAPI
   private conversation: RealtimeConversation
   private sessionConfig: RealtimeClientConfig
+  private backendUrl: string
   private eventHandlers = new Map<RealtimeEvent, ((data: any) => void)[]>()
   private audioContext: AudioContext | null = null
   private nextPlayTime: number = 0
@@ -387,6 +388,7 @@ export class RealtimeClient {
       tools: config.tools
     }
 
+    this.backendUrl = backendUrl || 'http://localhost:8000'
     this.api = new RealtimeAPI(backendUrl)
     this.conversation = new RealtimeConversation()
 
@@ -617,8 +619,7 @@ export class RealtimeClient {
     
     // Get session configuration from backend and send session update
     try {
-      const backendBaseUrl = backendUrl || 'http://localhost:8000'
-      const configResponse = await fetch(`${backendBaseUrl}/api/session/config`)
+      const configResponse = await fetch(`${this.backendUrl}/api/session/config`)
       if (configResponse.ok) {
         const backendConfig = await configResponse.json()
         console.log('Loaded session config from backend:', backendConfig)
