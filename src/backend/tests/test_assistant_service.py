@@ -2,7 +2,7 @@ import asyncio
 import pytest  # type: ignore[import]
 
 from services.assistant_service import AssistantService
-from api.websocket.realtime_handler import RealtimeHandler
+from websocket.realtime_handler import RealtimeHandler
 
 
 class _DummyCredential:
@@ -82,7 +82,7 @@ def test_tool_invocation_returns_conversation_item(assistant_service: AssistantS
 
 def test_compose_session_update_merges_defaults(monkeypatch):
     monkeypatch.setattr(
-        "api.websocket.realtime_handler.DefaultAzureCredential",
+        "websocket.realtime_handler.DefaultAzureCredential",
         lambda: _DummyCredential(),
     )
     handler = RealtimeHandler()

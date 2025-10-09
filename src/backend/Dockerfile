@@ -21,21 +21,11 @@ COPY . .
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PORT=80
+ENV PORT=8000
 ENV PYTHONPATH=/app
-
-# Ensure directories are treated as packages and verify structure
-RUN touch __init__.py pages/__init__.py utils/__init__.py && \
-    ls -la /app && \
-    ls -la /app/utils && \
-    echo "PYTHONPATH: $PYTHONPATH" && \
-    python -c "import sys; print('Python path:', sys.path)"
 
 # Expose the port the app runs on
 EXPOSE ${PORT}
 
-# Wrap the startup command to print debug info
-CMD echo "Current directory: $(pwd)" && \
-    echo "Directory contents: $(ls -la)" && \
-    echo "Python path: $(python -c 'import sys; print(sys.path)')" && \
-    /app/.venv/bin/streamlit run Admin.py --server.port=80 --server.address=0.0.0.0 --server.enableCORS false
+# Run FastAPI with uvicorn
+CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

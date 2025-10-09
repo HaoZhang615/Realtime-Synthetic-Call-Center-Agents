@@ -29,7 +29,7 @@ $env:AOAI_SCOPE = "https://cognitiveservices.azure.com/.default"
 $ uvicorn api.main:app --reload --app-dir src/backend/api --port 8000
 
 5. Run the frontend
-- In a separate terminal: navigate to `src/frontend/react-app` and run `npm install` and `npm run dev`.
+- In a separate terminal: navigate to `src/frontend` and run `npm install` and `npm run dev`.
 - Vite dev server is configured to proxy `/api` to `http://localhost:8000` — calls from the React app to `/api/*` will reach the FastAPI app.
 
 Notes

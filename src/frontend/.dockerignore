@@ -1,44 +1,22 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*.pyd
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
 
-# Caches of various types
-.cache/
-.pip/
+# Build outputs
+dist/
+build/
 
-# Development environments
+# Development
 .env
-.venv/
-venv/
-ENV/
-.conda/**
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Version control
-.git/
-.gitignore
-.github/
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Project backups
-*.bak
-
-# Log files
-*.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
+# Testing
+coverage/
+.nyc_output/
 
 # Editor directories and files
 .idea/
@@ -47,7 +25,23 @@ Thumbs.db
 *.swo
 *~
 
-# Chainlit
-#.chainlit/**
-.venv
-.env
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Version control
+.git/
+.gitignore
+.github/
+
+# Python artifacts (legacy)
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+*.log
+
+# React/Vite specific
+.cache/
+.temp/

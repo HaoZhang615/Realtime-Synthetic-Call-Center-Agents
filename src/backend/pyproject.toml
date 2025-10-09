@@ -9,19 +9,24 @@ dependencies = [
     "numpy",
     "python-dotenv",
     "rich>=13.0.0",
-    "streamlit",
     "azure-monitor-opentelemetry",
     "openai>=1.64.0",
     "azure-cosmos>=4.9.0",
-    "azure-keyvault",
+    "azure-keyvault-secrets",
     "fastapi>=0.95.0",
     "uvicorn[standard]>=0.22.0",
     "python-multipart>=0.0.20",
     "azure-core>=1.33.0",
     "azure-search>=1.0.0b2",
+    "aiohttp>=3.9.0",
+    "requests>=2.31.0",
+    "websockets>=12.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

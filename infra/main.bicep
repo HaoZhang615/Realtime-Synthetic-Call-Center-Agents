@@ -89,6 +89,9 @@ module containerAppsEnvironment './modules/app/containerappenv.bicep' = if (!ena
     appSubnetId: ''
   }
   scope: resGroup
+  dependsOn: [
+    monitoring  // ✅ ADD THIS - Wait for Log Analytics to be created
+  ]
 }
 
 // Create container apps environment for zero trust deployment (with VNet integration)
@@ -102,6 +105,9 @@ module containerAppsEnvironmentZeroTrust './modules/app/containerappenv.bicep' =
     appSubnetId: vnet!.outputs.appSubnetId
   }
   scope: resGroup
+  dependsOn: [
+    monitoring  // ✅ ADD THIS - Wait for Log Analytics to be created
+  ]
 }
 
 // Private Endpoints for backend services (only for Zero Trust deployment)
@@ -484,6 +490,10 @@ module frontendApp 'modules/app/containerapp.bicep' = {
     exists: appExists
     targetPort: 80
     env: union({
+      // Frontend runtime configuration - point to backend URL
+      VITE_API_BASE: 'https://${abbrs.appContainerApps}backend-${resourceToken}.${enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.defaultDomain : containerAppsEnvironment!.outputs.defaultDomain}'
+      VITE_REALTIME_API_BASE: 'https://${abbrs.appContainerApps}backend-${resourceToken}.${enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.defaultDomain : containerAppsEnvironment!.outputs.defaultDomain}'
+      // Azure service configuration (for reference)
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
@@ -503,13 +513,13 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
     },
     union(
-      empty(openAiRealtimeName) ? {} : {
-        AZURE_OPENAI_API_KEY: openAiRealtimeKey
-      },
-      !empty(bingSearchApiKey) ? {
-        BING_SEARCH_API_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/bingSearchApiKey/)'
-      } : {}
+      empty(openAiRealtimeName) ? {} : {},
+      !empty(bingSearchApiKey) ? {} : {}
     ))
+    // Key Vault secrets for frontend (if any needed in future)
+    keyVaultSecrets: !empty(bingSearchApiKey) ? {
+      BING_SEARCH_API_KEY: 'https://${keyVault.outputs.name}${environment().suffixes.keyvaultDns}/secrets/bingSearchApiKey'
+    } : {}
   }
 }
 
@@ -526,8 +536,11 @@ module backendApp 'modules/app/containerapp.bicep' = {
     containerAppsEnvironmentId: enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.id : containerAppsEnvironment!.outputs.id
     containerRegistryName: registry.outputs.name
     exists: appExists
-    targetPort: 80
+    targetPort: 8000
     env: union({
+      // CORS configuration - allow frontend origin
+      FRONTEND_ORIGINS: 'https://${abbrs.appContainerApps}frontend-${resourceToken}.${enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.defaultDomain : containerAppsEnvironment!.outputs.defaultDomain},http://localhost:5173,http://localhost:5001,http://localhost:5000'
+      // Azure service configuration
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
@@ -548,13 +561,15 @@ module backendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
-      AZURE_AI_SERVICES_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
-      // Add OpenAI-specific environment variables for backward compatibility
-      AZURE_OPENAI_API_KEY: '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
     },
     empty(openAiRealtimeName) ? {} : {
-      AZURE_OPENAI_API_KEY: openAiRealtimeKey
+      // Only include if using bring-your-own OpenAI key
     })
+    // Key Vault secrets - these will be resolved by Container Apps
+    keyVaultSecrets: {
+      AZURE_AI_SERVICES_KEY: 'https://${keyVault.outputs.name}${environment().suffixes.keyvaultDns}/secrets/${_accounts_aiservice_ms_name}-accessKey1'
+      AZURE_OPENAI_API_KEY: 'https://${keyVault.outputs.name}${environment().suffixes.keyvaultDns}/secrets/${_accounts_aiservice_ms_name}-accessKey1'
+    }
   }
 }
 

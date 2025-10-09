@@ -45,16 +45,14 @@ When Zero Trust is not enabled:
 ## How to get it work
 
 - [Deploy the application](#how-to-deploy)
-- Click on the backend app URL from the output of `azd up`.
-- read the instructions on the 'Admin' page:
-    - use the 'Ingest Documents' and 'Delete Documents' pages to manage documents for the internal knowledge base.
-    ![Backend Manage Documents](./docs/images/Backend_Manage_Document.png)
-    - use the 'Synthesize Data' page to dynamically synthesize a demo database in Azure CosmosDB with Customer, Product, Purchases tables.
-    ![Backend Synthesize Data](./docs/images/Backend_Synthesize_Data.png)
-- Click on the frontend app URL from the output of `azd up`.
-- Choose one of the customer name to log in.
-- Click on recording button or press 'P'
-- Speak
+- Access the backend FastAPI admin interface at the backend URL from the output of `azd up`.
+- Use the FastAPI endpoints to:
+    - Ingest and manage documents for the internal knowledge base
+    - Synthesize demo data in Azure Cosmos DB (Customer, Product, Purchases tables)
+- Access the React frontend at the frontend URL from the output of `azd up`.
+- Choose one of the customer names to log in
+- Click on the microphone button or press 'P' to start voice interaction
+- Speak to interact with the AI assistant
 
 ### Sample Questions
 
@@ -190,19 +188,19 @@ Please follow the instructions in [the instructions in `src/frontend`](./src/fro
 The solution is built on Azure Container Apps with configurable security architecture:
 
 ### Core Components
-- **Frontend**: Chainlit-based voice interface running in Azure Container Apps
-- **Backend**: Streamlit admin interface for document management and data synthesis
+- **Frontend**: React-based voice interface with WebSocket realtime audio streaming
+- **Backend**: FastAPI service with WebSocket bridge to Azure OpenAI Realtime API
 - **Azure AI Search**: Vector search with built-in skillsets for document processing and embeddings
 - **Azure Cosmos DB**: NoSQL database for storing customer, product, and transaction data
 - **Azure Storage**: Blob storage for document ingestion with configurable network access
-- **Azure OpenAI**: GPT-4o models for chat completion and text-embedding-3-large for vector embeddings
+- **Azure OpenAI**: GPT-4o Realtime API for voice interactions and text-embedding-3-large for vector embeddings
 - **Azure Logic Apps**: Email automation workflows using Office 365 connectors
 
 ### Realtime multi-agent orchestration
 
 - **FastAPI bridge**: `src/backend/api/websocket/realtime_handler.py` now owns agent selection and emits merged `session.update` payloads whenever an agent tool is invoked. Per-session configuration (voice, turn detection, tool list) is cached so the browser keeps its preferences while agents switch.
 - **Assistant service**: `src/backend/services/assistant_service.py` centralises agent registration and returns either tool outputs or new session instructions; unit tests in `src/backend/tests/test_assistant_service.py` cover both paths so regressions are caught early.
-- **React realtime client**: `src/frontend/react-app/src/utils/realtimeClient.ts` listens for `session.updated` events, keeps the active agent id for UI hints, and surfaces function-call errors via the shared error channel for quick operator feedback.
+- **React realtime client**: `src/frontend/src/utils/realtimeClient.ts` listens for `session.updated` events, keeps the active agent id for UI hints, and surfaces function-call errors via the shared error channel for quick operator feedback.
 - **Tool safety**: Backend tool execution is now time-bound, with structured logging and graceful fallbacks so a slow tool cannot stall the voice conversation loop.
 
 ### Networking Architecture
@@ -239,13 +237,14 @@ This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for
 
 ## Resources
 
-- [Chainlit Documentation](https://docs.chainlit.io/)
-- [Azure OpenAI Documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [React Documentation](https://react.dev/)
+- [Azure OpenAI Realtime API Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/realtime-audio)
 - [VoiceRAG Documentation](https://techcommunity.microsoft.com/blog/azure-ai-services-blog/voicerag-an-app-pattern-for-rag--voice-using-azure-ai-search-and-the-gpt-4o-real/4259116)
 - This project is derived from the ideas and implementation of the following projects:
     - [Azure Samples: agentic-voice-assistant](https://github.com/Azure-Samples/agentic-voice-assistant)
     - [Azure Samples: chat-with-your-data-solution-accelerator](https://github.com/Azure-Samples/chat-with-your-data-solution-accelerator)
-    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)$
+    - [AOAI ContactCenterDemo](https://github.com/HaoZhang615/AOAI_ContactCenterDemo)
 
 ## to-do
 - [ ] add a demo video
