@@ -20,6 +20,7 @@ from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.search.documents.indexes import SearchIndexerClient
 from azure.search.documents import SearchClient
+from azure.cosmos import CosmosClient
 from pydantic import BaseModel
 
 # Import existing utilities from the repo
@@ -69,6 +70,8 @@ class DashboardStats(BaseModel):
     index_status: str
     last_updated: str
     vector_dimensions: int
+    ai_conversations_count: int
+    human_conversations_count: int
 
 
 @admin_router.get("/dashboard")
@@ -115,13 +118,53 @@ async def get_dashboard_stats():
         except Exception:
             index_status = "error"
         
+        # Get Cosmos DB conversation counts
+        ai_conversations_count = 0
+        human_conversations_count = 0
+        
+        try:
+            cosmos_endpoint = os.getenv("COSMOSDB_ENDPOINT")
+            cosmos_database = os.getenv("COSMOSDB_DATABASE")
+            
+            if cosmos_endpoint and cosmos_database:
+                cosmos_client = CosmosClient(cosmos_endpoint, credential)
+                database = cosmos_client.get_database_client(cosmos_database)
+                
+                # Count AI_Conversations
+                try:
+                    ai_container = database.get_container_client("AI_Conversations")
+                    ai_query = "SELECT VALUE COUNT(1) FROM c"
+                    ai_results = list(ai_container.query_items(
+                        query=ai_query,
+                        enable_cross_partition_query=True
+                    ))
+                    ai_conversations_count = ai_results[0] if ai_results else 0
+                except Exception as ex:
+                    logger.warning("Failed to query AI_Conversations container: %s", ex)
+                
+                # Count Human_Conversations
+                try:
+                    human_container = database.get_container_client("Human_Conversations")
+                    human_query = "SELECT VALUE COUNT(1) FROM c"
+                    human_results = list(human_container.query_items(
+                        query=human_query,
+                        enable_cross_partition_query=True
+                    ))
+                    human_conversations_count = human_results[0] if human_results else 0
+                except Exception as ex:
+                    logger.warning("Failed to query Human_Conversations container: %s", ex)
+        except Exception as ex:
+            logger.warning("Failed to initialize Cosmos DB client: %s", ex)
+        
         return DashboardStats(
             documents_count=files_count,
             total_storage_size=total_size,
             index_name=azure_search_index,
             index_status=index_status,
             last_updated=last_modified.isoformat() if last_modified else "2024-01-01T00:00:00Z",
-            vector_dimensions=3072  # Based on your embedding model configuration
+            vector_dimensions=3072,  # Based on your embedding model configuration
+            ai_conversations_count=ai_conversations_count,
+            human_conversations_count=human_conversations_count
         )
         
     except Exception as ex:
@@ -133,7 +176,9 @@ async def get_dashboard_stats():
             index_name="documents",
             index_status="error",
             last_updated="2024-01-01T00:00:00Z",
-            vector_dimensions=3072
+            vector_dimensions=3072,
+            ai_conversations_count=0,
+            human_conversations_count=0
         )
 
 
@@ -150,20 +195,16 @@ def upload_with_setup(azure_credential, source_folder, indexer_name, azure_searc
         azure_openai_embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
         azure_openai_embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL")
         
-        # For production with managed identity, skip key validation
-        # For local dev, ensure AI Services key is available
-        ai_services_key = os.getenv("AZURE_AI_SERVICES_KEY", "")
-        if ai_services_key and not ai_services_key.startswith("@Microsoft.KeyVault"):
-            # Only set if we have a real key (not a Key Vault reference)
-            os.environ["AZURE_AI_SERVICES_KEY"] = ai_services_key
-            logger.info("Using AI Services key from environment")
-        elif uami_id:
-            # In production with managed identity, we don't need the key
-            logger.info("Using managed identity for AI Services authentication")
-        else:
-            # Local development without key
-            logger.warning("AZURE_AI_SERVICES_KEY not set. For local dev, set the direct key from Azure Portal.")
-            # Don't raise error - let it try with managed identity
+        # For local dev, ensure AI Services key is available (bypass Key Vault resolution)
+        ai_services_key = os.getenv("AZURE_AI_SERVICES_KEY")
+        if not ai_services_key or ai_services_key.startswith("@Microsoft.KeyVault"):
+            # If we have a Key Vault reference or no key, set a direct key for local dev
+            # You need to get this from Azure Portal: AI Services -> Keys and Endpoint
+            logger.warning("AZURE_AI_SERVICES_KEY is a Key Vault reference or missing. Set the direct key for local dev.")
+            raise ValueError("Please set AZURE_AI_SERVICES_KEY to your actual AI Services key (not Key Vault reference) for local development")
+        
+        # Temporarily override the environment variable to bypass Key Vault resolution
+        os.environ["AZURE_AI_SERVICES_KEY"] = ai_services_key
         
         # Convert embedding endpoint domain if needed (per Microsoft docs)
         if embedding_endpoint and "cognitiveservices.azure.com" in embedding_endpoint:

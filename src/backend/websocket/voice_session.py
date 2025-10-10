@@ -6,6 +6,7 @@ with customer context and conversation state.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from fastapi import WebSocket
 
@@ -66,21 +67,55 @@ class VoiceSessionManager:
             
         except Exception as e:
             logger.exception(f"Failed to start voice session: {e}")
-            # Ensure cleanup
+            # Only cleanup on error - normal cleanup happens in end_voice_session
             await self.connection_manager.disconnect(websocket)
             raise
-        finally:
-            # Always cleanup on session end
-            await self.connection_manager.disconnect(websocket)
 
     async def end_voice_session(self, websocket: WebSocket):
         """
-        End a voice session
+        End a voice session and log conversation to Cosmos DB
         """
         session = self.connection_manager.get_session_by_websocket(websocket)
+        
         if session:
             logger.info(f"Ending voice session: {session}")
             
+            # Mark session end time
+            session.session_end_time = datetime.now(timezone.utc)
+            
+            # Infer disconnect reason if not explicitly set
+            if session.disconnect_reason is None:
+                session.disconnect_reason = "connection_closed"
+            
+            # Log conversation to Cosmos DB (asynchronous, non-blocking)
+            if session.message_pairs:  # Only log if there was actual conversation
+                try:
+                    from services.conversation_logger import get_conversation_logger
+                    conversation_logger = get_conversation_logger()
+                    
+                    # Log the conversation (fire-and-forget pattern)
+                    # Errors in logging won't affect session cleanup
+                    success = conversation_logger.log_conversation(session)
+                    
+                    if success:
+                        logger.info(
+                            f"Conversation logged for session {session.session_id} "
+                            f"({len(session.message_pairs)} messages)"
+                        )
+                    else:
+                        logger.warning(f"Failed to log conversation for session {session.session_id}")
+                except Exception as e:
+                    logger.error(
+                        f"Error logging conversation for session {session.session_id}: {e}",
+                        exc_info=True
+                    )
+                    # Continue with session cleanup even if logging fails
+            else:
+                logger.debug(f"No messages to log for session {session.session_id}")
+        else:
+            logger.warning("end_voice_session called but no session found for websocket")
+        
+        # Always perform cleanup, regardless of logging success/failure
         await self.connection_manager.disconnect(websocket)
 
     def get_session_stats(self) -> Dict[str, Any]:

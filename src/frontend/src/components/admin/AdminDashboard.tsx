@@ -18,6 +18,8 @@ type SearchIndex = {
   lastUpdated: string
   vectorDimensions: number
   storageUsed: string
+  ai_conversations_count: number
+  human_conversations_count: number
 }
 
 type DashboardStats = {
@@ -27,6 +29,8 @@ type DashboardStats = {
   index_status: string
   last_updated: string
   vector_dimensions: number
+  ai_conversations_count: number
+  human_conversations_count: number
 }
 
 // Default index for fallback
@@ -38,7 +42,9 @@ const defaultIndex: SearchIndex = {
   status: 'error',
   lastUpdated: '2024-01-01T00:00:00Z',
   vectorDimensions: 3072,
-  storageUsed: '0 MB'
+  storageUsed: '0 MB',
+  ai_conversations_count: 0,
+  human_conversations_count: 0
 }
 
 export function AdminDashboard() {
@@ -68,7 +74,9 @@ export function AdminDashboard() {
         status: data.index_status as IndexStatus,
         lastUpdated: data.last_updated,
         vectorDimensions: data.vector_dimensions,
-        storageUsed: formatFileSize(data.total_storage_size)
+        storageUsed: formatFileSize(data.total_storage_size),
+        ai_conversations_count: data.ai_conversations_count,
+        human_conversations_count: data.human_conversations_count
       })
     } catch (e: any) {
       toast.error(e.message || 'Failed to load dashboard stats')
@@ -109,33 +117,25 @@ export function AdminDashboard() {
     {
       title: 'Documents',
       value: indexData.documentCount.toString(),
-      description: 'Total uploaded files',
       icon: FileText,
-      trend: '+12%',
       color: 'bg-blue-500'
     },
     {
       title: 'Search Index',
       value: '1',
-      description: 'Active knowledge base',
       icon: Database,
-      trend: 'Ready',
       color: 'bg-green-500'
     },
     {
-      title: 'Conversations',
-      value: '1,247',
-      description: 'Total chat sessions',
+      title: 'AI Agent Conversations',
+      value: indexData.ai_conversations_count.toLocaleString(),
       icon: ChatText,
-      trend: '+18%',
       color: 'bg-purple-500'
     },
     {
-      title: 'Success Rate',
-      value: '94.2%',
-      description: 'AI response accuracy',
+      title: 'Human Agent Conversations',
+      value: indexData.human_conversations_count.toLocaleString(),
       icon: TrendUp,
-      trend: '+2.1%',
       color: 'bg-orange-500'
     }
   ]
@@ -158,14 +158,6 @@ export function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
-                <div className="flex items-center justify-between mt-2">
-                  <p className="text-xs text-muted-foreground">
-                    {stat.description}
-                  </p>
-                  <Badge variant="secondary" className="text-xs">
-                    {stat.trend}
-                  </Badge>
-                </div>
               </CardContent>
             </Card>
           )

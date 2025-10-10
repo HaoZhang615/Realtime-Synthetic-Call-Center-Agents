@@ -8,7 +8,8 @@ multi-agent voice bot architecture.
 
 import logging
 import uuid
-from typing import Dict, Set, Optional
+from datetime import datetime, timezone
+from typing import Dict, Set, Optional, List
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,18 @@ class VoiceSession:
         self.current_agent = "root"  # Default to root agent
         self.conversation_items = []
         self.audio_buffer = bytearray()
+        
+        # Conversation logging fields
+        self.message_pairs: List[Dict[str, any]] = []  # User-assistant message pairs
+        self.session_start_time = datetime.now(timezone.utc)
+        self.session_end_time: Optional[datetime] = None
+        self.disconnect_reason: Optional[str] = None
+        self.graceful_disconnect = False
+        self.was_interrupted = False  # Track if current assistant message was interrupted
+        
+        # Analytics tracking (optional - for future use)
+        self.agents_used: List[str] = ["root"]  # Track which agents were used
+        self.tools_called: List[str] = []  # Track which tools were called
         
     def __str__(self):
         return f"VoiceSession(id={self.session_id}, customer={self.customer_id}, agent={self.current_agent})"

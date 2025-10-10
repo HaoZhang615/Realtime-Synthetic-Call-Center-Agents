@@ -398,6 +398,14 @@ class RealtimeHandler:
         
         This is the core bridge function that handles all message routing.
         """
+        # Import here to avoid circular dependency
+        from websocket.connection_manager import connection_manager
+        
+        # Get session for conversation tracking
+        session = connection_manager.get_session(session_id)
+        
+        if not session:
+            logger.warning(f"Session {session_id} not found in connection_manager - message tracking disabled")
         
         async def client_to_vendor():
             """Forward messages from browser client to Azure OpenAI"""
@@ -453,6 +461,43 @@ class RealtimeHandler:
                     try:
                         azure_message = json.loads(data)
                         msg_type = azure_message.get("type")
+                        
+                        # Track conversation messages for logging
+                        if session:
+                            # Track user transcription (completed)
+                            if msg_type == "conversation.item.input_audio_transcription.completed":
+                                transcript = azure_message.get("transcript", "")
+                                if transcript:
+                                    session.message_pairs.append({
+                                        "sender": "user",
+                                        "message": transcript,
+                                        "interrupted": False
+                                    })
+                                    logger.debug(f"Logged user message for session {session_id}")
+                            
+                            # Track assistant response (completed)
+                            elif msg_type == "response.audio_transcript.done":
+                                transcript = azure_message.get("transcript", "")
+                                if transcript:
+                                    session.message_pairs.append({
+                                        "sender": "assistant",
+                                        "message": transcript,
+                                        "interrupted": session.was_interrupted
+                                    })
+                                    logger.debug(f"Logged assistant message for session {session_id}")
+                                    # Reset interruption flag
+                                    session.was_interrupted = False
+                            
+                            # Track interruptions (user starts speaking while assistant is talking)
+                            elif msg_type == "input_audio_buffer.speech_started":
+                                # Mark that the current/next assistant message was interrupted
+                                session.was_interrupted = True
+                            
+                            # Track tool calls for metadata
+                            elif msg_type == "response.function_call_arguments.done":
+                                tool_name = azure_message.get("name")
+                                if tool_name and tool_name not in session.tools_called:
+                                    session.tools_called.append(tool_name)
                         
                         # Log all Azure messages for debugging
                         if msg_type not in {"response.audio.delta", "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped"}:
