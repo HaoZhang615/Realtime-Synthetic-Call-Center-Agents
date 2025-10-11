@@ -13,7 +13,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
       id: 'admin' as const,
       label: 'Admin Portal',
       icon: Gear,
-      description: 'Manage documents and indices'
+      // description: 'Documents Management and Data Synthesis'
     },
     {
       id: 'chat' as const,
@@ -24,7 +24,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
   ]
 
   return (
-    <div className="w-64 bg-card border-r border-border flex flex-col">
+    <div className="w-74 bg-card border-r border-border flex flex-col">
       {/* Header */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
@@ -32,8 +32,8 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
             <Activity className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="font-semibold text-lg text-foreground">AI Call Center</h1>
-            <p className="text-sm text-muted-foreground">Simulation System</p>
+            <h1 className="font-semibold text-lg text-foreground">AI Powered Call Center</h1>
+            <p className="text-sm text-muted-foreground">With Data Synthesis</p>
           </div>
         </div>
       </div>
@@ -50,27 +50,27 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
                 key={item.id}
                 variant={isActive ? "default" : "ghost"}
                 className={cn(
-                  "w-full justify-start h-auto p-4 text-left",
+                  "w-full justify-start h-auto p-4 text-left overflow-hidden",
                   isActive && "bg-primary text-primary-foreground shadow-sm"
                 )}
                 onClick={() => onSectionChange(item.id)}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 w-full min-w-0">
                   <Icon 
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
                       isActive ? "text-primary-foreground" : "text-muted-foreground"
                     )} 
                   />
-                  <div>
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className={cn(
-                      "font-medium",
+                      "font-medium truncate",
                       isActive ? "text-primary-foreground" : "text-foreground"
                     )}>
                       {item.label}
                     </div>
                     <div className={cn(
-                      "text-sm mt-1",
+                      "text-sm mt-1 leading-tight",
                       isActive ? "text-primary-foreground/80" : "text-muted-foreground"
                     )}>
                       {item.description}

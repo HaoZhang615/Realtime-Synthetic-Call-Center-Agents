@@ -58,7 +58,6 @@ class SynthesisRequest(BaseModel):
     company_name: str
     num_customers: int
     num_products: int
-    num_conversations: int
 
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
@@ -423,7 +422,7 @@ class JobLogHandler(logging.Handler):
             pass
 
 
-def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_products: int, num_conversations: int):
+def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_products: int):
     """Background task to run data synthesis with parameters."""
     try:
         job_status = JOBS.get(job_id)
@@ -434,7 +433,7 @@ def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_p
         def log(msg):
             job_status["logs"].append(msg)
             logger.info("Job %s: %s", job_id, msg)
-        logger.info(f"Starting data synthesis: company={company_name}, customers={num_customers}, products={num_products}, conversations={num_conversations}")
+        logger.info(f"Starting data synthesis: company={company_name}, customers={num_customers}, products={num_products}")
 
         # Attach real-time log handler to synthesizer logger
         job_handler = JobLogHandler(job_id)
@@ -483,14 +482,14 @@ def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_p
         synthesizer.synthesize_product_profiles(company_name)
         job_status["progress"] = 60
 
-        # Step 4: Generate conversations (80%)
-        log("Step 4/5: Generating human conversations...")
-        synthesizer.synthesize_human_conversations(num_conversations, company_name)
-        job_status["progress"] = 80
-
-        # Step 5: Generate purchases and save to Cosmos DB (100%)
-        log("Step 5/5: Generating purchases and saving to Cosmos DB...")
+        # Step 4: Generate purchases (75%)
+        log("Step 4/5: Generating purchases...")
         synthesizer.synthesize_purchases()
+        job_status["progress"] = 75
+
+        # Step 5: Generate conversations and save to Cosmos DB (100%)
+        log("Step 5/5: Generating human conversations and saving to Cosmos DB...")
+        synthesizer.synthesize_human_conversations()
         for folder, container in [
             ('Cosmos_ProductUrl', synthesizer.containers['product_url']),
             ('Cosmos_Customer', synthesizer.containers['customer']),
@@ -538,8 +537,7 @@ async def synthesize_data(request: SynthesisRequest, background_tasks: Backgroun
             job_id,
             request.company_name,
             request.num_customers,
-            request.num_products,
-            request.num_conversations
+            request.num_products
         )
 
         return {"status": "synthesis_started", "job_id": job_id}

@@ -32,7 +32,6 @@ export function SyntheticDataGen() {
   const [companyName, setCompanyName] = useState('Microsoft')
   const [numCustomers, setNumCustomers] = useState('2')
   const [numProducts, setNumProducts] = useState('2')
-  const [numConversations, setNumConversations] = useState('0')
 
   const dataTypeOptions = [
     { value: 'customer-calls', label: 'Customer Service Calls' },
@@ -88,10 +87,6 @@ export function SyntheticDataGen() {
       toast.error('Please enter a valid number of products')
       return
     }
-    if (!numConversations || parseInt(numConversations) <= 0) {
-      toast.error('Please enter a valid number of conversations')
-      return
-    }
 
     setIsGenerating(true)
     toast.success('Synthetic data generation started')
@@ -104,8 +99,7 @@ export function SyntheticDataGen() {
         body: JSON.stringify({
           company_name: companyName,
           num_customers: parseInt(numCustomers),
-          num_products: parseInt(numProducts),
-          num_conversations: parseInt(numConversations)
+          num_products: parseInt(numProducts)
         })
       })
       const result = await response.json();
@@ -115,7 +109,7 @@ export function SyntheticDataGen() {
         setGenerationJobs(prev => [{
           id: jobId,
           type: 'synthesis',
-          recordCount: parseInt(numConversations),
+          recordCount: parseInt(numCustomers) * 2, // 2 conversations per customer
           status: 'running',
           progress: 0,
           startedAt: new Date().toISOString(),
@@ -159,13 +153,18 @@ export function SyntheticDataGen() {
             Synthetic Data Generation
           </CardTitle>
           <CardDescription>
-            Generate realistic synthetic data for testing and training your AI models
+            Generate realistic synthetic data in CosmosDB for testing and demo
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="company-name">Company Name</Label>
+              <Label htmlFor="company-name">
+                Company Name
+                <span className="block text-xs font-normal text-muted-foreground mt-1">
+                  (e.g. Microsoft, Apple, Unilever, Nestlé)
+                </span>
+              </Label>
               <Input
                 id="company-name"
                 type="text"
@@ -175,7 +174,12 @@ export function SyntheticDataGen() {
               />
             </div>
             <div>
-              <Label htmlFor="num-customers">Number of Customers</Label>
+              <Label htmlFor="num-customers">
+                Number of Customers
+                <span className="block text-xs font-normal text-muted-foreground mt-1">
+                  (each will have 2 purchases and 2 conversations)
+                </span>
+              </Label>
               <Input
                 id="num-customers"
                 type="number"
@@ -187,7 +191,12 @@ export function SyntheticDataGen() {
               />
             </div>
             <div>
-              <Label htmlFor="num-products">Number of Products</Label>
+              <Label htmlFor="num-products">
+                Number of Products
+                <span className="block text-xs font-normal text-muted-foreground mt-1">
+                  (that the company above sells)
+                </span>
+              </Label>
               <Input
                 id="num-products"
                 type="number"
@@ -196,18 +205,6 @@ export function SyntheticDataGen() {
                 value={numProducts}
                 onChange={(e) => setNumProducts(e.target.value)}
                 placeholder="2"
-              />
-            </div>
-            <div>
-              <Label htmlFor="num-conversations">Number of Conversations</Label>
-              <Input
-                id="num-conversations"
-                type="number"
-                min="0"
-                max="100"
-                value={numConversations}
-                onChange={(e) => setNumConversations(e.target.value)}
-                placeholder="1"
               />
             </div>
           </div>

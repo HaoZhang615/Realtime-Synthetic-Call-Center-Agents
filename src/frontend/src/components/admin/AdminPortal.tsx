@@ -15,7 +15,7 @@ export function AdminPortal() {
         <div className="p-6">
           <h1 className="text-2xl font-bold text-foreground">Admin Portal</h1>
           <p className="text-muted-foreground mt-1">
-            Manage documents, knowledge base, and system configuration
+            Manage documents, knowledge base, and data synthesis
           </p>
         </div>
       </div>

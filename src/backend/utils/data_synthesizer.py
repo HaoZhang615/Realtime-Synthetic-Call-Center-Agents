@@ -155,7 +155,7 @@ class DataSynthesizer:
                     os.remove(file_path)
                     logger.info(f"Deleted: {file_path}")  # Optional: Log deleted file paths for confirmation
 
-    def synthesize_everything(self, company_name, num_customers, num_products, num_conversations):
+    def synthesize_everything(self, company_name, num_customers, num_products):
         
         # Refresh Cosmos DB containers
         self.refresh_container(self.database, cosmos_producturl_container_name, "/company_name")
@@ -172,7 +172,7 @@ class DataSynthesizer:
         self.synthesize_customer_profiles(num_customers)
         self.synthesize_product_profiles(company_name)
         self.synthesize_purchases()
-        self.synthesize_human_conversations(num_conversations, company_name)
+        self.synthesize_human_conversations()
 
         # Upload all data to Cosmos DB
         for folder, container in [
@@ -336,6 +336,17 @@ class DataSynthesizer:
                     return product_details
         return {}
 
+    def get_customer_name(self, customer_id):
+        """Get customer's first name from their customer_id"""
+        customer_directory = os.path.join(self.base_dir, "Cosmos_Customer")
+        for filename in os.listdir(customer_directory):
+            file_path = os.path.join(customer_directory, filename)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                customer = json.load(f)
+                if customer.get('customer_id') == customer_id:
+                    return customer.get('first_name', 'Customer')
+        return 'Customer'  # Fallback
+
     def synthesize_purchases(self):
         # Loop through the files in Cosmos_Customer and Cosmos_Product to gather customer_ids and product_ids
         customer_ids = []
@@ -416,50 +427,70 @@ class DataSynthesizer:
             random.choice(customers)
         )
 
-    def synthesize_human_conversations(self, num_conversations, company_name):
-        # product list is defined by the only json file in the local folder Cosmos_ProductUrl, in the "product" key
-        producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
-        with open(producturls_file_path, "r", encoding="utf-8") as f:
-            PRODUCTS_LIST = json.load(f)["products"]
-        for i in range(num_conversations):
-            # Randomly select elements for the conversation
-            random_sentiment, random_topic, random_product, random_agent, random_customer = self.randomized_prompt_elements(
-                SENTIMENTS_LIST, TOPICS_LIST, PRODUCTS_LIST, AGENT_LIST, FIRST_NAME_LIST
-            )
+    def synthesize_human_conversations(self):
+        # Load all purchases to link conversations to actual customer purchases
+        purchases = []
+        purchases_directory = os.path.join(self.base_dir, "Cosmos_Purchases")
+        for filename in os.listdir(purchases_directory):
+            file_path = os.path.join(purchases_directory, filename)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                purchase = json.load(f)
+                purchases.append(purchase)
+        
+        logger.info(f"Loaded {len(purchases)} purchases for conversation generation")
+        
+        # Generate one conversation per purchase
+        for idx, purchase in enumerate(purchases):
+            customer_id = purchase.get('customer_id')
+            product_id = purchase.get('product_id')
+            order_number = purchase.get('order_number')
+            product_details = purchase.get('product_details', {})
+            product_name = product_details.get('name', 'product')
             
-            # Create prompt for Azure OpenAI
+            # Get customer's first name
+            customer_first_name = self.get_customer_name(customer_id)
+            
+            # Randomly select sentiment, topic, and agent
+            random_sentiment = random.choice(SENTIMENTS_LIST)
+            random_topic = random.choice(TOPICS_LIST)
+            random_agent = random.choice(AGENT_LIST)
+            
+            # Create prompt for Azure OpenAI with purchase context
             document_creation_prompt = f"""CREATE a JSON document of a conversation between a customer and an agent.
+            The customer {customer_first_name} (customer_id: {customer_id}) is calling about their order {order_number}.
+            They purchased {product_name} (product_id: {product_id}).
+            
             Sentiment: {random_sentiment}
             Topic: {random_topic}
-            Product: {random_product}
             Agent: {random_agent}
-            Customer: {random_customer}
+            
             The required schema for the document is to follow the example below:
             {{
                 "conversation_id": "string",
-                "customer_id": "string",
+                "customer_id": "{customer_id}",
                 "agent_id": "string",
                 "messages": [
                     {{
                         "sender": "customer",
-                        "message": "Hello, I need help with my {random_product}."
+                        "message": "Hello, I need help with my {product_name}."
                     }},
                     {{
                         "sender": "agent",
-                        "message": "Sure, I'd be happy to assist you with your {random_product}."
+                        "message": "Sure, I'd be happy to assist you with your {product_name}."
                     }}
                 ],
                 "sentiment": "{random_sentiment}",
                 "topic": "{random_topic}"
             }}
             Be creative about the messages and do not use markdown to format the json object.
+            The customer_id MUST be exactly: {customer_id}
             """
             
             # Generate the document using Azure OpenAI
             generated_document = self.create_document(document_creation_prompt)
             
             # Create a dynamic document name
-            document_name = self.create_document_name(i, random_sentiment, random_topic, random_product)
+            document_name = self.create_document_name(idx, random_sentiment, random_topic, product_name)
             file_path = os.path.join(self.base_dir, "Cosmos_HumanConversations", document_name)
             
             # Save the generated document to the local folder
@@ -468,31 +499,48 @@ class DataSynthesizer:
             logger.info(f"Document {document_name} has been successfully created!")
         
         # Additional logic to update human conversations:
-        # loop through the files in the local folder Cosmos_HumanConversations and update them:
-        # 1. read the file and load the content
-        # 2. create a hash value of the combination of customer_id and agent_id and assign it to the conversation_id
-        # 3. add a id field with the value of the current iteration index number plus the conversation_id
-        # 4. save the updated content back to the file
+        # loop through the files in the local folder Cosmos_HumanConversations and update them
         directory = os.path.join(self.base_dir, "Cosmos_HumanConversations")
+        
+        # Rebuild purchase lookup for metadata enrichment
+        purchase_by_index = {}
+        for idx, purchase in enumerate(purchases):
+            purchase_by_index[idx] = purchase
+        
         for file in os.listdir(directory):
             file_path = os.path.join(directory, file)
             with open(file_path, 'r', encoding='utf-8') as f:
                 document = json.load(f)
                 filename = file.split('.')[0]
+                
+                # Extract index from filename to match with purchase
+                file_index = int(filename.split('_')[0])
+                
                 # add the "sentiment", "topic" and "product" key based on the file name to each JSON file
-                sentiment, topic, product = filename.split('_')[1], filename.split('_')[2], filename.split('_')[3]
+                sentiment, topic, product = filename.split('_')[1], filename.split('_')[2], '_'.join(filename.split('_')[3:])
                 document["sentiment"] = sentiment
                 document["topic"] = topic
                 document["product"] = product
+                
+                # Add purchase-related metadata
+                if file_index in purchase_by_index:
+                    purchase = purchase_by_index[file_index]
+                    document["order_number"] = purchase.get('order_number')
+                    document["product_id"] = purchase.get('product_id')
+                    # Ensure customer_id is from the purchase (real customer)
+                    document["customer_id"] = purchase.get('customer_id')
+                
+                # Generate session_id and id
                 session_id = uuid.uuid3(uuid.NAMESPACE_DNS, f"{document['customer_id']}_{document['agent_id']}_{document['sentiment']}_{document['topic']}_{document['product']}").hex
                 document['session_id'] = session_id
                 document['id'] = f"chat_{filename.split('_')[0]}_{session_id}"
+            
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(document, f, ensure_ascii=False, indent=4)
             logger.info(f"Document {file} has been successfully updated!")
 
 
-def run_synthesis(company_name, num_customers, num_products, num_conversations):
+def run_synthesis(company_name, num_customers, num_products):
     base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets')
     # Ensure the assets directory structure exists
     base_assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
@@ -500,4 +548,4 @@ def run_synthesis(company_name, num_customers, num_products, num_conversations):
         os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
     # print(f"Base directory: {base_dir}")
     synthesizer = DataSynthesizer(base_dir)
-    synthesizer.synthesize_everything(company_name, num_customers, num_products, num_conversations)
+    synthesizer.synthesize_everything(company_name, num_customers, num_products)
