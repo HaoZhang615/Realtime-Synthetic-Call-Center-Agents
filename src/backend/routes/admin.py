@@ -72,6 +72,18 @@ class DashboardStats(BaseModel):
     ai_conversations_count: int
     human_conversations_count: int
 
+class ProductSentimentStats(BaseModel):
+    product_name: str
+    total_conversations: int
+    positive: int
+    negative: int
+    neutral: int
+
+class ConversationSentimentStats(BaseModel):
+    products: List[ProductSentimentStats]
+    overall_sentiment_distribution: dict
+    total_conversations: int
+
 
 @admin_router.get("/dashboard")
 async def get_dashboard_stats():
@@ -178,6 +190,92 @@ async def get_dashboard_stats():
             vector_dimensions=3072,
             ai_conversations_count=0,
             human_conversations_count=0
+        )
+
+
+@admin_router.get("/conversation-sentiment-stats")
+async def get_conversation_sentiment_stats():
+    """Get sentiment statistics for human conversations grouped by product."""
+    try:
+        cosmos_endpoint = os.getenv("COSMOSDB_ENDPOINT")
+        cosmos_database = os.getenv("COSMOSDB_DATABASE")
+        
+        if not cosmos_endpoint or not cosmos_database:
+            return ConversationSentimentStats(
+                products=[],
+                overall_sentiment_distribution={},
+                total_conversations=0
+            )
+        
+        cosmos_client = CosmosClient(cosmos_endpoint, credential)
+        database = cosmos_client.get_database_client(cosmos_database)
+        
+        try:
+            human_container = database.get_container_client("Human_Conversations")
+            
+            # Query all conversations with product and sentiment
+            query = "SELECT c.product, c.sentiment FROM c"
+            conversations = list(human_container.query_items(
+                query=query,
+                enable_cross_partition_query=True
+            ))
+            
+            # Aggregate data by product and sentiment
+            product_stats = {}
+            overall_sentiments = {'positive': 0, 'negative': 0, 'neutral': 0}
+            
+            for conv in conversations:
+                product = conv.get('product', 'Unknown')
+                sentiment = conv.get('sentiment', 'neutral')
+                
+                # Initialize product if not exists
+                if product not in product_stats:
+                    product_stats[product] = {
+                        'product_name': product,
+                        'total_conversations': 0,
+                        'positive': 0,
+                        'negative': 0,
+                        'neutral': 0
+                    }
+                
+                # Count sentiments per product
+                product_stats[product]['total_conversations'] += 1
+                if sentiment in ['positive', 'negative', 'neutral']:
+                    product_stats[product][sentiment] += 1
+                
+                # Count overall sentiments
+                if sentiment in overall_sentiments:
+                    overall_sentiments[sentiment] += 1
+            
+            # Convert to list of ProductSentimentStats
+            products_list = [
+                ProductSentimentStats(**stats) 
+                for stats in product_stats.values()
+            ]
+            
+            # Sort by total conversations descending
+            products_list.sort(key=lambda x: x.total_conversations, reverse=True)
+            
+            return ConversationSentimentStats(
+                products=products_list,
+                overall_sentiment_distribution=overall_sentiments,
+                total_conversations=len(conversations)
+            )
+            
+        except Exception as ex:
+            logger.warning("Failed to query Human_Conversations for sentiment stats: %s", ex)
+            return ConversationSentimentStats(
+                products=[],
+                overall_sentiment_distribution={},
+                total_conversations=0
+            )
+            
+    except Exception as ex:
+        logger.exception("Failed to get conversation sentiment stats: %s", ex)
+        return ConversationSentimentStats(
+            products=[],
+            overall_sentiment_distribution={},
+            total_conversations=0
         )
 
 

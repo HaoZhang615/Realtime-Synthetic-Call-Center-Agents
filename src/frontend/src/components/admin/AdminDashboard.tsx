@@ -6,6 +6,7 @@ import { FileText, Database, ChatText, TrendUp, ArrowsClockwise, CheckCircle, XC
 import { toast } from 'sonner'
 import { useState, useEffect, useCallback } from 'react'
 import { getApiBase } from '@/config'
+import { ConversationSentimentWidget, ConversationSentimentStats } from './ConversationSentimentWidget'
 
 type IndexStatus = 'active' | 'syncing' | 'error'
 
@@ -50,6 +51,7 @@ const defaultIndex: SearchIndex = {
 export function AdminDashboard() {
   const [indexData, setIndexData] = useState(defaultIndex)
   const [loading, setLoading] = useState(false)
+  const [sentimentStats, setSentimentStats] = useState<ConversationSentimentStats | null>(null)
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 MB'
@@ -62,6 +64,7 @@ export function AdminDashboard() {
   const fetchDashboardStats = useCallback(async () => {
     setLoading(true)
     try {
+      // Fetch dashboard stats
       const res = await fetch(`${getApiBase()}/api/admin/dashboard`)
       if (!res.ok) throw new Error(`Failed to fetch dashboard stats: ${res.status}`)
       const data: DashboardStats = await res.json()
@@ -78,6 +81,17 @@ export function AdminDashboard() {
         ai_conversations_count: data.ai_conversations_count,
         human_conversations_count: data.human_conversations_count
       })
+
+      // Fetch sentiment stats
+      try {
+        const sentimentRes = await fetch(`${getApiBase()}/api/admin/conversation-sentiment-stats`)
+        if (sentimentRes.ok) {
+          const sentimentData: ConversationSentimentStats = await sentimentRes.json()
+          setSentimentStats(sentimentData)
+        }
+      } catch (e) {
+        console.error('Failed to fetch sentiment stats:', e)
+      }
     } catch (e: any) {
       toast.error(e.message || 'Failed to load dashboard stats')
       setIndexData(defaultIndex)
@@ -221,37 +235,9 @@ export function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent Activity */}
+      {/* Analytics and Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>System Health</CardTitle>
-            <CardDescription>Current system performance metrics</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium">API Response Time</span>
-                <span className="text-sm text-muted-foreground">245ms</span>
-              </div>
-              <Progress value={75} className="h-2" />
-            </div>
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium">Search Index Health</span>
-                <span className="text-sm text-muted-foreground">98%</span>
-              </div>
-              <Progress value={98} className="h-2" />
-            </div>
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium">Voice Processing</span>
-                <span className="text-sm text-muted-foreground">92%</span>
-              </div>
-              <Progress value={92} className="h-2" />
-            </div>
-          </CardContent>
-        </Card>
+        <ConversationSentimentWidget data={sentimentStats} loading={loading} />
 
         <Card>
           <CardHeader>

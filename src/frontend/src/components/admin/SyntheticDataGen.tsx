@@ -109,7 +109,7 @@ export function SyntheticDataGen() {
         setGenerationJobs(prev => [{
           id: jobId,
           type: 'synthesis',
-          recordCount: parseInt(numCustomers) * 2, // 2 conversations per customer
+          recordCount: parseInt(numCustomers) * 4, // 4 conversations per customer
           status: 'running',
           progress: 0,
           startedAt: new Date().toISOString(),
@@ -177,7 +177,7 @@ export function SyntheticDataGen() {
               <Label htmlFor="num-customers">
                 Number of Customers
                 <span className="block text-xs font-normal text-muted-foreground mt-1">
-                  (each will have 2 purchases and 2 conversations)
+                  (each will have 4 purchases and 4 conversations)
                 </span>
               </Label>
               <Input

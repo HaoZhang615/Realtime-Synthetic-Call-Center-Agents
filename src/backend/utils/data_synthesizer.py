@@ -26,7 +26,7 @@ token_provider = get_bearer_token_provider(
     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
 )
 # Constants for synthesis
-SENTIMENTS_LIST = ['positive', 'negative', 'neutral', 'mixed', 'content', 'upset', 'angry', 'frustrated', 'happy', 'disappointed', 'confused']
+SENTIMENTS_LIST = ['positive', 'negative', 'neutral']
 TOPICS_LIST = ['churn', 'assistance', 'support', 'information', 'billing', 'payment', 'account', 'service', 'Quality', 'Sustainability']
 AGENT_LIST = ['adam','betrace','curie','davinci','emil', 'fred']
 FIRST_NAME_LIST = ['Alex','Brian','Chloe','David','Emma','Fiona','George','Hannah','Ian','Julia','Kevin','Lucy','Michael',
@@ -365,9 +365,9 @@ class DataSynthesizer:
                 product_profile = json.load(f)
                 product_ids.append(product_profile.get('product_id'))
         
-        # For each customer, generate 2 random purchase records with random product_id
+        # For each customer, generate 4 random purchase records with random product_id
         for idx, customer_id in enumerate(customer_ids):
-            for i in range(2):
+            for i in range(4):
                 random_product_id = random.choice(product_ids)
                 document_creation_prompt = f"""CREATE a JSON document of a purchase record. The product_id is {random_product_id} which is bought by the customer_id {customer_id}. 
                 The required schema for the document is to follow the example below:
@@ -384,7 +384,7 @@ class DataSynthesizer:
                 """
 
                 generated_document = self.create_document(document_creation_prompt)
-                document_name = self.create_document_name(idx*2+i+1, random_product_id, customer_id, "")
+                document_name = self.create_document_name(idx*4+i+1, random_product_id, customer_id, "")
 
                 # Save the JSON document to the local folder Cosmos_Purchases
                 file_path = os.path.join(self.base_dir, "Cosmos_Purchases", document_name)
