@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 type ProductSentimentStats = {
   product_name: string
@@ -71,23 +71,86 @@ export function ConversationSentimentWidget({ data, loading }: ConversationSenti
   const [modalConversations, setModalConversations] = useState<ConversationData[]>([])
   const [expandedConvIndex, setExpandedConvIndex] = useState<number | null>(null)
 
-  // Get unique product list from data
+  // Get unique product list from data (filtered by selected agent and topic)
   const productList = useMemo(() => {
     if (!data || !data.conversations) return []
-    const products = new Set(data.conversations.map(conv => conv.product))
+    
+    // Filter conversations based on currently selected agent and topic
+    let filteredConvs = data.conversations
+    
+    if (selectedAgent !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.agent_id === selectedAgent)
+    }
+    
+    if (selectedTopic !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.topic === selectedTopic)
+    }
+    
+    const products = new Set(filteredConvs.map(conv => conv.product))
     return Array.from(products).sort()
-  }, [data])
+  }, [data, selectedAgent, selectedTopic])
 
-  // Get unique topic list from data
+  // Get unique topic list from data (filtered by selected agent and product)
   const topicList = useMemo(() => {
     if (!data || !data.conversations) return []
+    
+    // Filter conversations based on currently selected agent and product
+    let filteredConvs = data.conversations
+    
+    if (selectedAgent !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.agent_id === selectedAgent)
+    }
+    
+    if (selectedProduct !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.product === selectedProduct)
+    }
+    
     const topics = new Set(
-      data.conversations
+      filteredConvs
         .map(conv => conv.topic)
         .filter((topic): topic is string => typeof topic === 'string' && topic !== null)
     )
     return Array.from(topics).sort()
-  }, [data])
+  }, [data, selectedAgent, selectedProduct])
+
+  // Get unique agent list from data (filtered by selected topic and product)
+  const agentList = useMemo(() => {
+    if (!data || !data.conversations) return AGENT_LIST
+    
+    // Filter conversations based on currently selected topic and product
+    let filteredConvs = data.conversations
+    
+    if (selectedTopic !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.topic === selectedTopic)
+    }
+    
+    if (selectedProduct !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.product === selectedProduct)
+    }
+    
+    const agents = new Set(filteredConvs.map(conv => conv.agent_id))
+    // Return only agents that exist in the filtered data, maintaining the original order
+    return AGENT_LIST.filter(agent => agents.has(agent))
+  }, [data, selectedTopic, selectedProduct])
+
+  // Auto-reset filters when selected value is no longer available
+  useEffect(() => {
+    if (selectedProduct !== 'all' && !productList.includes(selectedProduct)) {
+      setSelectedProduct('all')
+    }
+  }, [productList, selectedProduct])
+  
+  useEffect(() => {
+    if (selectedTopic !== 'all' && !topicList.includes(selectedTopic)) {
+      setSelectedTopic('all')
+    }
+  }, [topicList, selectedTopic])
+  
+  useEffect(() => {
+    if (selectedAgent !== 'all' && !agentList.includes(selectedAgent)) {
+      setSelectedAgent('all')
+    }
+  }, [agentList, selectedAgent])
 
   // Filter and re-aggregate data by calendar week
   const filteredData = useMemo(() => {
@@ -315,7 +378,7 @@ export function ConversationSentimentWidget({ data, loading }: ConversationSenti
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Agents</SelectItem>
-                    {AGENT_LIST.map(agent => (
+                    {agentList.map(agent => (
                       <SelectItem key={agent} value={agent}>
                         {agent.charAt(0).toUpperCase() + agent.slice(1)}
                       </SelectItem>
