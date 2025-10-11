@@ -336,49 +336,74 @@ class DatabaseAgent:
             logger.info(f"[DB_Agent][Customer:{self.customer_id}] No purchases found")
             return f"No purchases found for customer: {self.customer_id}."
 
+        # Batch fetch all product details in a single query
         logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Enriching {len(purchases)} purchases with product details")
-        enhanced: List[Dict[str, Any]] = []
-        product_lookup_time = 0.0
         
-        for idx, purchase in enumerate(purchases):
-            product_start = time.perf_counter()
-            logger.debug(
-                f"[DB_Agent][Customer:{self.customer_id}] Enriching purchase {idx+1}/{len(purchases)}, "
-                f"product_id={purchase.get('product_id')}"
+        # Collect unique product IDs
+        product_ids = list(set(purchase.get('product_id') for purchase in purchases))
+        logger.debug(f"[DB_Agent][Customer:{self.customer_id}] Fetching {len(product_ids)} unique products in batch")
+        
+        product_lookup_start = time.perf_counter()
+        
+        # Batch query all products at once using IN clause
+        try:
+            # Build IN clause for SQL query
+            product_query = (
+                "SELECT c.product_id, c.name, c.category, c.type, c.brand, c.company, "
+                "c.unit_price, c.weight FROM c WHERE c.product_id IN ({})".format(
+                    ', '.join([f"@pid{i}" for i in range(len(product_ids))])
+                )
             )
             
-            product = list(
+            # Build parameters list
+            product_params = [
+                {"name": f"@pid{i}", "value": pid} 
+                for i, pid in enumerate(product_ids)
+            ]
+            
+            products = list(
                 product_container.query_items(
-                    query=(
-                        "SELECT c.name, c.category, c.type, c.brand, c.company, "
-                        "c.unit_price, c.weight FROM c WHERE c.product_id = @pid"
-                    ),
-                    parameters=[
-                        {"name": "@pid", "value": purchase["product_id"]}
-                    ],
+                    query=product_query,
+                    parameters=product_params,
                     enable_cross_partition_query=True,
                 )
             )
             
-            product_elapsed = time.perf_counter() - product_start
-            product_lookup_time += product_elapsed
-            logger.debug(
-                f"[DB_Agent][Customer:{self.customer_id}] Product lookup {idx+1} took {product_elapsed:.2f}s"
+            product_lookup_time = time.perf_counter() - product_lookup_start
+            logger.info(
+                f"[DB_Agent][Customer:{self.customer_id}] Batch product lookup completed in {product_lookup_time:.2f}s, "
+                f"found {len(products)} products"
             )
             
-            product_info = (
-                {
-                    "name": product[0].get("name"),
-                    "category": product[0].get("category"),
-                    "type": product[0].get("type"),
-                    "brand": product[0].get("brand"),
-                    "company": product[0].get("company"),
-                    "price": product[0].get("unit_price"),
-                    "weight": product[0].get("weight"),
+            # Create lookup dictionary for O(1) access
+            product_dict = {
+                p.get('product_id'): {
+                    "name": p.get("name"),
+                    "category": p.get("category"),
+                    "type": p.get("type"),
+                    "brand": p.get("brand"),
+                    "company": p.get("company"),
+                    "price": p.get("unit_price"),
+                    "weight": p.get("weight"),
                 }
-                if product
-                else {"error": "Product details not found."}
+                for p in products
+            }
+            
+        except exceptions.CosmosHttpResponseError as exc:
+            logger.exception(f"[DB_Agent][Customer:{self.customer_id}] Failed to retrieve product details")
+            # Fallback: create empty product dict
+            product_dict = {}
+            product_lookup_time = time.perf_counter() - product_lookup_start
+        
+        # Enrich purchases with product details from lookup
+        enhanced: List[Dict[str, Any]] = []
+        for purchase in purchases:
+            product_id = purchase.get('product_id')
+            product_info = product_dict.get(
+                product_id,
+                {"error": "Product details not found."}
             )
+            
             enhanced.append(
                 {
                     "quantity": purchase.get("quantity"),

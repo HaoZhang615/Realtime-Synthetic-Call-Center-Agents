@@ -659,6 +659,8 @@ export class RealtimeClient {
    * Disconnect from the API
    */
   disconnect() {
+    // Stop all playing audio before disconnecting
+    this.stopAllAudio()
     this.api.disconnect()
   }
 
