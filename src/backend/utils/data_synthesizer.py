@@ -7,7 +7,7 @@ import sys
 from openai import AzureOpenAI
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import load_dotenv_from_azd
 
 # Set up logger for data synthesizer
@@ -446,9 +446,24 @@ class DataSynthesizer:
             order_number = purchase.get('order_number')
             product_details = purchase.get('product_details', {})
             product_name = product_details.get('name', 'product')
-            
+            delivered_date_str = purchase.get('delivered_date', '')
+
             # Get customer's first name
             customer_first_name = self.get_customer_name(customer_id)
+            
+            # Calculate conversation date: 1-7 days after delivery
+            conversation_date = None
+            if delivered_date_str:
+                try:
+                    # Parse delivery date - handle common formats
+                    delivered_date = datetime.fromisoformat(delivered_date_str.replace('Z', '+00:00'))
+                    # Add random 1-7 days
+                    days_after_delivery = random.randint(1, 7)
+                    conversation_datetime = delivered_date + timedelta(days=days_after_delivery)
+                    conversation_date = conversation_datetime.isoformat()
+                except Exception as e:
+                    logger.warning(f"Could not parse delivery date '{delivered_date_str}': {e}")
+                    conversation_date = None
             
             # Randomly select sentiment, topic, and agent
             random_sentiment = random.choice(SENTIMENTS_LIST)
@@ -529,6 +544,20 @@ class DataSynthesizer:
                     document["product_id"] = purchase.get('product_id')
                     # Ensure customer_id is from the purchase (real customer)
                     document["customer_id"] = purchase.get('customer_id')
+                    
+                    # Calculate conversation date: 1-7 days after delivery
+                    delivered_date_str = purchase.get('delivered_date', '')
+                    if delivered_date_str:
+                        try:
+                            delivered_date = datetime.fromisoformat(delivered_date_str.replace('Z', '+00:00'))
+                            days_after_delivery = random.randint(1, 7)
+                            conversation_datetime = delivered_date + timedelta(days=days_after_delivery)
+                            document["conversation_date"] = conversation_datetime.isoformat()
+                        except Exception as e:
+                            logger.warning(f"Could not calculate conversation date for {file}: {e}")
+                            document["conversation_date"] = None
+                    else:
+                        document["conversation_date"] = None
                 
                 # Generate session_id and id
                 session_id = uuid.uuid3(uuid.NAMESPACE_DNS, f"{document['customer_id']}_{document['agent_id']}_{document['sentiment']}_{document['topic']}_{document['product']}").hex

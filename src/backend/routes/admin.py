@@ -10,7 +10,7 @@ import os
 import sys
 import tempfile
 import shutil
-from typing import List
+from typing import List, Optional
 import uuid
 from io import StringIO
 import contextlib
@@ -79,10 +79,19 @@ class ProductSentimentStats(BaseModel):
     negative: int
     neutral: int
 
+class ConversationData(BaseModel):
+    product: str
+    sentiment: str
+    agent_id: str
+    conversation_date: Optional[str] = None
+    messages: Optional[list] = None  # Array of {sender, message} objects
+    topic: Optional[str] = None
+
 class ConversationSentimentStats(BaseModel):
     products: List[ProductSentimentStats]
     overall_sentiment_distribution: dict
     total_conversations: int
+    conversations: List[ConversationData]  # Raw conversation data for filtering
 
 
 @admin_router.get("/dashboard")
@@ -213,8 +222,8 @@ async def get_conversation_sentiment_stats():
         try:
             human_container = database.get_container_client("Human_Conversations")
             
-            # Query all conversations with product and sentiment
-            query = "SELECT c.product, c.sentiment FROM c"
+            # Query all conversations with product, sentiment, agent_id, conversation_date, messages, and topic
+            query = "SELECT c.product, c.sentiment, c.agent_id, c.conversation_date, c.messages, c.topic FROM c"
             conversations = list(human_container.query_items(
                 query=query,
                 enable_cross_partition_query=True
@@ -224,9 +233,26 @@ async def get_conversation_sentiment_stats():
             product_stats = {}
             overall_sentiments = {'positive': 0, 'negative': 0, 'neutral': 0}
             
+            # Store raw conversations for frontend filtering
+            conversations_data = []
+            
             for conv in conversations:
                 product = conv.get('product', 'Unknown')
                 sentiment = conv.get('sentiment', 'neutral')
+                agent_id = conv.get('agent_id', 'unknown')
+                conversation_date = conv.get('conversation_date')
+                messages = conv.get('messages', [])
+                topic = conv.get('topic', 'Unknown')
+                
+                # Store conversation data
+                conversations_data.append({
+                    'product': product,
+                    'sentiment': sentiment,
+                    'agent_id': agent_id,
+                    'conversation_date': conversation_date,
+                    'messages': messages,
+                    'topic': topic
+                })
                 
                 # Initialize product if not exists
                 if product not in product_stats:
@@ -259,7 +285,8 @@ async def get_conversation_sentiment_stats():
             return ConversationSentimentStats(
                 products=products_list,
                 overall_sentiment_distribution=overall_sentiments,
-                total_conversations=len(conversations)
+                total_conversations=len(conversations),
+                conversations=conversations_data  # Include raw data for client-side filtering
             )
             
         except Exception as ex:
@@ -267,7 +294,8 @@ async def get_conversation_sentiment_stats():
             return ConversationSentimentStats(
                 products=[],
                 overall_sentiment_distribution={},
-                total_conversations=0
+                total_conversations=0,
+                conversations=[]
             )
             
     except Exception as ex:
@@ -275,7 +303,8 @@ async def get_conversation_sentiment_stats():
         return ConversationSentimentStats(
             products=[],
             overall_sentiment_distribution={},
-            total_conversations=0
+            total_conversations=0,
+            conversations=[]
         )
 
 
