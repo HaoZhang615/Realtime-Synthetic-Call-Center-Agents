@@ -65,7 +65,7 @@ class RealtimeHandler:
         # Get endpoint and normalize it (remove trailing slash, convert to wss)
         foundry_endpoint = os.getenv("AZURE_AI_FOUNDRY_ENDPOINT", "").rstrip("/")
         self.azure_endpoint = foundry_endpoint.replace("https://", "wss://")
-        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
+        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview")
         self.deployment = os.getenv("AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT")
         self.scope = "https://cognitiveservices.azure.com/.default"
         
