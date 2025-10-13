@@ -20,6 +20,4 @@ These environment vaiables are set automatically by `azd` when the infrastructur
 
 They are set in the AZD env file: `$project/.azure/<selected_azd_environment>/.env`
 
-You have to manually add the environment variable `BING_SEARCH_API_KEY` in the .env file's last line.
-
 When `chainlit` command is run, the application looks up and reads the `.env` file above automatically.

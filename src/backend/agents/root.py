@@ -69,21 +69,19 @@ def get_target_company() -> Optional[str]:
     return items[0].get("company")
 
 
-HAS_BING_KEY = bool(os.getenv("BING_SEARCH_API_KEY"))
-
-
 def root_assistant(customer_id: str) -> Dict[str, Any]:
     """Return the root agent configuration for the specified customer."""
     company = get_target_company() or "the company"
     customer_profile = get_customer_info(customer_id)
     profile_json = json.dumps(customer_profile, indent=4) if customer_profile else "{}"
 
-    instructions = [f"You are a helpful assistant working for the company {company}.", "You oversee four specialized agents (web search, email, database, and knowledge base).", "Keep answers short, professional, and suited for voice interactions.", "Always route tasks to the appropriate agent instead of answering directly. Confirm additional questions and close once resolved."]
-
-    if not HAS_BING_KEY:
-        instructions.append("Inform users that web search requires a Bing Search API key if they request that capability and it is unavailable.")
-        
-    instructions.append("Customer context:\n" + profile_json)
+    instructions = [
+        f"You are a helpful assistant working for the company {company}.",
+        "You oversee specialized agents (AI Foundry web search, email, database, and knowledge base).",
+        "Keep answers short, professional, and suited for voice interactions.",
+        "Always route tasks to the appropriate agent instead of answering directly. Confirm additional questions and close once resolved.",
+        "Customer context:\n" + profile_json
+    ]
 
     return {
         "id": "Assistant_Root",

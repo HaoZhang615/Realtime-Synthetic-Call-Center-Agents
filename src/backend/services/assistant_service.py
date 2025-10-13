@@ -39,13 +39,6 @@ except Exception as e:
     logger.error(f"Failed to import root_assistant: {e}")
     root_assistant = None
 
-try:
-    from agents.web_search_agent import web_search_agent
-    logger.info("Successfully imported web_search_agent")
-except Exception as e:
-    logger.error(f"Failed to import web_search_agent: {e}")
-    web_search_agent = None
-
 _AGENT_ID_PATTERN = re.compile(r"assistant", re.IGNORECASE)
 
 
@@ -265,9 +258,6 @@ class AgentOrchestrator:
             self.assistant_service.register_agent(assistant_agent)
         else:
             logger.warning("assistant_agent not available")
-
-        if os.getenv("BING_SEARCH_API_KEY") and web_search_agent:
-            self.assistant_service.register_agent(web_search_agent)
 
         if root_assistant:
             self.assistant_service.register_root_agent(root_assistant(customer_id))

@@ -29,7 +29,6 @@ param principalId string = ''
 var principalType = empty(runningOnGh) && empty(runningOnAdo) ? 'User' : 'ServicePrincipal'
 
 param openAiRealtimeName string = ''
-param openAiRealtimeKey string = ''
 
 param searchIndexName string = 'documents'
 
@@ -42,14 +41,6 @@ param tags object = { 'azd-env-name': environmentName }
 @maxLength(60)
 @description('Name of the container apps environment to deploy. If not specified, a name will be generated. The maximum length is 60 characters.')
 param containerAppsEnvironmentName string = ''
-
-// Add new parameters for Bing Search API to replace dynamic loadJsonContent calls
-@secure()
-@description('Bing Search API Key')
-param bingSearchApiKey string
-
-@description('Bing Search API Endpoint')
-param bingSearchApiEndpoint string = 'https://api.bing.microsoft.com/v7.0/search'
 
 // Load abbreviations from JSON file
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -285,35 +276,20 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
         principalType: principalType
       }
     ]
-    secrets: {
-      secureList: !empty(bingSearchApiKey) ? [
-        {
-          name: 'bingSearchApiKey'
-          value: bingSearchApiKey
-        }
-      ] : []
-    }
   }
 }
 
 param accounts_aiservice_ms_name string = ''
 var _accounts_aiservice_ms_name = !empty(accounts_aiservice_ms_name) ? accounts_aiservice_ms_name : '${abbrs.cognitiveServicesAccounts}${resourceToken}'
-module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
-  name: 'aiserviceaccountDeployment'
+
+// AI Services account with AI Foundry project management enabled
+module account 'modules/ai/account.bicep' = {
+  name: 'ai-services-account'
   scope: resGroup
   params: {
-    // Required parameters
-    kind: 'AIServices'
-    name: _accounts_aiservice_ms_name
-    // Non-required parameters
-    customSubDomainName: _accounts_aiservice_ms_name
+    accountName: _accounts_aiservice_ms_name
     location: location
-    disableLocalAuth: false
-    publicNetworkAccess: 'Enabled'
-    networkAcls: {
-      defaultAction: 'Allow'
-    }
-    // Deploy all three models in the AI Services account
+    tags: tags
     deployments: [
       {
         name: aoaiGptRealtimeModelName
@@ -364,33 +340,72 @@ module account 'br/public:avm/res/cognitive-services/account:0.8.0' = {
         }
       }
     ]
-    secretsExportConfiguration: {
-      accessKey1Name: '${_accounts_aiservice_ms_name}-accessKey1'
-      accessKey2Name: '${_accounts_aiservice_ms_name}-accessKey2'
-      keyVaultResourceId: keyVault.outputs.resourceId
-    }
-    roleAssignments: [
-      {
-        roleDefinitionIdOrName: 'Cognitive Services User'
-        principalId: appIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: 'Cognitive Services User'
-        principalId: principalId
-        principalType: principalType
-      }
-      {
-        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
-        principalId: appIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: 'Cognitive Services OpenAI User'
-        principalId: principalId
-        principalType: principalType
-      }
-    ]
+    keyVaultResourceId: keyVault.outputs.resourceId
+    appIdentityPrincipalId: appIdentity.outputs.principalId
+    principalId: principalId
+    principalType: principalType
+  }
+}
+
+// ========================
+// AI Foundry Resources
+// ========================
+
+// Deploy Bing Search for Grounding
+module bingSearch 'modules/bing/grounding-bing-search.bicep' = {
+  name: 'bing-search'
+  scope: resGroup
+  params: {
+    bingGroundingServiceName: 'bing-${resourceToken}'
+    tags: tags
+    skuName: 'G1'
+    statisticsEnabled: false
+  }
+}
+
+// Deploy AI Foundry Project (using the consolidated AI Services account)
+module aiFoundryProject 'modules/ai/project.bicep' = {
+  name: 'ai-foundry-project'
+  scope: resGroup
+  params: {
+    accountName: account.outputs.accountName
+    projectName: 'project-${resourceToken}'
+    location: location
+    projectDescription: 'AI Foundry project for realtime call center agents with Bing Search'
+    projectDisplayName: 'Call Center Agents Project'
+    tags: tags
+  }
+}
+
+// Create connection between AI Foundry Account and Bing Search
+module bingConnection 'modules/ai/bing-connection.bicep' = {
+  name: 'bing-connection'
+  scope: resGroup
+  params: {
+    accountName: account.outputs.accountName
+    bingSearchName: bingSearch.outputs.bingGroundingServiceName
+  }
+}
+
+// Grant backend app identity access to AI Foundry Project
+module aiFoundryAppRbac 'modules/ai/rbac.bicep' = {
+  name: 'ai-foundry-app-rbac'
+  scope: resGroup
+  params: {
+    principalId: appIdentity.outputs.principalId
+    principalType: 'ServicePrincipal'
+    projectResourceId: aiFoundryProject.outputs.projectId
+  }
+}
+
+// Also grant user access for testing
+module aiFoundryUserRbac 'modules/ai/rbac.bicep' = if (!empty(principalId)) {
+  name: 'ai-foundry-user-rbac'
+  scope: resGroup
+  params: {
+    principalId: principalId
+    principalType: principalType
+    projectResourceId: aiFoundryProject.outputs.projectId
   }
 }
 
@@ -524,16 +539,9 @@ module frontendApp 'modules/app/containerapp.bicep' = {
       COSMOSDB_Product_CONTAINER: cosmosdb.outputs.cosmosDbProductContainer
       COSMOSDB_Purchases_CONTAINER: cosmosdb.outputs.cosmosDbPurchasesContainer
       COSMOSDB_ProductUrl_CONTAINER: cosmosdb.outputs.cosmosDbProductUrlContainer
-      BING_SEARCH_API_ENDPOINT: bingSearchApiEndpoint
-    },
-    union(
-      empty(openAiRealtimeName) ? {} : {},
-      !empty(bingSearchApiKey) ? {} : {}
-    ))
+    }, {})
     // Key Vault secrets for frontend (if any needed in future)
-    keyVaultSecrets: !empty(bingSearchApiKey) ? {
-      BING_SEARCH_API_KEY: 'https://${keyVault.outputs.name}${environment().suffixes.keyvaultDns}/secrets/bingSearchApiKey'
-    } : {}
+    keyVaultSecrets: {}
   }
 }
 
@@ -558,7 +566,9 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_CLIENT_ID: appIdentity.outputs.clientId
       AZURE_USER_ASSIGNED_IDENTITY_ID: appIdentity.outputs.identityId
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
-      AZURE_AI_FOUNDRY_ENDPOINT: FoundryEndpoint
+      AZURE_AI_FOUNDRY_ENDPOINT: account.outputs.accountEndpoint
+      AZURE_AI_FOUNDRY_PROJECT_ID: aiFoundryProject.outputs.projectId
+      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: bingConnection.outputs.connectionId
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
       AZURE_OPENAI_GPT_CHAT_DEPLOYMENT: aoaiGptChatModelName
@@ -699,7 +709,16 @@ output AZURE_RESOURCE_GROUP string = resGroup.name
 output RESOURCE_GROUP_ID string = resGroup.id
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = appIdentity.outputs.identityId
 
-output AZURE_AI_FOUNDRY_ENDPOINT string = FoundryEndpoint
+// AI Foundry outputs
+output AZURE_AI_FOUNDRY_ENDPOINT string = account.outputs.accountEndpoint
+output AZURE_AI_FOUNDRY_ACCOUNT_NAME string = account.outputs.accountName
+output AZURE_AI_FOUNDRY_PROJECT_ID string = aiFoundryProject.outputs.projectId
+output AZURE_AI_FOUNDRY_PROJECT_NAME string = aiFoundryProject.outputs.projectName
+output AZURE_AI_FOUNDRY_BING_CONNECTION_ID string = bingConnection.outputs.connectionId
+// Model deployment is now managed in the consolidated account
+output AZURE_AI_FOUNDRY_MODEL_DEPLOYMENT string = aoaiGptRealtimeModelName
+
+// Azure OpenAI outputs (from original AI Services account)
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel
 output AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT string = aoaiGptRealtimeModelName
@@ -726,8 +745,5 @@ output COSMOSDB_HumanConversations_CONTAINER string = cosmosdb.outputs.cosmosDbH
 output COSMOSDB_Product_CONTAINER string = cosmosdb.outputs.cosmosDbProductContainer
 output COSMOSDB_Purchases_CONTAINER string = cosmosdb.outputs.cosmosDbPurchasesContainer
 output COSMOSDB_ProductUrl_CONTAINER string = cosmosdb.outputs.cosmosDbProductUrlContainer
-
-output BING_SEARCH_API_ENDPOINT string = bingSearchApiEndpoint
-// Bing Search API Key is stored in Key Vault - applications should retrieve it from there
 
 output AZURE_AI_SERVICES_KEY string = '@Microsoft.KeyVault(SecretUri=https://${keyVault.outputs.name}.vault.azure.net/secrets/${_accounts_aiservice_ms_name}-accessKey1/)'
