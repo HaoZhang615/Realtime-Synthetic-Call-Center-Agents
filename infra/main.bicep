@@ -568,7 +568,9 @@ module backendApp 'modules/app/containerapp.bicep' = {
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_AI_FOUNDRY_ENDPOINT: account.outputs.accountEndpoint
       AZURE_AI_FOUNDRY_PROJECT_ID: aiFoundryProject.outputs.projectId
-      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: bingConnection.outputs.connectionId
+      // Construct connection ID manually to ensure correct casing
+      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: '${subscription().id}/resourceGroups/${resGroup.name}/providers/Microsoft.CognitiveServices/accounts/${account.outputs.accountName}/connections/${bingConnection.outputs.connectionName}'
+      AZURE_AI_FOUNDRY_MCP_URL: mcpServerApp.outputs.fqdn  // 🆕 MCP Server internal URL
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
       AZURE_OPENAI_GPT_CHAT_DEPLOYMENT: aoaiGptChatModelName
@@ -595,6 +597,41 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_AI_SERVICES_KEY: 'https://${keyVault.outputs.name}${environment().suffixes.keyvaultDns}/secrets/${_accounts_aiservice_ms_name}-accessKey1'
       AZURE_OPENAI_API_KEY: 'https://${keyVault.outputs.name}${environment().suffixes.keyvaultDns}/secrets/${_accounts_aiservice_ms_name}-accessKey1'
     }
+  }
+}
+
+// ============================================================================
+// AI Foundry MCP Server Container App
+// ============================================================================
+// Deploys the AI Foundry MCP Server with internal ingress only
+// Accessed by backend via AZURE_AI_FOUNDRY_MCP_URL environment variable
+// ============================================================================
+
+module mcpServerApp 'modules/app/aifoundry-mcp.bicep' = {
+  name: 'ai-foundry-mcp'
+  scope: resGroup
+  params: {
+    appName: '${abbrs.appContainerApps}aifoundry-mcp-${resourceToken}'
+    serviceName: 'ai-foundry-mcp'
+    location: location
+    tags: tags
+    identityId: appIdentity.outputs.identityId
+    containerAppsEnvironmentId: enableZeroTrust ? containerAppsEnvironmentZeroTrust!.outputs.id : containerAppsEnvironment!.outputs.id
+    containerRegistryName: registry.outputs.name
+    exists: appExists
+    targetPort: 8000
+    env: {
+      // AI Foundry configuration - same as backend
+      AZURE_AI_FOUNDRY_ENDPOINT: account.outputs.accountEndpoint
+      AZURE_AI_FOUNDRY_PROJECT_ID: aiFoundryProject.outputs.projectId
+      // Construct connection ID manually to ensure correct casing
+      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: '${subscription().id}/resourceGroups/${resGroup.name}/providers/Microsoft.CognitiveServices/accounts/${account.outputs.accountName}/connections/${bingConnection.outputs.connectionName}'
+      AZURE_OPENAI_GPT_CHAT_DEPLOYMENT: aoaiGptChatModelName
+      // Azure authentication
+      AZURE_CLIENT_ID: appIdentity.outputs.clientId
+      APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
+    }
+    keyVaultSecrets: {}  // No secrets needed - uses managed identity
   }
 }
 

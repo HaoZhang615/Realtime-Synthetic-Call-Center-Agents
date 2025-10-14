@@ -214,7 +214,9 @@ async def _handle_tools_list(request_id: int | str) -> JSONResponse:
     )
     
     logger.info(f"✅ Returned {len(tools)} tools")
-    return JSONResponse(content=response.model_dump())
+    # Convert to dict and remove None values manually for JSON-RPC compliance
+    response_dict = response.model_dump(exclude_none=True)
+    return JSONResponse(content=response_dict)
 
 
 async def _handle_tools_call(request_id: int | str, params: Dict[str, Any]) -> JSONResponse:
@@ -264,6 +266,13 @@ async def _execute_web_search(request_id: int | str, arguments: Dict[str, Any]) 
             message="Missing required argument: query"
         )
     
+    # Ensure query is a string (not dict or other type)
+    if not isinstance(query, str):
+        logger.warning(f"Query is not a string (got {type(query).__name__}): {query}")
+        query = str(query)  # Convert to string
+    
+    logger.info(f"Executing tool: search_web_ai_foundry with query: '{query}'")
+    
     # Check if agent is initialized
     if not agent_service or not agent_service._initialized:
         return _error_response(
@@ -288,7 +297,9 @@ async def _execute_web_search(request_id: int | str, arguments: Dict[str, Any]) 
         )
         
         logger.info(f"✅ Search completed: {len(result_text)} chars")
-        return JSONResponse(content=response.model_dump())
+        # Convert to dict and remove None values manually for JSON-RPC compliance
+        response_dict = response.model_dump(exclude_none=True)
+        return JSONResponse(content=response_dict)
         
     except TimeoutError as e:
         logger.error(f"Search timeout: {e}")
@@ -330,8 +341,10 @@ def _error_response(
         error=MCPError(code=code, message=message, data=data)
     )
     
+    # Convert to dict and remove None values manually for JSON-RPC compliance
+    response_dict = response.model_dump(exclude_none=True)
     return JSONResponse(
-        content=response.model_dump(),
+        content=response_dict,
         status_code=200  # MCP uses 200 OK even for errors (JSON-RPC spec)
     )
 

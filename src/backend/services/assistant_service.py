@@ -9,6 +9,8 @@ import os
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
+from services.mcp_client import MCPClient, MCPClientError
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -33,6 +35,13 @@ except Exception as e:
     internal_kb_agent = None
 
 try:
+    from agents.web_search_agent import web_search_agent
+    logger.info("Successfully imported web_search_agent")
+except Exception as e:
+    logger.error(f"Failed to import web_search_agent: {e}")
+    web_search_agent = None
+
+try:
     from agents.root import root_assistant
     logger.info("Successfully imported root_assistant")
 except Exception as e:
@@ -48,6 +57,54 @@ class AssistantService:
     def __init__(self, language: str = "English") -> None:
         self.language = language
         self.agents: Dict[str, Dict[str, Any]] = {}
+        self.mcp_client: Optional[MCPClient] = None
+        self._mcp_initialized = False
+    
+    async def initialize_mcp_client(self) -> None:
+        """
+        Initialize MCP client for AI Foundry web search.
+        
+        Called lazily on first use. Safe to call multiple times.
+        """
+        if self._mcp_initialized:
+            return
+        
+        try:
+            mcp_url = os.getenv("AZURE_AI_FOUNDRY_MCP_URL")
+            if not mcp_url:
+                logger.warning("AZURE_AI_FOUNDRY_MCP_URL not set - web search will not be available")
+                return
+            
+            self.mcp_client = MCPClient(base_url=mcp_url)
+            await self.mcp_client.initialize()
+            self._mcp_initialized = True
+            logger.info("✅ MCP Client initialized successfully for web search")
+        except Exception as e:
+            logger.error(f"Failed to initialize MCP client: {e}")
+            self.mcp_client = None
+    
+    async def search_web_ai_foundry(self, query: str) -> str:
+        """
+        Execute web search via AI Foundry Agent MCP Server.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            Search results as text
+        """
+        if not self._mcp_initialized:
+            await self.initialize_mcp_client()
+        
+        if not self.mcp_client:
+            return "Web search is currently unavailable. Please try again later."
+        
+        try:
+            result = await self.mcp_client.search_web(query)
+            return result
+        except MCPClientError as e:
+            logger.error(f"Web search failed: {e}")
+            return f"I encountered an error while searching: {str(e)}"
 
     def register_agent(self, agent: Dict[str, Any]) -> None:
         """Register a non-root agent definition."""
@@ -258,6 +315,18 @@ class AgentOrchestrator:
             self.assistant_service.register_agent(assistant_agent)
         else:
             logger.warning("assistant_agent not available")
+        
+        if web_search_agent:
+            # Register web search agent with async tool
+            agent_def = web_search_agent()
+            # Link the tool's "returns" to the actual async method
+            for tool in agent_def["tools"]:
+                if tool["name"] == "search_web_ai_foundry":
+                    tool["returns"] = self.assistant_service.search_web_ai_foundry
+            self.assistant_service.register_agent(agent_def)
+            logger.info("Registered web search agent")
+        else:
+            logger.warning("web_search_agent not available")
 
         if root_assistant:
             self.assistant_service.register_root_agent(root_assistant(customer_id))

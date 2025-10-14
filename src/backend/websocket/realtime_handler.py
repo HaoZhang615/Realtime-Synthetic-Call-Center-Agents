@@ -176,6 +176,20 @@ class RealtimeHandler:
         # This ensures voice and other user preferences are preserved
         merged_session = {**self.default_session_config}
         merged_session.update(session)  # Frontend settings override defaults
+        
+        # Sanitize input_audio_transcription to only include valid properties
+        # Azure OpenAI Realtime API only supports: model
+        # Remove language, prompt, and other unsupported properties
+        if "input_audio_transcription" in merged_session:
+            audio_transcription = merged_session["input_audio_transcription"]
+            if isinstance(audio_transcription, dict):
+                # Only keep 'model' property
+                sanitized_transcription = {}
+                if "model" in audio_transcription:
+                    sanitized_transcription["model"] = audio_transcription["model"]
+                merged_session["input_audio_transcription"] = sanitized_transcription
+                logger.debug(f"Sanitized input_audio_transcription: {sanitized_transcription}")
+        
         message["session"] = merged_session
         if session_id:
             self.session_state[session_id] = merged_session

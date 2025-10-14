@@ -114,8 +114,31 @@ class AIFoundryAgentService:
     async def _create_agent(self) -> Agent:
         """Create the AI Foundry agent with Bing Search tool."""
         try:
-            # Define Bing Grounding tool using connection
-            bing_tool = BingGroundingTool(connection_id=self.bing_connection_id)
+            # Construct connection ID with proper casing
+            # The bing_connection_id from env might be lowercased by Bicep
+            # Extract the connection name and rebuild the ID with correct casing
+            if "/" in self.bing_connection_id:
+                # It's a full resource ID - extract just the connection name
+                connection_name = self.bing_connection_id.split("/")[-1]
+            else:
+                # It's already just the connection name
+                connection_name = self.bing_connection_id
+            
+            # Construct the connection ID with proper casing from the project ID
+            # Project ID format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}
+            # Connection ID format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{account}/connections/{connection}
+            if "/projects/" in self.project_id:
+                # Replace "/projects/{project}" with "/connections/{connection}"
+                base_path = self.project_id.rsplit("/projects/", 1)[0]
+                properly_cased_connection_id = f"{base_path}/connections/{connection_name}"
+            else:
+                # Fallback to using the connection ID as-is
+                properly_cased_connection_id = self.bing_connection_id
+            
+            logger.info(f"Using Bing connection: {properly_cased_connection_id}")
+            
+            # Define Bing Grounding tool using the properly cased connection ID
+            bing_tool = BingGroundingTool(connection_id=properly_cased_connection_id)
             
             # Create agent
             agent = self.client.agents.create_agent(
@@ -229,11 +252,15 @@ class AIFoundryAgentService:
             logger.debug(f"Thread created: {thread.id}")
             
             # Step 2: Add user message
-            logger.debug(f"Adding user message: '{query}'")
+            logger.debug(f"Adding user message: '{query}' (type: {type(query).__name__})")
+            
+            # Ensure query is a string
+            query_str = str(query) if not isinstance(query, str) else query
+            
             self.client.agents.messages.create(
                 thread_id=thread.id,
                 role=MessageRole.USER,
-                content=query,
+                content=query_str,
             )
             
             # Step 3: Create run and execute
