@@ -172,3 +172,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Node.js dependencies — ignore nested node_modules anywhere in the repo
+node_modules/
+**/node_modules/
+
+# Vite / frontend build artifacts
+dist/
+.build/
+
+# Local env files for frontends
+.env.local
+.env.*.local

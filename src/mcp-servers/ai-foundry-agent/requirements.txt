@@ -1,0 +1,14 @@
+# AI Foundry Agent MCP Server Dependencies
+
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+
+# Azure AI Foundry SDK
+azure-ai-projects==1.0.0
+azure-identity==1.19.0
+azure-core==1.31.0
+
+# Utilities
+python-dotenv==1.0.1

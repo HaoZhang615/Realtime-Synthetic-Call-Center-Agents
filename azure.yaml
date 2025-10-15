@@ -16,3 +16,10 @@ services:
         docker:
             path: Dockerfile
             remoteBuild: true
+    ai-foundry-mcp:
+        project: ./src/mcp-servers/ai-foundry-agent
+        host: containerapp
+        language: python
+        docker:
+            path: Dockerfile
+            remoteBuild: true

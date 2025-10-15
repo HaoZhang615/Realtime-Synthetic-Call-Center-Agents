@@ -40,12 +40,6 @@
     },
     "frontendContainerImage": {
       "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
-    },
-    "bingSearchApiKey": {
-      "value": "${BING_SEARCH_API_KEY=}"
-    },
-    "bingSearchApiEndpoint": {
-      "value": "https://api.bing.microsoft.com/v7.0/search"
     }
   }
 }

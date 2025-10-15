@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from subprocess import run, PIPE
 from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import BlobServiceClient
@@ -88,20 +89,30 @@ def setup_index(
     logging.info(f"Using identity: {azure_credential.__class__.__name__}")
     logging.info(f"User assigned identity ID: {uami_id}")
     
-    # Step 1: Create a data source connection to the blob storage container if it doesn't exist
-    data_source_connections = indexer_client.get_data_source_connections()
-    if index_name in [ds.name for ds in data_source_connections]:
-        logging.info(f"Data source connection {index_name} already exists, not re-creating")
+    # ---- Name helpers (used across resources) ----
+    data_source_connection_name = f"{index_name}-data-source-connection"
+    skillset_name = f"{index_name}-skillset"
+    indexer_name = f"{index_name}-indexer"
+
+    # Step 1: Ensure data source connection exists (idempotent)
+    existing_ds_names = [ds.name for ds in indexer_client.get_data_source_connections()]
+    if data_source_connection_name in existing_ds_names:
+        logging.info("Data source connection %s already exists, skipping create", data_source_connection_name)
     else:
-        logging.info(f"Creating data source connection: {index_name}")
-        data_source_connection_name = f"{index_name}-data-source-connection"
-        data_source_connection=SearchIndexerDataSourceConnection(
-                name=data_source_connection_name, 
-                type=SearchIndexerDataSourceType.AZURE_BLOB,
-                connection_string=azure_storage_connection_string,
-                identity = SearchIndexerDataUserAssignedIdentity(resource_id=uami_id),
-                container=SearchIndexerDataContainer(name=azure_storage_container))
-        data_source = indexer_client.create_or_update_data_source_connection(data_source_connection)
+        logging.info("Creating data source connection: %s", data_source_connection_name)
+        try:
+            indexer_client.create_or_update_data_source_connection(
+                SearchIndexerDataSourceConnection(
+                    name=data_source_connection_name,
+                    type=SearchIndexerDataSourceType.AZURE_BLOB,
+                    connection_string=azure_storage_connection_string,
+                    identity=SearchIndexerDataUserAssignedIdentity(resource_id=uami_id),
+                    container=SearchIndexerDataContainer(name=azure_storage_container)
+                )
+            )
+        except ResourceExistsError:
+            # Race condition – another request created it between our check and create
+            logging.info("Data source connection %s just created by another request", data_source_connection_name)
     # Step 2: Create the index if it doesn't exist
     index_names = [index.name for index in index_client.list_indexes()]
     if index_name in index_names:
@@ -194,92 +205,95 @@ def setup_index(
         logging.info("Resolving AI Service Key from Key Vault")
         ai_services_key = get_keyvault_secret(azure_credential, ai_services_key)
     
-    logging.info(f"Creating skillset: {index_name}")
-    skillset_name = f"{index_name}-skillset"
-    indexer_client.create_or_update_skillset(
-        skillset=SearchIndexerSkillset(
-            name=skillset_name,
-            description="Skillset to chunk documents and generating embeddings",  
-            skills=[
-                DocumentIntelligenceLayoutSkill(
-                    name="document-layout-skill",
-                    description="Layout skill to read documents",
-                    context="/document",
-                    output_mode="oneToMany",
-                    markdown_header_depth="h3",
-                    inputs=[InputFieldMappingEntry(name="file_data", source="/document/file_data")],
-                    outputs=[OutputFieldMappingEntry(name="markdown_document", target_name="markdownDocument")],
-                ),
-                SplitSkill(
-                    name="split-skill",
-                    description="Split skill to chunk documents",  
-                    text_split_mode="pages",
-                    context="/document/markdownDocument/*",
-                    maximum_page_length=2000,
-                    page_overlap_length=500,
-                    inputs=[InputFieldMappingEntry(name="text", source="/document/markdownDocument/*/content")],
-                    outputs=[OutputFieldMappingEntry(name="textItems", target_name="pages")]),
-                AzureOpenAIEmbeddingSkill(
-                    name="azure-openai-embedding-skill",
-                    description="Skill to generate embeddings via Azure OpenAI",  
-                    context="/document/markdownDocument/*/pages/*",
-                    resource_url=azure_openai_embedding_endpoint,
-                    auth_identity=SearchIndexerDataUserAssignedIdentity(resource_id=uami_id),
-                    deployment_name=azure_openai_embedding_deployment,
-                    model_name=azure_openai_embedding_model,
-                    dimensions=azure_openai_embeddings_dimensions,
-                    inputs=[InputFieldMappingEntry(name="text", source="/document/markdownDocument/*/pages/*")],
-                    outputs=[OutputFieldMappingEntry(name="embedding", target_name="text_vector")])
-            ],
-            index_projection=SearchIndexerIndexProjection(
-                selectors=[
-                    SearchIndexerIndexProjectionSelector(
-                        target_index_name=index_name,
-                        parent_key_field_name="parent_id",
-                        source_context="/document/markdownDocument/*/pages/*",
-                        mappings=[
-                            InputFieldMappingEntry(name="chunk", source="/document/markdownDocument/*/pages/*"),
-                            InputFieldMappingEntry(name="text_vector", source="/document/markdownDocument/*/pages/*/text_vector"),
-                            InputFieldMappingEntry(name="title", source="/document/metadata_storage_name"),
-                            # Add mappings for header fields
-                            InputFieldMappingEntry(name="header_1", source="/document/markdownDocument/*/sections/h1"),
-                            InputFieldMappingEntry(name="header_2", source="/document/markdownDocument/*/sections/h2"),
-                            InputFieldMappingEntry(name="header_3", source="/document/markdownDocument/*/sections/h3"),
-                        ]
-                    )
+    existing_skillsets = [s.name for s in indexer_client.get_skillsets()]
+    if skillset_name in existing_skillsets:
+        logging.info("Skillset %s already exists, skipping create", skillset_name)
+    else:
+        logging.info(f"Creating skillset: {skillset_name}")
+        indexer_client.create_or_update_skillset(
+            skillset=SearchIndexerSkillset(
+                name=skillset_name,
+                description="Skillset to chunk documents and generating embeddings",  
+                skills=[
+                    DocumentIntelligenceLayoutSkill(
+                        name="document-layout-skill",
+                        description="Layout skill to read documents",
+                        context="/document",
+                        output_mode="oneToMany",
+                        markdown_header_depth="h3",
+                        inputs=[InputFieldMappingEntry(name="file_data", source="/document/file_data")],
+                        outputs=[OutputFieldMappingEntry(name="markdown_document", target_name="markdownDocument")],
+                    ),
+                    SplitSkill(
+                        name="split-skill",
+                        description="Split skill to chunk documents",  
+                        text_split_mode="pages",
+                        context="/document/markdownDocument/*",
+                        maximum_page_length=2000,
+                        page_overlap_length=500,
+                        inputs=[InputFieldMappingEntry(name="text", source="/document/markdownDocument/*/content")],
+                        outputs=[OutputFieldMappingEntry(name="textItems", target_name="pages")]),
+                    AzureOpenAIEmbeddingSkill(
+                        name="azure-openai-embedding-skill",
+                        description="Skill to generate embeddings via Azure OpenAI",  
+                        context="/document/markdownDocument/*/pages/*",
+                        resource_url=azure_openai_embedding_endpoint,
+                        auth_identity=SearchIndexerDataUserAssignedIdentity(resource_id=uami_id),
+                        deployment_name=azure_openai_embedding_deployment,
+                        model_name=azure_openai_embedding_model,
+                        dimensions=azure_openai_embeddings_dimensions,
+                        inputs=[InputFieldMappingEntry(name="text", source="/document/markdownDocument/*/pages/*")],
+                        outputs=[OutputFieldMappingEntry(name="embedding", target_name="text_vector")])
                 ],
-                parameters=SearchIndexerIndexProjectionsParameters(
-                    projection_mode=IndexProjectionMode.SKIP_INDEXING_PARENT_DOCUMENTS
+                index_projection=SearchIndexerIndexProjection(
+                    selectors=[
+                        SearchIndexerIndexProjectionSelector(
+                            target_index_name=index_name,
+                            parent_key_field_name="parent_id",
+                            source_context="/document/markdownDocument/*/pages/*",
+                            mappings=[
+                                InputFieldMappingEntry(name="chunk", source="/document/markdownDocument/*/pages/*"),
+                                InputFieldMappingEntry(name="text_vector", source="/document/markdownDocument/*/pages/*/text_vector"),
+                                InputFieldMappingEntry(name="title", source="/document/metadata_storage_name"),
+                                # Add mappings for header fields
+                                InputFieldMappingEntry(name="header_1", source="/document/markdownDocument/*/sections/h1"),
+                                InputFieldMappingEntry(name="header_2", source="/document/markdownDocument/*/sections/h2"),
+                                InputFieldMappingEntry(name="header_3", source="/document/markdownDocument/*/sections/h3"),
+                            ]
+                        )
+                    ],
+                    parameters=SearchIndexerIndexProjectionsParameters(
+                        projection_mode=IndexProjectionMode.SKIP_INDEXING_PARENT_DOCUMENTS
+                    )
+                ),
+                cognitive_services_account=AIServicesAccountKey(
+                    key=ai_services_key,
+                    subdomain_url=ai_services_endpoint
+                    ) if ai_services_key else
+                            AIServicesAccountIdentity(
+                                identity=SearchIndexerDataUserAssignedIdentity(resource_id=uami_id),
+                                subdomain_url=ai_services_endpoint
+                            ),
                 )
-            ),
-            cognitive_services_account=AIServicesAccountKey(
-                key=ai_services_key,
-                subdomain_url=ai_services_endpoint
-                ) if ai_services_key else
-                        AIServicesAccountIdentity(
-                            identity=SearchIndexerDataUserAssignedIdentity(resource_id=uami_id),
-                            subdomain_url=ai_services_endpoint
-                        ),
-            )
-            )
+                )
 
     # Step 3: Create the indexer if it doesn't exist
-    indexers = indexer_client.get_indexers()
-    if f"{index_name}-indexer" in [indexer.name for indexer in indexers]:
-        logging.info(f"Indexer {index_name}-indexer already exists, not re-creating")
+    existing_indexer_names = [idx.name for idx in indexer_client.get_indexers()]
+    if indexer_name in existing_indexer_names:
+        logging.info("Indexer %s already exists, skipping create", indexer_name)
     else:
         indexer_client.create_or_update_indexer(
             indexer=SearchIndexer(
-                name=f"{index_name}-indexer" ,
+                name=indexer_name,
                 description="Indexer to index documents and generate embeddings",
-                data_source_name=data_source.name,
+                data_source_name=data_source_connection_name,
                 skillset_name=skillset_name,
-                target_index_name=index_name,        
+                target_index_name=index_name,
                 parameters=IndexingParameters(
                     configuration=IndexingParametersConfiguration(
                         allow_skillset_to_read_file_data=True,
                         query_timeout=None)
-                        )
+                )
             )
         )
 
@@ -313,3 +327,82 @@ def upload_documents(azure_credential, source_folder, indexer_name, azure_search
         logging.info("Indexer started. Any unindexed blobs should be indexed in a few minutes, check the Azure Portal for status.")
     except ResourceExistsError:
         logging.info("Indexer already running, not starting again")
+
+
+def wait_for_indexer_completion(azure_credential, indexer_name, azure_search_endpoint, max_wait_seconds=300, poll_interval=10):
+    """
+    Wait for the indexer to complete processing documents.
+    
+    This ensures that the AI Search index is fully updated before extracting
+    topics from document metadata. This is critical when multiple documents
+    are uploaded simultaneously, as indexing can take time.
+    
+    Args:
+        azure_credential: Azure credential for authentication
+        indexer_name: Name of the indexer to monitor
+        azure_search_endpoint: Azure Search service endpoint
+        max_wait_seconds: Maximum time to wait (default: 300s = 5 minutes)
+        poll_interval: Seconds between status checks (default: 10s)
+        
+    Returns:
+        bool: True if indexing completed successfully, False if timeout or error
+    """
+    indexer_client = SearchIndexerClient(azure_search_endpoint, azure_credential)
+    
+    start_time = time.time()
+    elapsed = 0
+    
+    logging.info(
+        f"Waiting for indexer '{indexer_name}' to complete. "
+        f"Max wait: {max_wait_seconds}s, polling every {poll_interval}s"
+    )
+    
+    while elapsed < max_wait_seconds:
+        try:
+            status = indexer_client.get_indexer_status(indexer_name)
+            
+            # Check execution status
+            if status.last_result:
+                exec_status = status.last_result.status
+                items_processed = status.last_result.items_processed or 0
+                items_failed = status.last_result.items_failed or 0
+                
+                logging.info(
+                    f"Indexer status: {exec_status} | "
+                    f"Processed: {items_processed} | Failed: {items_failed} | "
+                    f"Elapsed: {int(elapsed)}s"
+                )
+                
+                if exec_status == "success":
+                    logging.info(
+                        f"✅ Indexer completed successfully! "
+                        f"Processed {items_processed} items in {int(elapsed)}s"
+                    )
+                    return True
+                elif exec_status == "transientFailure":
+                    logging.warning(f"Indexer encountered transient failure, will retry...")
+                elif exec_status in ["failure", "reset"]:
+                    logging.error(f"Indexer failed with status: {exec_status}")
+                    return False
+                # If status is "inProgress", continue waiting
+            
+            # Check current execution state
+            if status.execution_history and len(status.execution_history) > 0:
+                latest = status.execution_history[0]
+                if latest.status == "inProgress":
+                    logging.info(f"Indexer is currently running... ({int(elapsed)}s elapsed)")
+            
+            # Wait before next check
+            time.sleep(poll_interval)
+            elapsed = time.time() - start_time
+            
+        except Exception as e:
+            logging.error(f"Error checking indexer status: {e}")
+            return False
+    
+    logging.warning(
+        f"⚠️ Indexer did not complete within {max_wait_seconds}s. "
+        f"Documents may still be indexing in the background. "
+        f"Topic extraction will use currently indexed documents."
+    )
+    return False
