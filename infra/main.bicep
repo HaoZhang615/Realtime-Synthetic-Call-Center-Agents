@@ -249,7 +249,7 @@ param embedModel string = 'text-embedding-3-large'
 
 
 
-// Add Key Vault to store secrets like Bing Search API Key
+// Key Vault for secure storage of AI Services keys
 module keyVault 'br/public:avm/res/key-vault/vault:0.4.0' = {
   name: 'keyVault'
   scope: resGroup
@@ -360,6 +360,7 @@ module bingSearch 'modules/bing/grounding-bing-search.bicep' = {
     tags: tags
     skuName: 'G1'
     statisticsEnabled: false
+    
   }
 }
 
@@ -384,6 +385,7 @@ module bingConnection 'modules/ai/bing-connection.bicep' = {
   params: {
     accountName: account.outputs.accountName
     bingSearchName: bingSearch.outputs.bingGroundingServiceName
+    projectName: 'project-${resourceToken}'
   }
 }
 
@@ -568,8 +570,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.appInsightsConnectionString
       AZURE_AI_FOUNDRY_ENDPOINT: account.outputs.accountEndpoint
       AZURE_AI_FOUNDRY_PROJECT_ID: aiFoundryProject.outputs.projectId
-      // Construct connection ID manually to ensure correct casing
-      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: '${subscription().id}/resourceGroups/${resGroup.name}/providers/Microsoft.CognitiveServices/accounts/${account.outputs.accountName}/connections/${bingConnection.outputs.connectionName}'
+      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: bingConnection.outputs.connectionId
       AZURE_AI_FOUNDRY_MCP_URL: mcpServerApp.outputs.fqdn  // 🆕 MCP Server internal URL
       AZURE_OPENAI_EMBEDDING_DEPLOYMENT: embedModel
       AZURE_OPENAI_EMBEDDING_MODEL: embedModel
@@ -624,8 +625,7 @@ module mcpServerApp 'modules/app/aifoundry-mcp.bicep' = {
       // AI Foundry configuration - same as backend
       AZURE_AI_FOUNDRY_ENDPOINT: account.outputs.accountEndpoint
       AZURE_AI_FOUNDRY_PROJECT_ID: aiFoundryProject.outputs.projectId
-      // Construct connection ID manually to ensure correct casing
-      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: '${subscription().id}/resourceGroups/${resGroup.name}/providers/Microsoft.CognitiveServices/accounts/${account.outputs.accountName}/connections/${bingConnection.outputs.connectionName}'
+      AZURE_AI_FOUNDRY_BING_CONNECTION_ID: bingConnection.outputs.connectionId
       AZURE_OPENAI_GPT_CHAT_DEPLOYMENT: aoaiGptChatModelName
       // Azure authentication
       AZURE_CLIENT_ID: appIdentity.outputs.clientId

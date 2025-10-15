@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "5201538900852628469"
+      "templateHash": "12903006639776302429"
     }
   },
   "parameters": {
@@ -4796,6 +4796,9 @@
           },
           "bingSearchName": {
             "value": "[reference('bingSearch').outputs.bingGroundingServiceName.value]"
+          },
+          "projectName": {
+            "value": "[format('project-{0}', variables('resourceToken'))]"
           }
         },
         "template": {
@@ -4805,7 +4808,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "3553383330666899670"
+              "templateHash": "3229253926720222983"
             }
           },
           "parameters": {
@@ -4820,24 +4823,30 @@
               "metadata": {
                 "description": "Name of the Bing Search resource"
               }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Foundry project"
+              }
             }
           },
           "resources": [
             {
               "type": "Microsoft.CognitiveServices/accounts/connections",
-              "apiVersion": "2025-04-01-preview",
-              "name": "[format('{0}/{1}', parameters('accountName'), format('{0}-bingsearch', parameters('accountName')))]",
+              "apiVersion": "2025-07-01-preview",
+              "name": "[format('{0}/{1}', parameters('accountName'), parameters('bingSearchName'))]",
               "properties": {
                 "category": "ApiKey",
                 "target": "https://api.bing.microsoft.com/",
                 "authType": "ApiKey",
-                "isSharedToAll": true,
+                "isSharedToAll": false,
                 "credentials": {
                   "key": "[listKeys(resourceId('Microsoft.Bing/accounts', parameters('bingSearchName')), '2020-06-10').key1]"
                 },
                 "metadata": {
                   "ApiType": "Azure",
-                  "Type": "bing_grounding",
+                  "Type": "GroundingWithBingSearch",
                   "Location": "[reference(resourceId('Microsoft.Bing/accounts', parameters('bingSearchName')), '2020-06-10', 'full').location]",
                   "ResourceId": "[resourceId('Microsoft.Bing/accounts', parameters('bingSearchName'))]"
                 }
@@ -4847,11 +4856,11 @@
           "outputs": {
             "connectionName": {
               "type": "string",
-              "value": "[format('{0}-bingsearch', parameters('accountName'))]"
+              "value": "[parameters('bingSearchName')]"
             },
             "connectionId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.CognitiveServices/accounts/connections', parameters('accountName'), format('{0}-bingsearch', parameters('accountName')))]"
+              "value": "[format('{0}/projects/{1}/connections/{2}', resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), parameters('projectName'), parameters('bingSearchName'))]"
             }
           }
         }
@@ -7050,7 +7059,7 @@
             "value": 8000
           },
           "env": {
-            "value": "[union(createObject('FRONTEND_ORIGINS', format('https://{0}frontend-{1}.{2},http://localhost:5173,http://localhost:5001,http://localhost:5000', variables('abbrs').appContainerApps, variables('resourceToken'), if(parameters('enableZeroTrust'), reference('containerAppsEnvironmentZeroTrust').outputs.defaultDomain.value, reference('containerAppsEnvironment').outputs.defaultDomain.value)), 'AZURE_CLIENT_ID', reference('appIdentity').outputs.clientId.value, 'AZURE_USER_ASSIGNED_IDENTITY_ID', reference('appIdentity').outputs.identityId.value, 'APPLICATIONINSIGHTS_CONNECTION_STRING', reference('monitoring').outputs.appInsightsConnectionString.value, 'AZURE_AI_FOUNDRY_ENDPOINT', reference('account').outputs.accountEndpoint.value, 'AZURE_AI_FOUNDRY_PROJECT_ID', reference('aiFoundryProject').outputs.projectId.value, 'AZURE_AI_FOUNDRY_BING_CONNECTION_ID', reference('bingConnection').outputs.connectionId.value, 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT', parameters('embedModel'), 'AZURE_OPENAI_EMBEDDING_MODEL', parameters('embedModel'), 'AZURE_OPENAI_GPT_CHAT_DEPLOYMENT', parameters('aoaiGptChatModelName'), 'AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT', parameters('aoaiGptRealtimeModelName'), 'AZURE_SEARCH_ENDPOINT', format('https://{0}.search.windows.net', reference('searchService').outputs.name.value), 'AZURE_SEARCH_INDEX', parameters('searchIndexName'), 'AZURE_STORAGE_ENDPOINT', reference('storage').outputs.primaryBlobEndpoint.value, 'AZURE_STORAGE_CONNECTION_STRING', format('ResourceId=/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Storage/storageAccounts/{2};', subscription().subscriptionId, if(not(empty(parameters('resourceGroupName'))), parameters('resourceGroupName'), format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), reference('storage').outputs.name.value), 'AZURE_STORAGE_CONTAINER', variables('storageContainerName'), 'COSMOSDB_ENDPOINT', reference('cosmosdb').outputs.cosmosDbEndpoint.value, 'COSMOSDB_DATABASE', reference('cosmosdb').outputs.cosmosDbDatabase.value, 'COSMOSDB_AIConversations_CONTAINER', reference('cosmosdb').outputs.cosmosDbAIConversationsContainer.value, 'COSMOSDB_Customer_CONTAINER', reference('cosmosdb').outputs.cosmosDbCustomerContainer.value, 'COSMOSDB_HumanConversations_CONTAINER', reference('cosmosdb').outputs.cosmosDbHumanConversationsContainer.value, 'COSMOSDB_Product_CONTAINER', reference('cosmosdb').outputs.cosmosDbProductContainer.value, 'COSMOSDB_Purchases_CONTAINER', reference('cosmosdb').outputs.cosmosDbPurchasesContainer.value, 'COSMOSDB_ProductUrl_CONTAINER', reference('cosmosdb').outputs.cosmosDbProductUrlContainer.value), if(empty(parameters('openAiRealtimeName')), createObject(), createObject()))]"
+            "value": "[union(createObject('FRONTEND_ORIGINS', format('https://{0}frontend-{1}.{2},http://localhost:5173,http://localhost:5001,http://localhost:5000', variables('abbrs').appContainerApps, variables('resourceToken'), if(parameters('enableZeroTrust'), reference('containerAppsEnvironmentZeroTrust').outputs.defaultDomain.value, reference('containerAppsEnvironment').outputs.defaultDomain.value)), 'AZURE_CLIENT_ID', reference('appIdentity').outputs.clientId.value, 'AZURE_USER_ASSIGNED_IDENTITY_ID', reference('appIdentity').outputs.identityId.value, 'APPLICATIONINSIGHTS_CONNECTION_STRING', reference('monitoring').outputs.appInsightsConnectionString.value, 'AZURE_AI_FOUNDRY_ENDPOINT', reference('account').outputs.accountEndpoint.value, 'AZURE_AI_FOUNDRY_PROJECT_ID', reference('aiFoundryProject').outputs.projectId.value, 'AZURE_AI_FOUNDRY_BING_CONNECTION_ID', reference('bingConnection').outputs.connectionId.value, 'AZURE_AI_FOUNDRY_MCP_URL', reference('mcpServerApp').outputs.fqdn.value, 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT', parameters('embedModel'), 'AZURE_OPENAI_EMBEDDING_MODEL', parameters('embedModel'), 'AZURE_OPENAI_GPT_CHAT_DEPLOYMENT', parameters('aoaiGptChatModelName'), 'AZURE_OPENAI_GPT_REALTIME_DEPLOYMENT', parameters('aoaiGptRealtimeModelName'), 'AZURE_SEARCH_ENDPOINT', format('https://{0}.search.windows.net', reference('searchService').outputs.name.value), 'AZURE_SEARCH_INDEX', parameters('searchIndexName'), 'AZURE_STORAGE_ENDPOINT', reference('storage').outputs.primaryBlobEndpoint.value, 'AZURE_STORAGE_CONNECTION_STRING', format('ResourceId=/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Storage/storageAccounts/{2};', subscription().subscriptionId, if(not(empty(parameters('resourceGroupName'))), parameters('resourceGroupName'), format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), reference('storage').outputs.name.value), 'AZURE_STORAGE_CONTAINER', variables('storageContainerName'), 'COSMOSDB_ENDPOINT', reference('cosmosdb').outputs.cosmosDbEndpoint.value, 'COSMOSDB_DATABASE', reference('cosmosdb').outputs.cosmosDbDatabase.value, 'COSMOSDB_AIConversations_CONTAINER', reference('cosmosdb').outputs.cosmosDbAIConversationsContainer.value, 'COSMOSDB_Customer_CONTAINER', reference('cosmosdb').outputs.cosmosDbCustomerContainer.value, 'COSMOSDB_HumanConversations_CONTAINER', reference('cosmosdb').outputs.cosmosDbHumanConversationsContainer.value, 'COSMOSDB_Product_CONTAINER', reference('cosmosdb').outputs.cosmosDbProductContainer.value, 'COSMOSDB_Purchases_CONTAINER', reference('cosmosdb').outputs.cosmosDbPurchasesContainer.value, 'COSMOSDB_ProductUrl_CONTAINER', reference('cosmosdb').outputs.cosmosDbProductUrlContainer.value), if(empty(parameters('openAiRealtimeName')), createObject(), createObject()))]"
           },
           "keyVaultSecrets": {
             "value": {
@@ -7271,11 +7280,317 @@
         "containerAppsEnvironmentZeroTrust",
         "cosmosdb",
         "keyVault",
+        "mcpServerApp",
         "monitoring",
         "registry",
         "resGroup",
         "searchService",
         "storage"
+      ]
+    },
+    "mcpServerApp": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "ai-foundry-mcp",
+      "resourceGroup": "[if(not(empty(parameters('resourceGroupName'))), parameters('resourceGroupName'), format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "appName": {
+            "value": "[format('{0}aifoundry-mcp-{1}', variables('abbrs').appContainerApps, variables('resourceToken'))]"
+          },
+          "serviceName": {
+            "value": "ai-foundry-mcp"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "identityId": {
+            "value": "[reference('appIdentity').outputs.identityId.value]"
+          },
+          "containerAppsEnvironmentId": "[if(parameters('enableZeroTrust'), createObject('value', reference('containerAppsEnvironmentZeroTrust').outputs.id.value), createObject('value', reference('containerAppsEnvironment').outputs.id.value))]",
+          "containerRegistryName": {
+            "value": "[reference('registry').outputs.name.value]"
+          },
+          "exists": {
+            "value": "[parameters('appExists')]"
+          },
+          "targetPort": {
+            "value": 8000
+          },
+          "env": {
+            "value": {
+              "AZURE_AI_FOUNDRY_ENDPOINT": "[reference('account').outputs.accountEndpoint.value]",
+              "AZURE_AI_FOUNDRY_PROJECT_ID": "[reference('aiFoundryProject').outputs.projectId.value]",
+              "AZURE_AI_FOUNDRY_BING_CONNECTION_ID": "[reference('bingConnection').outputs.connectionId.value]",
+              "AZURE_OPENAI_GPT_CHAT_DEPLOYMENT": "[parameters('aoaiGptChatModelName')]",
+              "AZURE_CLIENT_ID": "[reference('appIdentity').outputs.clientId.value]",
+              "APPLICATIONINSIGHTS_CONNECTION_STRING": "[reference('monitoring').outputs.appInsightsConnectionString.value]"
+            }
+          },
+          "keyVaultSecrets": {
+            "value": {}
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "4480837838925266547"
+            }
+          },
+          "parameters": {
+            "appName": {
+              "type": "string",
+              "metadata": {
+                "description": "Container App name"
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Azure region for deployment"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to resources"
+              }
+            },
+            "identityId": {
+              "type": "string",
+              "metadata": {
+                "description": "Managed identity ID for Azure authentication"
+              }
+            },
+            "containerAppsEnvironmentId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment resource ID"
+              }
+            },
+            "containerRegistryName": {
+              "type": "string",
+              "metadata": {
+                "description": "Container registry name"
+              }
+            },
+            "exists": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Whether the app already exists (for updates)"
+              }
+            },
+            "serviceName": {
+              "type": "string",
+              "defaultValue": "ai-foundry-mcp",
+              "metadata": {
+                "description": "Service name for image tagging"
+              }
+            },
+            "targetPort": {
+              "type": "int",
+              "defaultValue": 8000,
+              "metadata": {
+                "description": "Container port"
+              }
+            },
+            "env": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Environment variables for the container"
+              }
+            },
+            "keyVaultSecrets": {
+              "type": "secureObject",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Key Vault secrets to inject as environment variables"
+              }
+            }
+          },
+          "variables": {
+            "copy": [
+              {
+                "name": "envVars",
+                "count": "[length(items(parameters('env')))]",
+                "input": {
+                  "name": "[items(parameters('env'))[copyIndex('envVars')].key]",
+                  "value": "[items(parameters('env'))[copyIndex('envVars')].value]"
+                }
+              },
+              {
+                "name": "secretRefs",
+                "count": "[length(items(parameters('keyVaultSecrets')))]",
+                "input": {
+                  "name": "[items(parameters('keyVaultSecrets'))[copyIndex('secretRefs')].key]",
+                  "secretRef": "[toLower(items(parameters('keyVaultSecrets'))[copyIndex('secretRefs')].key)]"
+                }
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('appName')]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('azd-service-name', parameters('serviceName')))]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', parameters('identityId'))]": {}
+                }
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('containerAppsEnvironmentId')]",
+                "configuration": {
+                  "copy": [
+                    {
+                      "name": "secrets",
+                      "count": "[length(items(parameters('keyVaultSecrets')))]",
+                      "input": {
+                        "name": "[toLower(items(parameters('keyVaultSecrets'))[copyIndex('secrets')].key)]",
+                        "keyVaultUrl": "[items(parameters('keyVaultSecrets'))[copyIndex('secrets')].value]",
+                        "identity": "[parameters('identityId')]"
+                      }
+                    }
+                  ],
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": false,
+                    "targetPort": "[parameters('targetPort')]",
+                    "transport": "http",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-01-01-preview').loginServer]",
+                      "identity": "[parameters('identityId')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "image": "[if(parameters('exists'), format('{0}/{1}:{2}', reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-01-01-preview').loginServer, parameters('serviceName'), take(uniqueString(resourceGroup().id), 8)), 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest')]",
+                      "name": "[parameters('serviceName')]",
+                      "env": "[union(variables('envVars'), variables('secretRefs'))]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "probes": [
+                        {
+                          "type": "Startup",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": "[parameters('targetPort')]",
+                            "scheme": "HTTP"
+                          },
+                          "initialDelaySeconds": 10,
+                          "periodSeconds": 10,
+                          "failureThreshold": 30
+                        },
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": "[parameters('targetPort')]",
+                            "scheme": "HTTP"
+                          },
+                          "initialDelaySeconds": 0,
+                          "periodSeconds": 30,
+                          "failureThreshold": 3
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": "[parameters('targetPort')]",
+                            "scheme": "HTTP"
+                          },
+                          "initialDelaySeconds": 5,
+                          "periodSeconds": 10,
+                          "failureThreshold": 3
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 3,
+                    "rules": [
+                      {
+                        "name": "http-scaling",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "50"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "metadata": {
+                "description": "Container App resource ID"
+              },
+              "value": "[resourceId('Microsoft.App/containerApps', parameters('appName'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Container App name"
+              },
+              "value": "[parameters('appName')]"
+            },
+            "fqdn": {
+              "type": "string",
+              "metadata": {
+                "description": "Container App FQDN (internal)"
+              },
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('appName')), '2024-03-01').configuration.ingress.fqdn)]"
+            },
+            "serviceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Container App service name for azd"
+              },
+              "value": "[parameters('serviceName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "account",
+        "aiFoundryProject",
+        "appIdentity",
+        "bingConnection",
+        "containerAppsEnvironment",
+        "containerAppsEnvironmentZeroTrust",
+        "monitoring",
+        "registry",
+        "resGroup"
       ]
     },
     "searchService": {

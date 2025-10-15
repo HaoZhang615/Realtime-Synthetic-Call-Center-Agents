@@ -28,6 +28,7 @@ if BACKEND_ROOT not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 # Import route modules
 from routes.admin import admin_router
@@ -70,9 +71,5 @@ async def health():
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
-    return {
-        "message": "Realtime Synthetic Call Center Agents API",
-        "status": "running",
-        "docs": "/docs"
-    }
+    """Redirect root to API documentation"""
+    return RedirectResponse(url="/docs", status_code=301)
