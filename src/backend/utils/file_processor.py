@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from subprocess import run, PIPE
 from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import BlobServiceClient
@@ -326,3 +327,82 @@ def upload_documents(azure_credential, source_folder, indexer_name, azure_search
         logging.info("Indexer started. Any unindexed blobs should be indexed in a few minutes, check the Azure Portal for status.")
     except ResourceExistsError:
         logging.info("Indexer already running, not starting again")
+
+
+def wait_for_indexer_completion(azure_credential, indexer_name, azure_search_endpoint, max_wait_seconds=300, poll_interval=10):
+    """
+    Wait for the indexer to complete processing documents.
+    
+    This ensures that the AI Search index is fully updated before extracting
+    topics from document metadata. This is critical when multiple documents
+    are uploaded simultaneously, as indexing can take time.
+    
+    Args:
+        azure_credential: Azure credential for authentication
+        indexer_name: Name of the indexer to monitor
+        azure_search_endpoint: Azure Search service endpoint
+        max_wait_seconds: Maximum time to wait (default: 300s = 5 minutes)
+        poll_interval: Seconds between status checks (default: 10s)
+        
+    Returns:
+        bool: True if indexing completed successfully, False if timeout or error
+    """
+    indexer_client = SearchIndexerClient(azure_search_endpoint, azure_credential)
+    
+    start_time = time.time()
+    elapsed = 0
+    
+    logging.info(
+        f"Waiting for indexer '{indexer_name}' to complete. "
+        f"Max wait: {max_wait_seconds}s, polling every {poll_interval}s"
+    )
+    
+    while elapsed < max_wait_seconds:
+        try:
+            status = indexer_client.get_indexer_status(indexer_name)
+            
+            # Check execution status
+            if status.last_result:
+                exec_status = status.last_result.status
+                items_processed = status.last_result.items_processed or 0
+                items_failed = status.last_result.items_failed or 0
+                
+                logging.info(
+                    f"Indexer status: {exec_status} | "
+                    f"Processed: {items_processed} | Failed: {items_failed} | "
+                    f"Elapsed: {int(elapsed)}s"
+                )
+                
+                if exec_status == "success":
+                    logging.info(
+                        f"✅ Indexer completed successfully! "
+                        f"Processed {items_processed} items in {int(elapsed)}s"
+                    )
+                    return True
+                elif exec_status == "transientFailure":
+                    logging.warning(f"Indexer encountered transient failure, will retry...")
+                elif exec_status in ["failure", "reset"]:
+                    logging.error(f"Indexer failed with status: {exec_status}")
+                    return False
+                # If status is "inProgress", continue waiting
+            
+            # Check current execution state
+            if status.execution_history and len(status.execution_history) > 0:
+                latest = status.execution_history[0]
+                if latest.status == "inProgress":
+                    logging.info(f"Indexer is currently running... ({int(elapsed)}s elapsed)")
+            
+            # Wait before next check
+            time.sleep(poll_interval)
+            elapsed = time.time() - start_time
+            
+        except Exception as e:
+            logging.error(f"Error checking indexer status: {e}")
+            return False
+    
+    logging.warning(
+        f"⚠️ Indexer did not complete within {max_wait_seconds}s. "
+        f"Documents may still be indexing in the background. "
+        f"Topic extraction will use currently indexed documents."
+    )
+    return False

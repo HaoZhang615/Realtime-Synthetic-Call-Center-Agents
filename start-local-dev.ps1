@@ -64,11 +64,106 @@ function Write-Header {
     Write-Host "$('=' * 70)`n" -ForegroundColor Magenta
 }
 
+# Resolve Key Vault references from azd environment
+function Resolve-KeyVaultReferences {
+    Write-Header "Resolving Azure Key Vault References"
+    
+    # Check if user is logged in to Azure CLI
+    try {
+        $null = az account show 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Not logged in to Azure CLI. Cannot resolve Key Vault references."
+            Write-Info "Login with: az login"
+            return @{}
+        }
+    } catch {
+        Write-Warning "Azure CLI not available. Cannot resolve Key Vault references."
+        return @{}
+    }
+    
+    # Try to get environment variables from azd
+    try {
+        $azdEnvOutput = azd env get-values 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not retrieve azd environment variables"
+            Write-Info "Make sure you have run 'azd up' or 'azd env refresh'"
+            return @{}
+        }
+        
+        # Parse the output and find Key Vault references
+        $resolvedVars = @{}
+        $keyVaultRefsFound = $false
+        
+        $azdEnvOutput | ForEach-Object {
+            if ($_ -match '^([^=]+)="?(@Microsoft\.KeyVault\(SecretUri=([^)]+)\))"?$') {
+                $keyVaultRefsFound = $true
+                $varName = $matches[1]
+                $secretUri = $matches[3]
+                
+                Write-Info "Resolving Key Vault reference for $varName..."
+                
+                # Extract vault name and secret name from URI
+                # Format: https://<vault-name>.vault.azure.net/secrets/<secret-name>/
+                if ($secretUri -match 'https://([^.]+)\.vault\.azure\.net/secrets/([^/]+)') {
+                    $vaultName = $matches[1]
+                    $secretName = $matches[2]
+                    
+                    try {
+                        # Use Azure CLI to get the secret value
+                        $secretValue = az keyvault secret show --vault-name $vaultName --name $secretName --query "value" -o tsv 2>&1
+                        if ($LASTEXITCODE -eq 0 -and $secretValue) {
+                            $resolvedVars[$varName] = $secretValue
+                            Write-Success "Resolved $varName from Key Vault"
+                        } else {
+                            Write-Warning "Failed to retrieve secret $secretName from vault $vaultName"
+                            Write-Info "You may need to grant yourself access to the Key Vault"
+                            Write-Info "Run: az keyvault set-policy --name $vaultName --upn <your-email> --secret-permissions get list"
+                        }
+                    } catch {
+                        Write-Warning "Failed to resolve $varName from Key Vault: $_"
+                    }
+                }
+            }
+        }
+        
+        if (-not $keyVaultRefsFound) {
+            Write-Info "No Key Vault references found in environment variables"
+        }
+        
+        return $resolvedVars
+    } catch {
+        Write-Warning "Error resolving Key Vault references: $_"
+        return @{}
+    }
+}
+
 # Verify prerequisites
 function Test-Prerequisites {
     Write-Header "Checking Prerequisites"
     
     $allGood = $true
+    
+    # Check if Azure CLI is installed
+    try {
+        $null = az version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "Azure CLI found"
+        }
+    } catch {
+        Write-Warning "Azure CLI not found - Key Vault references won't be resolved automatically"
+        Write-Info "Install from: https://aka.ms/install-azure-cli"
+    }
+    
+    # Check if azd is installed
+    try {
+        $null = azd version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "Azure Developer CLI (azd) found"
+        }
+    } catch {
+        Write-Warning "Azure Developer CLI (azd) not found"
+        Write-Info "Install from: https://aka.ms/azure-dev/install"
+    }
     
     # Check MCP virtual environment
     if (-not $SkipMcp) {
@@ -116,6 +211,10 @@ function Test-Prerequisites {
 
 # Start MCP Server
 function Start-McpServer {
+    param(
+        [hashtable]$ResolvedSecrets = @{}
+    )
+    
     if ($SkipMcp) {
         Write-Warning "Skipping MCP Server (will use Azure deployment)"
         return
@@ -129,11 +228,66 @@ function Start-McpServer {
     Write-Info "Port: $McpPort"
     Write-Info "Directory: $mcpDir"
     
+    # Get AI Foundry configuration from azd environment
+    $azdEnvOutput = azd env get-values 2>&1
+    $aiFoundryEndpoint = ""
+    $aiFoundryProjectId = ""
+    $aiFoundryBingConnectionId = ""
+    $gptDeployment = "gpt-4.1-nano"
+    
+    if ($LASTEXITCODE -eq 0) {
+        $azdEnvOutput | ForEach-Object {
+            if ($_ -match '^AZURE_AI_FOUNDRY_ENDPOINT="?([^"]+)"?$') {
+                $aiFoundryEndpoint = $matches[1]
+            }
+            elseif ($_ -match '^AZURE_AI_FOUNDRY_PROJECT_ID="?([^"]+)"?$') {
+                $aiFoundryProjectId = $matches[1]
+            }
+            elseif ($_ -match '^AZURE_AI_FOUNDRY_BING_CONNECTION_ID="?([^"]+)"?$') {
+                $aiFoundryBingConnectionId = $matches[1]
+            }
+            elseif ($_ -match '^AZURE_OPENAI_GPT_CHAT_DEPLOYMENT="?([^"]+)"?$') {
+                $gptDeployment = $matches[1]
+            }
+        }
+    }
+    
+    # Build environment variable assignments
+    $envVarCommands = "`$env:PORT = '$McpPort'"
+    
+    if ($aiFoundryEndpoint) {
+        $envVarCommands += "`n`$env:AZURE_AI_FOUNDRY_ENDPOINT = '$aiFoundryEndpoint'"
+        Write-Info "AI Foundry Endpoint: $aiFoundryEndpoint"
+    }
+    if ($aiFoundryProjectId) {
+        $envVarCommands += "`n`$env:AZURE_AI_FOUNDRY_PROJECT_ID = '$aiFoundryProjectId'"
+    }
+    if ($aiFoundryBingConnectionId) {
+        $envVarCommands += "`n`$env:AZURE_AI_FOUNDRY_BING_CONNECTION_ID = '$aiFoundryBingConnectionId'"
+    }
+    if ($gptDeployment) {
+        $envVarCommands += "`n`$env:AZURE_OPENAI_GPT_CHAT_DEPLOYMENT = '$gptDeployment'"
+        Write-Info "Model Deployment: $gptDeployment"
+    }
+    
+    # Add any resolved secrets
+    foreach ($key in $ResolvedSecrets.Keys) {
+        $value = $ResolvedSecrets[$key]
+        $escapedValue = $value -replace "'", "''"
+        $envVarCommands += "`n`$env:$key = '$escapedValue'"
+    }
+    
+    if (-not $aiFoundryEndpoint -or -not $aiFoundryProjectId -or -not $aiFoundryBingConnectionId) {
+        Write-Warning "Some AI Foundry environment variables are missing!"
+        Write-Info "The MCP server may fail to initialize."
+        Write-Info "Run 'azd env refresh' to update environment variables."
+    }
+    
     # Start in new PowerShell window
     $mcpCommand = @"
 `$host.ui.RawUI.WindowTitle = 'AI Foundry MCP Server - Port $McpPort'
 cd '$mcpDir'
-`$env:PORT = '$McpPort'
+$envVarCommands
 Write-Host '🚀 Starting AI Foundry MCP Server on port $McpPort...' -ForegroundColor Green
 Write-Host 'URL: http://localhost:$McpPort' -ForegroundColor Cyan
 Write-Host 'Health: http://localhost:$McpPort/health' -ForegroundColor Cyan
@@ -151,6 +305,10 @@ Write-Host '❌ MCP Server stopped. Press any key to close...' -ForegroundColor 
 
 # Start Backend
 function Start-Backend {
+    param(
+        [hashtable]$ResolvedSecrets = @{}
+    )
+    
     if ($SkipBackend) {
         Write-Warning "Skipping Backend Server"
         return
@@ -170,11 +328,24 @@ function Start-Backend {
     Write-Info "Directory: $backendDir"
     Write-Info "MCP Server: $mcpUrl"
     
+    # Build environment variable assignments
+    $envVarCommands = "`$env:AZURE_AI_FOUNDRY_MCP_URL = '$mcpUrl'"
+    foreach ($key in $ResolvedSecrets.Keys) {
+        $value = $ResolvedSecrets[$key]
+        # Escape special characters in the value
+        $escapedValue = $value -replace "'", "''"
+        $envVarCommands += "`n`$env:$key = '$escapedValue'"
+    }
+    
+    if ($ResolvedSecrets.Count -gt 0) {
+        Write-Success "Will inject $($ResolvedSecrets.Count) resolved Key Vault secret(s) into backend"
+    }
+    
     # Start in new PowerShell window
     $backendCommand = @"
 `$host.ui.RawUI.WindowTitle = 'Backend API - Port $BackendPort'
 cd '$backendDir'
-`$env:AZURE_AI_FOUNDRY_MCP_URL = '$mcpUrl'
+$envVarCommands
 Write-Host '🚀 Starting Backend API on port $BackendPort...' -ForegroundColor Green
 Write-Host 'URL: http://localhost:$BackendPort' -ForegroundColor Cyan
 Write-Host 'API Docs: http://localhost:$BackendPort/docs' -ForegroundColor Cyan
@@ -238,13 +409,19 @@ function Main {
     # Check prerequisites
     Test-Prerequisites
     
+    # Resolve Key Vault references for local development
+    $resolvedSecrets = @{}
+    if (-not $SkipBackend -or -not $SkipMcp) {
+        $resolvedSecrets = Resolve-KeyVaultReferences
+    }
+    
     # Start services in order
     if (-not $SkipMcp) {
-        Start-McpServer
+        Start-McpServer -ResolvedSecrets $resolvedSecrets
     }
     
     if (-not $SkipBackend) {
-        Start-Backend
+        Start-Backend -ResolvedSecrets $resolvedSecrets
     }
     
     if (-not $SkipFrontend) {

@@ -31,7 +31,7 @@ if ROOT not in sys.path:
 if BACKEND_ROOT not in sys.path:
     sys.path.insert(0, BACKEND_ROOT)
 
-from utils.file_processor import upload_documents, setup_index
+from utils.file_processor import upload_documents, setup_index, wait_for_indexer_completion
 from utils.data_synthesizer import DataSynthesizer, run_synthesis, logger as synthesizer_logger
 from load_azd_env import load_azd_environment
 
@@ -355,7 +355,41 @@ def upload_with_setup(azure_credential, source_folder, indexer_name, azure_searc
         # Now upload the documents
         upload_documents(azure_credential, source_folder, indexer_name, azure_search_endpoint, azure_storage_endpoint, azure_storage_container)
         
-        logger.info("Upload and indexing completed successfully")
+        logger.info("Documents uploaded, waiting for indexer to complete...")
+        
+        # Wait for indexer to complete processing
+        # This is critical when multiple documents are uploaded - indexing takes time
+        indexing_successful = wait_for_indexer_completion(
+            azure_credential=azure_credential,
+            indexer_name=indexer_name,
+            azure_search_endpoint=azure_search_endpoint,
+            max_wait_seconds=300,  # 5 minutes max
+            poll_interval=10  # Check every 10 seconds
+        )
+        
+        if indexing_successful:
+            logger.info("✅ Indexing completed successfully")
+            
+            # Extract topics from the newly indexed documents
+            # This updates the Internal KB agent's description for better routing
+            try:
+                from services.document_metadata import get_all_document_topics
+                topics = get_all_document_topics()
+                logger.info(
+                    f"📚 Extracted {len(topics)} topics from indexed documents. "
+                    f"Internal KB agent description will be updated on next session."
+                )
+                if topics:
+                    logger.info(f"Sample topics: {', '.join(topics[:10])}")
+            except Exception as topic_error:
+                logger.warning(f"Failed to extract topics (non-critical): {topic_error}")
+        else:
+            logger.warning(
+                "⚠️ Indexing may still be in progress. "
+                "Topics will be available once indexing completes."
+            )
+        
+        logger.info("Upload and indexing process completed")
         
     except Exception as ex:
         logger.exception("Upload with setup failed: %s", ex)
@@ -472,6 +506,19 @@ async def delete_file(filename: str):
             logger.info("Deleted blob: %s", filename)
         else:
             logger.warning("Blob not found: %s", filename)
+        
+        # After deletion, log updated topics for Internal KB agent
+        # The next session will automatically use the updated topic list
+        try:
+            from services.document_metadata import get_all_document_topics
+            topics = get_all_document_topics()
+            logger.info(
+                f"📚 After deletion: {len(topics)} topics remain in knowledge base. "
+                f"Internal KB agent description will reflect this on next session."
+            )
+        except Exception as topic_error:
+            logger.warning(f"Failed to update topics after deletion (non-critical): {topic_error}")
+        
         return {
             "status": "deleted",
             "filename": filename,
@@ -686,3 +733,41 @@ async def get_job_status(job_id: str = Path(...)):
         "progress": job.get("progress", 0),
         "logs": job.get("logs", [])
     }
+
+
+@admin_router.get("/kb-topics")
+async def get_kb_topics():
+    """
+    Get all topics extracted from the knowledge base index.
+    
+    This endpoint shows what topics are currently indexed and available
+    for the Internal KB agent. The agent's description is dynamically
+    generated from these topics to enable intelligent routing.
+    
+    Returns:
+        - total_topics: Number of unique topics
+        - topics: List of all topic strings
+        - documents: Summary of documents with their topics
+        - agent_description: Current description used by Internal KB agent
+    """
+    try:
+        from services.document_metadata import (
+            get_all_document_topics, 
+            get_document_summaries,
+            get_kb_agent_description
+        )
+        
+        topics = get_all_document_topics()
+        summaries = get_document_summaries()
+        agent_description = get_kb_agent_description()
+        
+        return {
+            "total_topics": len(topics),
+            "topics": topics,
+            "documents": summaries,
+            "agent_description": agent_description,
+            "note": "The Internal KB agent uses this description for intelligent routing. Topics update automatically when documents are added or deleted."
+        }
+    except Exception as e:
+        logger.exception("Failed to get KB topics: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))

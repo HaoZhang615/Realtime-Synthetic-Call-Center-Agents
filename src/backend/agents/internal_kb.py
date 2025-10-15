@@ -131,33 +131,45 @@ async def query_internal_knowledge_base(params: Dict[str, Any]) -> str:
         return f"Failed to query knowledge base: {exc}"
 
 
-internal_kb_agent: Dict[str, Any] = {
-    "id": "Assistant_internal_kb_agent",
-    "name": "Internal Knowledgebase Agent",
-    "description": (
-        "Call this agent when the user needs information from the internal "
-        "knowledge base."
-    ),
-    "system_message": (
-        "You are an internal knowledge base assistant that responds to "
-        "questions about the company's knowledge assets. Use "
-        "query_internal_knowledge_base to gather precise context."
-    ),
-    "tools": [
-        {
-            "name": "query_internal_knowledge_base",
-            "description": "Query the internal knowledge base for supporting evidence.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "User request rephrased for search.",
-                    }
+def get_internal_kb_agent() -> Dict[str, Any]:
+    """
+    Return Internal KB agent with dynamically generated description 
+    based on current AI Search index metadata.
+    
+    This function is called each time a session initializes, ensuring
+    the agent description reflects the current state of indexed documents.
+    The description automatically updates when documents are added or deleted.
+    """
+    from services.document_metadata import get_kb_agent_description
+    
+    return {
+        "id": "Assistant_internal_kb_agent",
+        "name": "Internal Knowledgebase Agent",
+        "description": get_kb_agent_description(),  # Dynamic description from index!
+        "system_message": (
+            "You are an internal knowledge base assistant that responds to "
+            "questions about the company's knowledge assets. Use "
+            "query_internal_knowledge_base to gather precise context."
+        ),
+        "tools": [
+            {
+                "name": "query_internal_knowledge_base",
+                "description": "Query the internal knowledge base for supporting evidence.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "User request rephrased for search.",
+                        }
+                    },
+                    "required": ["query"],
                 },
-                "required": ["query"],
-            },
-            "returns": query_internal_knowledge_base,
-        }
-    ],
-}
+                "returns": query_internal_knowledge_base,
+            }
+        ],
+    }
+
+
+# Legacy export for backward compatibility
+internal_kb_agent = get_internal_kb_agent()

@@ -28,11 +28,11 @@ except Exception as e:
     database_agent = None
 
 try:
-    from agents.internal_kb import internal_kb_agent
-    logger.info("Successfully imported internal_kb_agent")
+    from agents.internal_kb import get_internal_kb_agent
+    logger.info("Successfully imported get_internal_kb_agent")
 except Exception as e:
-    logger.error(f"Failed to import internal_kb_agent: {e}")
-    internal_kb_agent = None
+    logger.error(f"Failed to import get_internal_kb_agent: {e}")
+    get_internal_kb_agent = None
 
 try:
     from agents.web_search_agent import web_search_agent
@@ -301,10 +301,13 @@ class AgentOrchestrator:
 
     def initialise_agents(self, customer_id: str) -> None:
         """Register core agents for the supplied customer identifier."""
-        if internal_kb_agent:
-            self.assistant_service.register_agent(internal_kb_agent)
+        if get_internal_kb_agent:
+            # Get fresh agent definition with current topics from AI Search index
+            # This ensures the description reflects the latest indexed documents
+            self.assistant_service.register_agent(get_internal_kb_agent())
+            logger.info("Registered internal KB agent with dynamic topics from AI Search")
         else:
-            logger.warning("internal_kb_agent not available")
+            logger.warning("get_internal_kb_agent not available")
             
         if database_agent:
             self.assistant_service.register_agent(database_agent(customer_id))
