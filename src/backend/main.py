@@ -35,6 +35,7 @@ from routes.admin import admin_router
 from routes.realtime import realtime_router 
 from routes.websocket import websocket_router
 from routes.customers import router as customers_router
+from routes.conversations import router as conversations_router
 
 from load_azd_env import load_azd_environment
 
@@ -61,6 +62,7 @@ app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(realtime_router, prefix="/api/realtime", tags=["realtime"])
 app.include_router(websocket_router, prefix="/api", tags=["websocket"])
 app.include_router(customers_router, prefix="/api", tags=["customers"])
+app.include_router(conversations_router, prefix="/api", tags=["conversations"])
 
 
 @app.get("/api/health")

@@ -6,10 +6,11 @@ import { VoiceControls } from './VoiceControls'
 import { ChatHistory } from './ChatHistory'
 import { VoiceSettings } from './VoiceSettings'
 import { CustomerSelection } from './CustomerSelection'
+import { ConversationHistory } from './ConversationHistory'
 import { ChatText } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { RealtimeClient } from '@/utils/realtimeClient'
-import { getRealtimeApiBase } from '@/config'
+import { getRealtimeApiBase, getApiBase } from '@/config'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 type CallStatus = 'idle' | 'calling' | 'active' | 'ended'
@@ -24,6 +25,7 @@ type ChatMessage = {
 }
 
 export function VoiceChatInterface() {
+  const API_BASE = getApiBase()
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
   const [callStatus, setCallStatus] = useState<CallStatus>('idle')
   const [isRecording, setIsRecording] = useState(false)
@@ -32,6 +34,10 @@ export function VoiceChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [currentTranscript, setCurrentTranscript] = useState('')
   const [textInput, setTextInput] = useState('')
+  
+  // Historical conversation state
+  const [viewingHistorical, setViewingHistorical] = useState(false)
+  const [historicalConversationId, setHistoricalConversationId] = useState<string | null>(null)
   
   // Customer selection state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
@@ -288,6 +294,8 @@ export function VoiceChatInterface() {
     setTextInput('')
     setCallStatus('idle')
     setIsMuted(false)
+    setViewingHistorical(false)
+    setHistoricalConversationId(null)
 
     toast.success(`Selected customer: ${customerName}`)
 
@@ -464,6 +472,8 @@ export function VoiceChatInterface() {
       setCallStatus('calling')
       setMessages([])
       setCurrentTranscript('')
+      setViewingHistorical(false)
+      setHistoricalConversationId(null)
 
       if (!client.isConnected) {
         await connectWebSocket(selectedCustomerId)
@@ -522,6 +532,49 @@ export function VoiceChatInterface() {
     }
   }
 
+  const handleConversationSelect = async (conversationId: string) => {
+    if (!selectedCustomerId) return
+
+    try {
+      // Fetch the full conversation details
+      const response = await fetch(`${API_BASE}/api/conversations/${selectedCustomerId}/${conversationId}`)
+      if (!response.ok) {
+        throw new Error('Failed to load conversation')
+      }
+      
+      const conversation = await response.json()
+      
+      // Transform the messages to match our ChatMessage format
+      const transformedMessages: ChatMessage[] = conversation.messages.map((msg: any, index: number) => ({
+        id: `historical_${index}`,
+        type: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.message || '',
+        timestamp: conversation.session_start || new Date().toISOString(),
+        streaming: false
+      }))
+      
+      // Set the messages and mark as viewing historical
+      setMessages(transformedMessages)
+      setViewingHistorical(true)
+      setHistoricalConversationId(conversationId)
+      setCurrentTranscript('')
+      
+      toast.success('Loaded historical conversation')
+    } catch (error) {
+      console.error('Error loading conversation:', error)
+      toast.error('Failed to load conversation')
+    }
+  }
+
+  const handleNewConversation = () => {
+    // Clear historical view and return to live mode
+    setViewingHistorical(false)
+    setHistoricalConversationId(null)
+    setMessages([])
+    setCurrentTranscript('')
+    toast.info('Ready for new conversation')
+  }
+
   // Helper function to convert Float32Array to PCM16
   const convertToPCM16 = (float32Array: Float32Array): ArrayBuffer => {
     const arrayBuffer = new ArrayBuffer(float32Array.length * 2)
@@ -566,14 +619,25 @@ export function VoiceChatInterface() {
     return (
       <div className="flex flex-col h-full">
         <div className="border-b border-border bg-card">
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <ChatText className="w-6 h-6 text-primary" />
-              Voice Chat Interface
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Select a customer to start your voice conversation
-            </p>
+          <div className="p-6 flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <ChatText className="w-6 h-6 text-primary" />
+                Voice Chat Interface
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Select a customer to start your voice conversation
+              </p>
+            </div>
+            <img 
+              src="/microsoft.png" 
+              alt="Microsoft" 
+              className="h-15 w-auto"
+              onError={(e) => {
+                console.error('Failed to load Microsoft logo from /microsoft.png');
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center p-6">
@@ -590,7 +654,7 @@ export function VoiceChatInterface() {
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
                 <ChatText className="w-6 h-6 text-primary" />
@@ -601,25 +665,36 @@ export function VoiceChatInterface() {
               </p>
             </div>
             
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowCustomerSelection(true)}
-              >
-                Change Customer
-              </Button>
-              
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${getConnectionStatusColor()}`}></div>
-                <span className="text-sm text-muted-foreground">
-                  {connectionStatus === 'connected' ? 'Connected' : 'Disconnected'}
-                </span>
+            <div className="flex flex-col items-end gap-3">
+              <img 
+                src="/microsoft.png" 
+                alt="Microsoft" 
+                className="h-12 w-auto"
+                onError={(e) => {
+                  console.error('Failed to load Microsoft logo from /microsoft.png');
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+              <div className="flex items-center gap-4">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowCustomerSelection(true)}
+                >
+                  Change Customer
+                </Button>
+                
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${getConnectionStatusColor()}`}></div>
+                  <span className="text-sm text-muted-foreground">
+                    {connectionStatus === 'connected' ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                
+                <Badge variant={callStatus === 'active' ? 'default' : 'secondary'}>
+                  {getCallStatusText()}
+                </Badge>
               </div>
-              
-              <Badge variant={callStatus === 'active' ? 'default' : 'secondary'}>
-                {getCallStatusText()}
-              </Badge>
             </div>
           </div>
         </div>
@@ -627,14 +702,45 @@ export function VoiceChatInterface() {
 
       {/* Main Content */}
       <div className="flex-1 flex gap-6 p-6 min-h-0">
-        {/* Left Panel - Chat History */}
+        {/* Left Sidebar - Conversation History */}
+        <div className="w-80 flex-shrink-0">
+          <ConversationHistory 
+            customerId={selectedCustomerId}
+            onConversationSelect={handleConversationSelect}
+            className="h-full"
+          />
+        </div>
+
+        {/* Center Panel - Chat History */}
         <div className="flex-1 flex flex-col min-w-0">
           <Card className="flex-1 flex flex-col">
             <CardHeader>
-              <CardTitle>Conversation</CardTitle>
-              <CardDescription>
-                Live transcript of your voice conversation
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    Conversation
+                    {viewingHistorical && (
+                      <Badge variant="secondary" className="text-xs">
+                        Historical
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {viewingHistorical 
+                      ? 'Viewing past conversation' 
+                      : 'Live transcript of your voice conversation'}
+                  </CardDescription>
+                </div>
+                {viewingHistorical && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleNewConversation}
+                  >
+                    New Conversation
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
               <div className="flex-1 min-h-0 flex flex-col">
@@ -650,10 +756,10 @@ export function VoiceChatInterface() {
                     onChange={e => setTextInput(e.target.value)}
                     onKeyDown={handleTextInputKey}
                     placeholder={connectionStatus === 'connected' ? 'Type a message...' : 'Connect to start chatting'}
-                    disabled={connectionStatus !== 'connected'}
+                    disabled={connectionStatus !== 'connected' || viewingHistorical}
                     className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                   />
-                  <Button size="sm" onClick={sendTextInput} disabled={!textInput.trim() || connectionStatus !== 'connected'}>
+                  <Button size="sm" onClick={sendTextInput} disabled={!textInput.trim() || connectionStatus !== 'connected' || viewingHistorical}>
                     Send
                   </Button>
                 </div>
@@ -663,7 +769,7 @@ export function VoiceChatInterface() {
         </div>
 
         {/* Right Panel - Controls */}
-        <div className="w-80 flex flex-col gap-6">
+        <div className="w-80 flex flex-col gap-6 flex-shrink-0">
           {/* Voice Controls */}
           <Card>
             <CardHeader>

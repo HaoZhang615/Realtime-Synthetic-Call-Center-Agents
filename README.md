@@ -14,17 +14,17 @@ This solution combines:
   - ***📚 Document Intelligence**: Vector search over internal knowledge base using Azure AI Search
   - ***💾 Database Operations**: CRUD operations on synthetic customer, product, and transaction data via Cosmos DB
   - ***📧 Email Automation**: Azure Logic Apps integration for outbound communication
-- **⚡ Modern Web Stack**: FastAPI backend with async WebSocket support + React TypeScript frontend, plus MCP invokation.
+- **⚡ Modern Web Stack**: FastAPI backend with async WebSocket support + React TypeScript frontend, plus MCP server invokation.
 
 ![Assistant Interface](./docs/images/Realtime-Synthetic-Call-Center-Agents.webp)
 
-The multi-agent system supports internal knowledge base queries, web search (grounded by synthetic product data from real companies like Microsoft), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
+The multi-agent system supports internal knowledge base queries, web search (grounded by Bing Search), and database actions (read, create, update), making it ideal for showcasing AI-driven customer support and automation in call centers and retail environments.
 
 ## Security & Networking
 
 This solution supports **enterprise-grade security** with configurable Zero Trust architecture. During deployment with `azd up`, users can choose to enable Zero Trust networking for enhanced security:
 
-### Zero Trust Architecture (Optional - Selected During Deployment)
+### Zero Trust Architecture (Optional - Selected During Deployment) (**Work In Progress**) 
 The `azd up` deployment process allows users to decide whether to enable Zero Trust architecture. When enabled:
 - **All public endpoints are disabled** except for the AI Foundry/AI Services account (required for AI Search indexing skillset functionality)
 - **Virtual Network (VNet) Integration**: Container Apps Environment deployed with VNet integration using workload profiles
@@ -45,25 +45,21 @@ When Zero Trust is not enabled:
 - **Azure Key Vault**: Secure storage for sensitive configuration like API keys
 - **Azure Trusted Services**: Storage account configured to allow trusted Azure services (like AI Search) access
 
-### Benefits
-- **Flexible Security**: Choose between standard deployment or Zero Trust architecture based on requirements
-- **Enhanced Security** (Zero Trust): Backend data and services isolated from public internet when enabled
-- **Compliance Ready**: Zero Trust option supports enterprise compliance requirements  
-- **Zero-Trust Architecture**: Services authenticate using managed identities instead of connection strings
-- **AI Search Compatibility**: AI Services account maintains necessary access for AI Search operations
-- **Scalable**: VNet integration (when enabled) allows for future expansion with additional subnets and security controls
-
 ## How to get it work
 
 - [Deploy the application](#how-to-deploy)
-- Access the backend FastAPI admin interface at the backend URL from the output of `azd up`.
-- Use the FastAPI endpoints to:
-    - Ingest and manage documents for the internal knowledge base
-    - Synthesize demo data in Azure Cosmos DB (Customer, Product, Purchases tables)
-- Access the React frontend at the frontend URL from the output of `azd up`.
-- Choose one of the customer names to log in
-- Click on the microphone button or press 'P' to start voice interaction
-- Speak to interact with the AI assistant
+1. Access the backend FastAPI admin interface at the backend URL from the output of `azd up`.
+2. Access the React frontend at the frontend URL from the output of `azd up` process
+3. In the "Admin Portal" page:
+-     Use the "Upload" tab in the admin interface to upload documents (PDF, DOCX, TXT) to populate the internal knowledge base
+-     Use the "Files" tab in the admin interface to verify the documents have been indexed and delete any unwanted files
+-     Use the "Synthetic Data" tab in the admin interface to create synthetic customers, products, purchases histories and customer conversations
+-     Use the "Dashboard" tab in the admin interface to overview on the setup status and synthetic customer conversations by topic, product and agents.
+4. In the "Voice Chat" page:
+-     Choose one of the (synthesized) customer names to log in
+-     Select the voice you want to use
+-     Click on the microphone button to start voice interaction
+-     Speak to interact with the AI assistant
 
 ## 🚀 Local Development
 

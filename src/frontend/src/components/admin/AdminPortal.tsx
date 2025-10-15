@@ -12,11 +12,22 @@ export function AdminPortal() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="border-b border-border bg-card">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold text-foreground">Admin Portal</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage documents, knowledge base, and data synthesis
-          </p>
+        <div className="p-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Admin Portal</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage documents, knowledge base, and data synthesis
+            </p>
+          </div>
+          <img 
+            src="/microsoft.png" 
+            alt="Microsoft" 
+            className="h-15 w-auto"
+            onError={(e) => {
+              console.error('Failed to load Microsoft logo from /microsoft.png');
+              e.currentTarget.style.display = 'none';
+            }}
+          />
         </div>
       </div>
 
