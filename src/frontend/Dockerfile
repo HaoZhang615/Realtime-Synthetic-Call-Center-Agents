@@ -30,9 +30,9 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy entrypoint script
+# Copy entrypoint script and ensure Unix line endings
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN dos2unix /entrypoint.sh || sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Expose port 80
 EXPOSE 80

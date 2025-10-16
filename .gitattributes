@@ -1,0 +1,24 @@
+# Ensure shell scripts always have LF line endings
+*.sh text eol=lf
+
+# Ensure bash scripts have LF endings
+*.bash text eol=lf
+
+# Standard Git attributes for other file types
+* text=auto
+
+# Windows script files should have CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
