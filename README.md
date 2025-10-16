@@ -68,17 +68,6 @@ azd up
 
 ### Post-Deployment Steps
 
-> [!IMPORTANT]
-> **Manual Bing Connection Required** - The Bing Search connection must be created manually in Azure AI Foundry Portal:
->
-> 1. Navigate to [Azure AI Foundry Portal](https://ai.azure.com/)
-> 2. Open your AI Foundry project (e.g., `project-<resourceToken>`)
-> 3. Go to **Management Center** → **Connected resources**
-> 4. Delete the existing Bing Search connection (if any)
-> 5. Click **+ New connection** → **Grounding with Bing Search**
-> 6. Select your Bing Search resource (e.g., `bing-<resourceToken>`)
-> 7. Complete the connection setup
-
 > [!NOTE]
 > **Email Setup** - To enable outbound email functionality, authorize your M365 account:
 > See [Email Authorization Guide](./docs/mail_authorisation.md)
