@@ -314,9 +314,6 @@ class DataSynthesizer:
                 json.dump(product_profile, f, ensure_ascii=False, indent=4)
             logger.info(f"Document {filename} has been successfully updated!")
 
-    # def create_document_name(self, index, product_id, customer_id, suffix):
-    #     return f"{index}_{product_id}_{customer_id}{suffix}.json"
-
     def get_today_date(self):
         return datetime.today().strftime("%B %d, %Y")
 

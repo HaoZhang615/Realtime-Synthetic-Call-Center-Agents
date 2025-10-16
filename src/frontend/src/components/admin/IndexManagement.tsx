@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,45 +21,46 @@ type SearchIndex = {
   storageUsed: string
 }
 
-const mockIndices: SearchIndex[] = [
-  {
-    id: '1',
-    name: 'customer-support',
-    description: 'Customer service guidelines and procedures',
-    documentCount: 45,
-    status: 'active',
-    lastUpdated: '2024-01-15T10:30:00Z',
-    vectorDimensions: 1536,
-    storageUsed: '2.3 GB'
-  },
-  {
-    id: '2',
-    name: 'product-info',
-    description: 'Product specifications and features',
-    documentCount: 28,
-    status: 'active',
-    lastUpdated: '2024-01-14T15:45:00Z',
-    vectorDimensions: 1536,
-    storageUsed: '1.8 GB'
-  },
-  {
-    id: '3',
-    name: 'general-knowledge',
-    description: 'General company information and policies',
-    documentCount: 67,
-    status: 'syncing',
-    lastUpdated: '2024-01-14T09:20:00Z',
-    vectorDimensions: 1536,
-    storageUsed: '3.1 GB'
-  }
-]
-
 export function IndexManagement() {
-  const [indices, setIndices] = useState<SearchIndex[]>(mockIndices)
+  const [indices, setIndices] = useState<SearchIndex[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newIndexName, setNewIndexName] = useState('')
   const [newIndexDescription, setNewIndexDescription] = useState('')
   const [newIndexDimensions, setNewIndexDimensions] = useState('1536')
+
+  // TODO: Replace with real API call to fetch indices from Azure AI Search
+  useEffect(() => {
+    const fetchIndices = async () => {
+      try {
+        setIsLoading(true)
+        // Fetch from /api/admin/stats for now (contains basic index info)
+        const response = await fetch('/api/admin/stats')
+        if (response.ok) {
+          const data = await response.json()
+          // Convert the stats response to index format
+          const index: SearchIndex = {
+            id: '1',
+            name: data.index_name || 'documents',
+            description: 'Primary search index for documents',
+            documentCount: data.document_count || 0,
+            status: data.index_status || 'active',
+            lastUpdated: new Date().toISOString(),
+            vectorDimensions: 3072, // text-embedding-3-large default
+            storageUsed: 'N/A'
+          }
+          setIndices([index])
+        }
+      } catch (error) {
+        console.error('Failed to fetch index info:', error)
+        toast.error('Failed to load index information')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    fetchIndices()
+  }, [])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
