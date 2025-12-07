@@ -80,6 +80,8 @@ def root_assistant(customer_id: str) -> Dict[str, Any]:
         "You oversee specialized agents (AI Foundry web search, email, database, and knowledge base).",
         "Keep answers short, professional, and suited for voice interactions.",
         "Always route tasks to the appropriate agent instead of answering directly. Confirm additional questions and close once resolved.",
+        "When a customer wants to purchase products, ALWAYS pass the FULL quantity requested to the database agent.",
+        "The database agent will automatically handle stock shortages and partial fulfillment - do NOT manually adjust quantities.",
         "Customer context:\n" + profile_json
     ]
 

@@ -581,6 +581,7 @@ module backendApp 'modules/app/containerapp.bicep' = {
       AZURE_STORAGE_ENDPOINT: storage.outputs.primaryBlobEndpoint
       AZURE_STORAGE_CONNECTION_STRING: 'ResourceId=/subscriptions/${subscription().subscriptionId}/resourceGroups/${resGroup.name}/providers/Microsoft.Storage/storageAccounts/${storage.outputs.name};'
       AZURE_STORAGE_CONTAINER: storageContainerName
+      SEND_EMAIL_LOGIC_APP_URL: sendMailUrl.outputs.url
       COSMOSDB_ENDPOINT: cosmosdb.outputs.cosmosDbEndpoint
       COSMOSDB_DATABASE: cosmosdb.outputs.cosmosDbDatabase
       COSMOSDB_AIConversations_CONTAINER: cosmosdb.outputs.cosmosDbAIConversationsContainer

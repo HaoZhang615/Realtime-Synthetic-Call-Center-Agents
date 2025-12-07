@@ -96,9 +96,18 @@ azd env get-values | Select-String "FRONTEND_URL|BACKEND_URL"
 - "Change my address to [street, city, postal code, country]"
 - "What products are available in your catalog?"
 - "I want to order 2 units of [product name]"
+- "I want to order 10 units of [product name]" (tests low stock scenario)
 - "Send me an email confirming my order"
 - "Tell me about [topic from uploaded document]"
 - "What's the latest news about [topic]?"
+
+**Inventory Management Demo:**
+- All products are initialized with 3 units in stock
+- When customers order more than available stock:
+  - AI fulfills partial orders (e.g., 3 units available, 7 backordered)
+  - Automatically emails supplier to restock
+  - Customer receives confirmation for fulfilled items + backorder notification
+- Enter your email as "Supplier Email" in the Synthetic Data tab to receive demo stock alerts
 
 ## 💻 Local Development
 
