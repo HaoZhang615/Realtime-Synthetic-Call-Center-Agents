@@ -32,6 +32,7 @@ export function SyntheticDataGen() {
   const [companyName, setCompanyName] = useState('Microsoft')
   const [numCustomers, setNumCustomers] = useState('2')
   const [numProducts, setNumProducts] = useState('2')
+  const [supplierEmail, setSupplierEmail] = useState('')
 
   const dataTypeOptions = [
     { value: 'customer-calls', label: 'Customer Service Calls' },
@@ -99,7 +100,8 @@ export function SyntheticDataGen() {
         body: JSON.stringify({
           company_name: companyName,
           num_customers: parseInt(numCustomers),
-          num_products: parseInt(numProducts)
+          num_products: parseInt(numProducts),
+          supplier_email: supplierEmail || null
         })
       })
       const result = await response.json();
@@ -205,6 +207,21 @@ export function SyntheticDataGen() {
                 value={numProducts}
                 onChange={(e) => setNumProducts(e.target.value)}
                 placeholder="2"
+              />
+            </div>
+            <div>
+              <Label htmlFor="supplier-email">
+                Supplier Email (Optional)
+                <span className="block text-xs font-normal text-muted-foreground mt-1">
+                  (for demo: enter your email to receive stock alerts)
+                </span>
+              </Label>
+              <Input
+                id="supplier-email"
+                type="email"
+                value={supplierEmail}
+                onChange={(e) => setSupplierEmail(e.target.value)}
+                placeholder="supplier@example.com"
               />
             </div>
           </div>

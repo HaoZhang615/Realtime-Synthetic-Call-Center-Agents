@@ -155,7 +155,7 @@ class DataSynthesizer:
                     os.remove(file_path)
                     logger.info(f"Deleted: {file_path}")  # Optional: Log deleted file paths for confirmation
 
-    def synthesize_everything(self, company_name, num_customers, num_products):
+    def synthesize_everything(self, company_name, num_customers, num_products, supplier_email=None):
         
         # Refresh Cosmos DB containers
         self.refresh_container(self.database, cosmos_producturl_container_name, "/company_name")
@@ -170,7 +170,7 @@ class DataSynthesizer:
         # Generate all data types
         self.create_product_and_url_list(company_name, num_products)
         self.synthesize_customer_profiles(num_customers)
-        self.synthesize_product_profiles(company_name)
+        self.synthesize_product_profiles(company_name, supplier_email)
         self.synthesize_purchases()
         self.synthesize_human_conversations()
 
@@ -259,7 +259,7 @@ class DataSynthesizer:
                 json.dump(customer_profile, f, ensure_ascii=False, indent=4)
             logger.info(f"Document {filename} has been successfully updated!")
 
-    def synthesize_product_profiles(self, company_name):
+    def synthesize_product_profiles(self, company_name, supplier_email=None):
         producturls_file_path = os.path.join(self.base_dir, "Cosmos_ProductUrl", f"{company_name}_products_and_urls.json")
         with open(producturls_file_path, "r", encoding="utf-8") as f:
             products_list = json.load(f)["products"]
@@ -301,7 +301,9 @@ class DataSynthesizer:
         # loop through the files in the local folder Cosmos_Product and update them:
         # 1. add a product_id field (hash value based on the current file name) to the content
         # 2. add a id field (hash value based on the prefix value of the current file name and the product_id) to the content
-        # 3. save the updated content back to the file
+        # 3. add stock_quantity field (default 3 units for demo)
+        # 4. add supplier_email field (use provided email or empty string)
+        # 5. save the updated content back to the file
         directory = os.path.join(self.base_dir, "Cosmos_Product")
         for filename in os.listdir(directory):
             path = os.path.join(directory, filename)
@@ -310,6 +312,8 @@ class DataSynthesizer:
                 product_id = uuid.uuid3(uuid.NAMESPACE_DNS, f"{filename}").hex
                 product_profile['product_id'] = product_id
                 product_profile['id'] = f"{filename.split('_')[0]}_{product_id}"
+                product_profile['stock_quantity'] = 3  # Default stock level for demo
+                product_profile['supplier_email'] = supplier_email or ""  # Supplier email for stock notifications
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(product_profile, f, ensure_ascii=False, indent=4)
             logger.info(f"Document {filename} has been successfully updated!")
@@ -376,7 +380,7 @@ class DataSynthesizer:
                     "delivered_date": "datetime"
                 }}
                 Do not use markdown to format the json object. if any field is not applicable, leave it empty.
-                quantity should be a random number between 1 and 10.
+                quantity should be a random number between 1 and 5.
                 Today is {self.get_today_date()}, the purchasing_date and delivered_date should be within the last 6 months of today's date.
                 """
 
@@ -566,7 +570,7 @@ class DataSynthesizer:
             logger.info(f"Document {file} has been successfully updated!")
 
 
-def run_synthesis(company_name, num_customers, num_products):
+def run_synthesis(company_name, num_customers, num_products, supplier_email=None):
     base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets')
     # Ensure the assets directory structure exists
     base_assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
@@ -574,4 +578,4 @@ def run_synthesis(company_name, num_customers, num_products):
         os.makedirs(os.path.join(base_assets_dir, dir_name), exist_ok=True)
     # print(f"Base directory: {base_dir}")
     synthesizer = DataSynthesizer(base_dir)
-    synthesizer.synthesize_everything(company_name, num_customers, num_products)
+    synthesizer.synthesize_everything(company_name, num_customers, num_products, supplier_email)

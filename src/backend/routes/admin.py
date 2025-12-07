@@ -58,6 +58,7 @@ class SynthesisRequest(BaseModel):
     company_name: str
     num_customers: int
     num_products: int
+    supplier_email: Optional[str] = None
 
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
@@ -596,7 +597,7 @@ class JobLogHandler(logging.Handler):
             pass
 
 
-def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_products: int):
+def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_products: int, supplier_email: Optional[str] = None):
     """Background task to run data synthesis with parameters."""
     try:
         job_status = JOBS.get(job_id)
@@ -607,7 +608,7 @@ def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_p
         def log(msg):
             job_status["logs"].append(msg)
             logger.info("Job %s: %s", job_id, msg)
-        logger.info(f"Starting data synthesis: company={company_name}, customers={num_customers}, products={num_products}")
+        logger.info(f"Starting data synthesis: company={company_name}, customers={num_customers}, products={num_products}, supplier_email={supplier_email}")
 
         # Attach real-time log handler to synthesizer logger
         job_handler = JobLogHandler(job_id)
@@ -653,7 +654,7 @@ def run_synthesis_task(job_id: str, company_name: str, num_customers: int, num_p
 
         # Step 3: Generate products (60%)
         log("Step 3/5: Generating product profiles...")
-        synthesizer.synthesize_product_profiles(company_name)
+        synthesizer.synthesize_product_profiles(company_name, supplier_email)
         job_status["progress"] = 60
 
         # Step 4: Generate purchases (75%)
@@ -711,7 +712,8 @@ async def synthesize_data(request: SynthesisRequest, background_tasks: Backgroun
             job_id,
             request.company_name,
             request.num_customers,
-            request.num_products
+            request.num_products,
+            request.supplier_email
         )
 
         return {"status": "synthesis_started", "job_id": job_id}
