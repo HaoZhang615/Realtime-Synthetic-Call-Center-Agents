@@ -255,7 +255,7 @@ Inspired by:
 
 ## 📋 To-Do
 
-- [ ] Add demo video
+- [x] Add demo video
 - [x] Implement conversation logging to Cosmos DB
 - [x] Add conversation transcription download feature
 - [ ] Implement customer authentication flow
