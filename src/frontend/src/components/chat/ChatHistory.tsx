@@ -1,9 +1,28 @@
 import { useEffect, useRef } from 'react'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { User, Robot, Download, Copy } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+
+// Configure marked to use GitHub Flavored Markdown with line-break support.
+marked.use({ breaks: true, gfm: true })
+
+/**
+ * Parse markdown content into a sanitized HTML string for safe injection.
+ * Output from marked is sanitized with DOMPurify as a defence-in-depth
+ * measure even though content originates from the trusted Azure OpenAI backend.
+ *
+ * @param content - Raw markdown string from the assistant.
+ * @returns Sanitized HTML string.
+ */
+function renderMarkdown(content: string): string {
+  // marked.parse returns string synchronously when no async extensions are used.
+  const raw = marked.parse(content) as string
+  return DOMPurify.sanitize(raw)
+}
 
 type ChatMessage = {
   id: string
@@ -111,7 +130,14 @@ export function ChatHistory({ messages, currentTranscript, className = '' }: Cha
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  {message.type === 'assistant' ? (
+                    <div
+                      className="text-sm leading-relaxed chat-markdown"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+                    />
+                  ) : (
+                    <p className="text-sm leading-relaxed">{message.content}</p>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
